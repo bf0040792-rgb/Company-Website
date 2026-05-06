@@ -47,7 +47,7 @@
 
     <div class="box" id="login-box">
         <h2 style="color: #3b82f6;">Root Owner Login</h2>
-        <p style="color: #94a3b8; font-size: 13px; margin-bottom: 25px;">Enter your Super Admin credentials to access.</p>
+        <p style="color: #94a3b8; font-size: 13px; margin-bottom: 25px;">Enter Super Admin credentials to access.</p>
         
         <div class="form-group">
             <input type="email" id="adminEmail" placeholder="Super Admin Email">
@@ -88,7 +88,6 @@
     </div>
 
     <script>
-        // 1. FIREBASE CONFIGURATION
         const firebaseConfig = {
             apiKey: "AIzaSyBUAoXX64MTKrhMiRKd9oJPnaT0j60SPdY",
             authDomain: "admin-panel-17e6a.firebaseapp.com",
@@ -100,14 +99,13 @@
         };
         firebase.initializeApp(firebaseConfig);
 
-        // 2. SECURITY APP CHECK ACTIVATION
         const appCheck = firebase.appCheck();
         appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
 
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // 3. SECURE LOGIN LOGIC
+        // AUTHENTICATION LOGIC
         async function loginRoot() {
             const e = document.getElementById("adminEmail").value.trim();
             const p = document.getElementById("adminPass").value.trim();
@@ -122,7 +120,7 @@
 
             btn.innerText = "Authenticating...";
             try {
-                // Firebase se asli login ho raha hai
+                // Firebase Login
                 await auth.signInWithEmailAndPassword(e, p);
                 document.getElementById("login-box").style.display = "none";
                 document.getElementById("dashboard").style.display = "block";
@@ -134,14 +132,14 @@
             }
         }
 
-        // 4. LOAD SCHOOLS (Ab Firebase isko block nahi karega)
+        // LOAD SCHOOLS FROM FIREBASE
         async function loadSchools() {
             const select = document.getElementById("schoolSelect");
             select.innerHTML = '<option value="">-- Select a School --</option>';
             try {
                 const snap = await db.collection("schools").get();
                 if(snap.empty) {
-                    select.innerHTML = '<option value="">No schools found in database</option>';
+                    select.innerHTML = '<option value="">No schools found</option>';
                     return;
                 }
                 snap.forEach(doc => {
@@ -153,7 +151,7 @@
             }
         }
 
-        // 5. CALL RENDER BACKEND TO GENERATE KEY
+        // CALL RENDER BACKEND TO GENERATE KEY
         async function generateKey() {
             const schoolSelect = document.getElementById("schoolSelect");
             const schoolId = schoolSelect.value;
@@ -174,7 +172,7 @@
                         schoolId: schoolId,
                         schoolName: schoolName,
                         validityMonths: validity,
-                        masterSecret: "VETO_MASTER_2026" // Auto-passing the backend secret
+                        masterSecret: "VETO_MASTER_2026"
                     })
                 });
                 
@@ -183,7 +181,7 @@
                 if(data.success) {
                     const out = document.getElementById("keyOutput");
                     out.style.display = "block";
-                    out.innerHTML = `✅ Key Generated:<br><b style="color:white; font-size:26px; letter-spacing:2px;">${data.licenseKey}</b><br><small style="font-size:13px; color:#d1fae5; display:block; margin-top:10px;">Valid till: ${new Date(data.expiryDate).toLocaleDateString()}</small>`;
+                    out.innerHTML = `✅ Key Generated:<br><b style="color:white; font-size:24px; letter-spacing:2px;">${data.licenseKey}</b><br><small style="font-size:13px; color:#d1fae5; display:block; margin-top:10px;">Valid till: ${new Date(data.expiryDate).toLocaleDateString()}</small>`;
                 } else {
                     alert("Backend Error: " + data.error);
                 }
