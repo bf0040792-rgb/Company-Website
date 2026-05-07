@@ -1,0 +1,74 @@
+body { background-color: theme('colors.slateBase'); color: #f9fafb; overflow-x: hidden; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', sans-serif; }
+
+/* Modern Neumorphism/Glassmorphism */
+.glass-card { 
+    background: rgba(31, 41, 55, 0.6); 
+    backdrop-filter: blur(16px); 
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05); 
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+}
+
+.input-premium {
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgba(107, 114, 128, 0.3);
+    transition: all 0.3s ease;
+}
+.input-premium:focus {
+    border-color: theme('colors.tealAccent');
+    box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+    outline: none;
+}
+.input-checkbox {
+    appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1px solid rgba(107, 114, 128, 0.5);
+    border-radius: 0.25rem;
+    background: rgba(17, 24, 39, 0.8);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.input-checkbox:checked {
+    background-color: theme('colors.tealAccent');
+    border-color: theme('colors.tealAccent');
+}
+.input-checkbox:checked::after {
+    content: '✓';
+    color: white;
+    font-size: 0.875rem;
+    font-weight: bold;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: theme('colors.slateBase'); }
+::-webkit-scrollbar-thumb { background: theme('colors.coolGray'); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: theme('colors.tealAccent'); }
+
+.hidden-el { display: none !important; }
+
+/* Placeholder Graph Pattern */
+.graph-placeholder {
+    background-image: linear-gradient(rgba(13, 148, 136, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 148, 136, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* Emergency Ticker */
+#emergency-ticker {
+    display: none;
+    background: #e74c3c;
+    color: white;
+    width: 100%;
+    text-align: center;
+    padding: 8px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    font-size: 14px;
+    box-shadow: 0 4px 15px rgba(231,76,60,0.4);
+    z-index: 1000;
+}
