@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoreEdu Tech | Master Command Center</title>
+    <title>CoreEdu Tech | Global SaaS Management</title>
     
-    <!-- Google Fonts -->
+    <!-- Google Fonts: Inter & Poppins -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
     
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -21,16 +21,16 @@
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
-                        display: ['Poppins', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace'],
+                        display:['Poppins', 'sans-serif'],
                     },
                     colors: {
-                        slateBase: '#0b1120',     // Deeper Slate for Mission Control feel
-                        slateSurface: '#1e293b',  // Elevated Slate
+                        slateBase: '#111827',     // Dark Slate
+                        slateSurface: '#1f2937',  // Elevated Slate
                         tealAccent: '#0D9488',    // Electric Teal
                         tealHover: '#0F766E',
-                        coolGray: '#64748b',      // Highlights
-                        coolLight: '#94a3b8',
+                        coolGray: '#6B7280',      // Highlights
+                        coolLight: '#9CA3AF',
+                        glassBorder: 'rgba(255, 255, 255, 0.1)'
                     }
                 }
             }
@@ -43,108 +43,289 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-check-compat.js"></script>
 
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css">
+    <style>
+        body { background-color: theme('colors.slateBase'); color: #f9fafb; overflow-x: hidden; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', sans-serif; }
+        
+        /* Modern Neumorphism/Glassmorphism */
+        .glass-card { 
+            background: rgba(31, 41, 55, 0.6); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05); 
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+        }
+        
+        .input-premium {
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid rgba(107, 114, 128, 0.3);
+            transition: all 0.3s ease;
+        }
+        .input-premium:focus {
+            border-color: theme('colors.tealAccent');
+            box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+            outline: none;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: theme('colors.slateBase'); }
+        ::-webkit-scrollbar-thumb { background: theme('colors.coolGray'); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: theme('colors.tealAccent'); }
+        
+        .hidden-el { display: none !important; }
+        
+        /* Placeholder Graph Pattern */
+        .graph-placeholder {
+            background-image: linear-gradient(rgba(13, 148, 136, 0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(13, 148, 136, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
 </head>
-<body class="antialiased h-screen flex flex-col bg-slateBase text-gray-50 overflow-x-hidden">
+<body class="antialiased h-screen flex flex-col">
 
     <!-- ========================================== -->
-    <!-- PUBLIC LANDING PAGE (A-Z)                  -->
+    <!-- TASK 1: PUBLIC LANDING PAGE (A-Z)          -->
     <!-- ========================================== -->
     <div id="landing-page" class="flex-1 w-full relative z-10 overflow-y-auto">
-        <!-- High-Contrast Navbar -->
-        <nav class="w-full navbar-glass fixed top-0 z-50 transition-all">
+        <!-- Sticky Navbar -->
+        <nav class="w-full glass-card fixed top-0 z-50 rounded-none border-t-0 border-l-0 border-r-0 border-b border-glassBorder transition-all">
             <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
                 <div class="flex items-center gap-2">
                     <i data-lucide="layers" class="text-tealAccent w-8 h-8"></i>
-                    <h1 class="text-2xl font-bold tracking-tight text-white">CoreEdu<span class="text-tealAccent">Tech</span></h1>
+                    <h1 class="text-2xl font-bold tracking-tight">CoreEdu<span class="text-tealAccent">Tech</span></h1>
                 </div>
-                <div class="hidden md:flex space-x-8 text-sm font-semibold text-gray-200">
-                    <a href="#home" class="hover:text-tealAccent transition-colors">Home</a>
-                    <a href="#features" class="hover:text-tealAccent transition-colors">Features</a>
-                    <a href="#security" class="hover:text-tealAccent transition-colors">Security</a>
-                    <a href="#pricing" class="hover:text-tealAccent transition-colors">Pricing</a>
+                
+                <!-- Desktop Navigation Links (Underline on hover animation) -->
+                <div class="hidden lg:flex space-x-8 text-sm font-medium text-coolLight">
+                    <a href="#home" class="relative group py-2 hover:text-white transition-colors duration-300">
+                        Home
+                        <span class="absolute bottom-0 left-0 w-0 h-[2px] bg-tealAccent transition-all duration-300 ease-out group-hover:w-full rounded-full"></span>
+                    </a>
+                    <a href="#features" class="relative group py-2 hover:text-white transition-colors duration-300">
+                        Features
+                        <span class="absolute bottom-0 left-0 w-0 h-[2px] bg-tealAccent transition-all duration-300 ease-out group-hover:w-full rounded-full"></span>
+                    </a>
+                    <a href="#why-us" class="relative group py-2 hover:text-white transition-colors duration-300">
+                        Why Us
+                        <span class="absolute bottom-0 left-0 w-0 h-[2px] bg-tealAccent transition-all duration-300 ease-out group-hover:w-full rounded-full"></span>
+                    </a>
+                    <a href="#security" class="relative group py-2 hover:text-white transition-colors duration-300">
+                        Security
+                        <span class="absolute bottom-0 left-0 w-0 h-[2px] bg-tealAccent transition-all duration-300 ease-out group-hover:w-full rounded-full"></span>
+                    </a>
+                    <a href="#pricing" class="relative group py-2 hover:text-white transition-colors duration-300">
+                        Pricing
+                        <span class="absolute bottom-0 left-0 w-0 h-[2px] bg-tealAccent transition-all duration-300 ease-out group-hover:w-full rounded-full"></span>
+                    </a>
                 </div>
-                <a href="#contact" class="px-5 py-2.5 bg-tealAccent hover:bg-tealHover text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-tealAccent/30 hover:-translate-y-0.5">Contact Sales</a>
+
+                <div class="flex items-center gap-4">
+                    <a href="#contact" class="hidden sm:inline-block px-5 py-2.5 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-semibold transition shadow-lg shadow-tealAccent/20">Contact Sales</a>
+                    
+                    <!-- Sleek Hamburger Menu Icon -->
+                    <button onclick="toggleDrawer()" class="flex flex-col justify-center items-center gap-[5px] w-10 h-10 rounded-full hover:bg-slateSurface border border-transparent hover:border-glassBorder transition-all group focus:outline-none">
+                        <span class="w-5 h-[1.5px] bg-coolLight group-hover:bg-tealAccent transition-colors duration-300"></span>
+                        <span class="w-5 h-[1.5px] bg-coolLight group-hover:bg-tealAccent transition-colors duration-300"></span>
+                        <span class="w-5 h-[1.5px] bg-coolLight group-hover:bg-tealAccent transition-colors duration-300"></span>
+                    </button>
+                </div>
             </div>
         </nav>
 
         <!-- Home Hero Section -->
         <header id="home" class="pt-40 pb-24 px-6 text-center relative overflow-hidden">
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-tealAccent/10 blur-[100px] rounded-full z-0 pointer-events-none"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-tealAccent/10 blur-[120px] rounded-full z-0 pointer-events-none"></div>
             <div class="relative z-10 max-w-4xl mx-auto">
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-tealAccent/30 bg-tealAccent/10 text-sm text-tealAccent font-medium mb-8">
-                    <span class="relative flex h-2.5 w-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tealAccent opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-tealAccent"></span></span>
-                    CoreEdu Enterprise v4.0 Live
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card text-sm text-tealAccent font-medium mb-8">
+                    <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tealAccent opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-tealAccent"></span></span>
+                    Enterprise SaaS v4.0 is Live
                 </div>
-                <h2 class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight tracking-tight text-white">
+                <h2 class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight tracking-tight">
                     Unified Infrastructure for <br><span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-teal-600">Modern Education</span>
                 </h2>
-                <p class="text-lg text-coolLight mb-10 max-w-2xl mx-auto font-light">Deploy, scale, and secure your institution's digital ecosystem with our military-grade command center.</p>
+                <p class="text-xl text-coolLight mb-10 max-w-2xl mx-auto font-light">Deploy, scale, and secure your institution's digital ecosystem with our military-grade management command center.</p>
                 <div class="flex flex-col sm:flex-row justify-center gap-4">
-                    <a href="#pricing" class="px-8 py-4 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-semibold transition-all hover:-translate-y-1 shadow-lg shadow-tealAccent/20 flex items-center justify-center gap-2">Start Free Trial <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+                    <a href="#pricing" class="px-8 py-4 bg-tealAccent hover:bg-tealHover text-white rounded-2xl font-semibold transition shadow-lg shadow-tealAccent/20 flex items-center justify-center gap-2">Start Free Trial <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+                    <a href="#features" class="px-8 py-4 glass-card hover:bg-slateSurface text-white rounded-2xl font-semibold transition flex items-center justify-center gap-2"><i data-lucide="play-circle" class="w-4 h-4"></i> Watch Demo</a>
                 </div>
             </div>
         </header>
 
         <!-- Features Section -->
-        <section id="features" class="py-24 bg-slateSurface/30 px-6 border-y border-white/5">
+        <section id="features" class="py-24 bg-slateSurface px-6 border-y border-glassBorder">
             <div class="max-w-7xl mx-auto">
                 <div class="text-center mb-16">
                     <h3 class="text-tealAccent font-semibold tracking-wider uppercase text-sm mb-2">Core Features</h3>
-                    <h2 class="text-3xl md:text-4xl font-bold text-white">Everything you need to scale</h2>
+                    <h2 class="text-3xl md:text-4xl font-bold">Everything you need to scale</h2>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div class="glass-card p-8 rounded-2xl hover-scale">
-                        <div class="w-12 h-12 rounded-xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent border border-tealAccent/20"><i data-lucide="database"></i></div>
-                        <h4 class="text-xl font-bold mb-3 text-white">Multi-Tenant Architecture</h4>
-                        <p class="text-coolLight text-sm leading-relaxed">Absolute data isolation between schools with centralized master control.</p>
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300">
+                        <div class="w-14 h-14 rounded-2xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent"><i data-lucide="database"></i></div>
+                        <h4 class="text-xl font-bold mb-3">Multi-Tenant Architecture</h4>
+                        <p class="text-coolLight leading-relaxed">Absolute data isolation between schools with centralized master control and zero cross-contamination.</p>
                     </div>
-                    <div class="glass-card p-8 rounded-2xl hover-scale">
-                        <div class="w-12 h-12 rounded-xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent border border-tealAccent/20"><i data-lucide="bar-chart-3"></i></div>
-                        <h4 class="text-xl font-bold mb-3 text-white">Real-time Telemetry</h4>
-                        <p class="text-coolLight text-sm leading-relaxed">Live insight into financial metrics, user engagement, and system health.</p>
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300">
+                        <div class="w-14 h-14 rounded-2xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent"><i data-lucide="bar-chart-3"></i></div>
+                        <h4 class="text-xl font-bold mb-3">Real-time Telemetry</h4>
+                        <p class="text-coolLight leading-relaxed">Live insight into financial metrics, user engagement, and system health across global deployments.</p>
                     </div>
-                    <div class="glass-card p-8 rounded-2xl hover-scale">
-                        <div class="w-12 h-12 rounded-xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent border border-tealAccent/20"><i data-lucide="zap"></i></div>
-                        <h4 class="text-xl font-bold mb-3 text-white">Instant Provisioning</h4>
-                        <p class="text-coolLight text-sm leading-relaxed">Deploy entire school environments, databases, and keys in milliseconds.</p>
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300">
+                        <div class="w-14 h-14 rounded-2xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent"><i data-lucide="zap"></i></div>
+                        <h4 class="text-xl font-bold mb-3">Instant Provisioning</h4>
+                        <p class="text-coolLight leading-relaxed">Deploy entirely new school environments, databases, and secure access keys in milliseconds.</p>
                     </div>
                 </div>
             </div>
         </section>
 
+        <!-- Security & Why Us -->
+        <section id="why-us" class="py-24 px-6 relative">
+            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h3 id="security" class="text-tealAccent font-semibold tracking-wider uppercase text-sm mb-2">Military-Grade Security</h3>
+                    <h2 class="text-3xl md:text-4xl font-bold mb-6">Data sovereignty is our highest priority.</h2>
+                    <p class="text-coolLight mb-6 leading-relaxed">We protect your institutional data using advanced cryptographic licensing, continuous surveillance, and an immutable master audit ledger. Every action is authenticated, verified, and logged.</p>
+                    <ul class="space-y-4">
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-tealAccent w-5 h-5"></i> <span class="text-gray-300">End-to-End Encryption (AES-256)</span></li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-tealAccent w-5 h-5"></i> <span class="text-gray-300">Global Kill-Switch Capabilities</span></li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-tealAccent w-5 h-5"></i> <span class="text-gray-300">Role-Based Access Control (RBAC)</span></li>
+                    </ul>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-card p-2 rounded-2xl">
+                        <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" alt="Security Dashboard" class="rounded-xl opacity-80 mix-blend-luminosity hover:mix-blend-normal transition duration-500">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section id="pricing" class="py-24 bg-slateSurface px-6 border-y border-glassBorder">
+            <div class="max-w-7xl mx-auto text-center">
+                <h3 class="text-tealAccent font-semibold tracking-wider uppercase text-sm mb-2">Licensing</h3>
+                <h2 class="text-3xl md:text-4xl font-bold mb-16">Plans built for your scale</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                    <!-- Silver -->
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left">
+                        <h4 class="text-2xl font-bold text-gray-100 mb-2">Silver</h4>
+                        <p class="text-coolLight text-sm mb-6 h-10">Essential infrastructure for standalone schools.</p>
+                        <div class="text-4xl font-extrabold mb-6">$149<span class="text-lg text-coolGray font-medium">/mo</span></div>
+                        <ul class="space-y-4 mb-8 flex-1">
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Up to 500 Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Standard Analytics</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> 48-hour SLA Support</li>
+                        </ul>
+                        <button class="w-full py-3 rounded-xl border border-glassBorder hover:bg-slateBase transition font-semibold">Select Silver</button>
+                    </div>
+                    <!-- Gold -->
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border-tealAccent relative transform md:-translate-y-4 shadow-2xl shadow-tealAccent/10">
+                        <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-tealAccent text-white px-4 py-1 rounded-full text-xs font-bold tracking-wide">ENTERPRISE STANDARD</div>
+                        <h4 class="text-2xl font-bold text-tealAccent mb-2">Gold</h4>
+                        <p class="text-coolLight text-sm mb-6 h-10">Advanced telemetry for growing districts.</p>
+                        <div class="text-4xl font-extrabold mb-6">$349<span class="text-lg text-coolGray font-medium">/mo</span></div>
+                        <ul class="space-y-4 mb-8 flex-1">
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Up to 3,000 Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Advanced AI Analytics</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Custom Branding</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> 4-hour SLA Support</li>
+                        </ul>
+                        <button class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealHover transition font-semibold text-white shadow-lg">Select Gold</button>
+                    </div>
+                    <!-- Platinum -->
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left">
+                        <h4 class="text-2xl font-bold text-gray-100 mb-2">Platinum</h4>
+                        <p class="text-coolLight text-sm mb-6 h-10">Infinite scalability for national deployments.</p>
+                        <div class="text-4xl font-extrabold mb-6">Custom</div>
+                        <ul class="space-y-4 mb-8 flex-1">
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Unlimited Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Dedicated Database Nodes</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Root API Access</li>
+                        </ul>
+                        <button class="w-full py-3 rounded-xl border border-glassBorder hover:bg-slateBase transition font-semibold">Contact Sales</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact Section -->
+        <section id="contact" class="py-24 px-6 relative">
+            <div class="max-w-3xl mx-auto glass-card p-10 md:p-16 rounded-3xl text-center">
+                <i data-lucide="mail" class="w-10 h-10 text-tealAccent mx-auto mb-6"></i>
+                <h2 class="text-3xl font-bold mb-4">Ready to modernize your infrastructure?</h2>
+                <p class="text-coolLight mb-8">Speak to our architecture team today to schedule a technical deep-dive and platform demo.</p>
+                <div class="flex flex-col md:flex-row gap-4 justify-center">
+                    <input type="email" placeholder="Work Email" class="input-premium px-6 py-4 rounded-xl w-full md:w-96 text-white">
+                    <button class="px-8 py-4 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-semibold transition whitespace-nowrap shadow-lg">Request Demo</button>
+                </div>
+            </div>
+        </section>
+
         <!-- Footer & Hidden Entry -->
-        <footer class="py-12 border-t border-white/10 bg-slateBase text-center relative z-20">
-            <div class="flex items-center justify-center gap-2 mb-6 text-coolGray">
+        <footer class="py-12 border-t border-glassBorder bg-slateBase text-center relative z-20">
+            <div class="flex items-center justify-center gap-2 mb-6 opacity-50">
                 <i data-lucide="layers" class="w-6 h-6"></i> <span class="font-bold text-lg">CoreEdu</span>
             </div>
-            <p id="secret-trigger" class="text-coolGray text-xs cursor-default select-none transition hover:text-coolLight" ondblclick="showLoginModal()">© 2026 CoreEdu Tech Inc. All rights reserved.</p>
+            <p id="secret-trigger" class="text-coolGray text-sm cursor-default select-none transition hover:text-coolLight" ondblclick="showLoginModal()">© 2026 CoreEdu Tech Inc. All rights reserved.</p>
         </footer>
     </div>
 
-    <!-- Hidden Login Modal -->
-    <div id="login-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-sm z-[100] hidden-el flex justify-center items-center px-4 transition-opacity">
-        <div class="glass-card p-8 rounded-2xl w-full max-w-md relative overflow-hidden border border-white/10 shadow-2xl">
+    <!-- Side Drawer Overlay -->
+    <div id="side-drawer-overlay" class="fixed inset-0 bg-slateBase/60 backdrop-blur-sm z-[105] hidden-el opacity-0 transition-opacity duration-300" onclick="toggleDrawer()"></div>
+
+    <!-- Side Drawer Panel -->
+    <div id="side-drawer" class="fixed top-0 right-0 h-full w-80 glass-card bg-slateBase/90 border-y-0 border-r-0 border-l border-glassBorder z-[110] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col shadow-2xl">
+        <div class="p-6 flex justify-between items-center border-b border-glassBorder">
+            <div class="flex items-center gap-2">
+                <i data-lucide="command" class="text-tealAccent w-5 h-5"></i>
+                <h2 class="text-lg font-bold tracking-tight text-white">Navigation</h2>
+            </div>
+            <button onclick="toggleDrawer()" class="text-coolGray hover:text-white p-2 rounded-lg hover:bg-slateSurface transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        
+        <div class="p-6 flex-1 flex flex-col gap-4 overflow-y-auto">
+            <button onclick="openLoginFromDrawer()" class="w-full py-4 bg-tealAccent/10 border border-tealAccent/30 hover:bg-tealAccent text-teal-400 hover:text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(13,148,136,0.15)] hover:shadow-[0_0_25px_rgba(13,148,136,0.4)] flex justify-start px-6 items-center gap-3 group">
+                <i data-lucide="fingerprint" class="w-5 h-5 group-hover:scale-110 transition-transform"></i> Login Center
+            </button>
+            
+            <div class="w-full h-px bg-glassBorder my-2"></div>
+            
+            <a href="#features" onclick="toggleDrawer()" class="w-full py-3 text-left text-coolLight hover:text-white hover:bg-slateSurface transition-all flex items-center gap-3 px-4 rounded-xl border border-transparent hover:border-glassBorder"><i data-lucide="play-circle" class="w-5 h-5 text-tealAccent"></i> Product Demo</a>
+            <a href="#pricing" onclick="toggleDrawer()" class="w-full py-3 text-left text-coolLight hover:text-white hover:bg-slateSurface transition-all flex items-center gap-3 px-4 rounded-xl border border-transparent hover:border-glassBorder"><i data-lucide="credit-card" class="w-5 h-5 text-tealAccent"></i> Pricing Plans</a>
+            <a href="#contact" onclick="toggleDrawer()" class="w-full py-3 text-left text-coolLight hover:text-white hover:bg-slateSurface transition-all flex items-center gap-3 px-4 rounded-xl border border-transparent hover:border-glassBorder"><i data-lucide="headphones" class="w-5 h-5 text-tealAccent"></i> Contact Support</a>
+        </div>
+        
+        <div class="p-6 border-t border-glassBorder text-xs text-coolGray text-center flex justify-center items-center gap-2">
+            <i data-lucide="shield-check" class="w-4 h-4 text-tealAccent"></i> CoreEdu Tech © 2026
+        </div>
+    </div>
+
+    <!-- Hidden Login Modal (Neumorphic) -->
+    <div id="login-modal" class="fixed inset-0 bg-slateBase/90 backdrop-blur-md z-[120] hidden-el flex justify-center items-center px-4 transition-opacity duration-300 opacity-0">
+        <div class="glass-card p-10 rounded-3xl w-full max-w-md relative overflow-hidden transform scale-95 transition-transform duration-300" id="login-modal-box">
             <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-tealAccent to-transparent"></div>
-            <div class="flex justify-between items-start mb-6">
+            
+            <div class="flex justify-between items-start mb-8">
                 <div>
                     <h2 class="text-2xl font-bold text-white tracking-tight flex items-center gap-2"><i data-lucide="cpu" class="text-tealAccent"></i> Root Authority</h2>
-                    <p class="text-coolGray text-xs mt-1 uppercase tracking-wider font-mono">Level 1 Infrastructure</p>
+                    <p class="text-coolLight text-sm mt-1">Level 1 Infrastructure Access.</p>
                 </div>
-                <button onclick="hideLoginModal()" class="text-coolGray hover:text-white transition p-1.5 hover:bg-white/5 rounded-md"><i data-lucide="x" class="w-5 h-5"></i></button>
+                <button onclick="hideLoginModal()" class="text-coolGray hover:text-white transition p-2 bg-slateSurface rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            <div class="space-y-4">
+            
+            <div class="space-y-5">
                 <div>
-                    <input type="email" id="adminEmail" placeholder="Master Identity (root@coreedu.tech)" class="input-premium w-full px-4 py-3 rounded-lg text-sm text-white font-mono">
+                    <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Master Identity</label>
+                    <input type="email" id="adminEmail" placeholder="root@coreedu.tech" class="input-premium w-full px-4 py-3 rounded-xl text-white">
                 </div>
                 <div>
-                    <input type="password" id="adminPass" placeholder="Cryptographic Key" class="input-premium w-full px-4 py-3 rounded-lg text-sm text-white font-mono">
+                    <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Cryptographic Key</label>
+                    <input type="password" id="adminPass" placeholder="••••••••••••" class="input-premium w-full px-4 py-3 rounded-xl text-white">
                 </div>
-                <button onclick="loginRoot()" id="loginBtn" class="w-full py-3.5 bg-tealAccent hover:bg-tealHover text-white rounded-lg font-bold transition-all shadow-lg mt-2 flex justify-center items-center gap-2 hover:-translate-y-0.5">
-                    <i data-lucide="fingerprint" class="w-4 h-4"></i> Authenticate
+                <button onclick="loginRoot()" id="loginBtn" class="w-full py-4 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-bold transition shadow-lg mt-4 flex justify-center items-center gap-2">
+                    <i data-lucide="fingerprint" class="w-5 h-5"></i> Authenticate
                 </button>
-                <div id="err" class="text-rose-400 text-xs font-medium mt-3 hidden-el bg-rose-500/10 p-3 rounded-lg border border-rose-500/20 flex items-center gap-2">
+                <div id="err" class="text-rose-400 text-sm font-medium mt-3 hidden-el bg-rose-500/10 p-3 rounded-lg border border-rose-500/20 flex items-center gap-2">
                     <i data-lucide="alert-circle" class="w-4 h-4"></i> <span id="errText"></span>
                 </div>
             </div>
@@ -152,231 +333,748 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- MASTER OWNER PORTAL (GOD MODE)             -->
+    <!-- TASK 2: MASTER OWNER PORTAL (GOD MODE)     -->
     <!-- ========================================== -->
     <div id="dashboard" class="hidden-el h-screen w-full flex bg-slateBase overflow-hidden">
         
-        <!-- Sidebar Navigation (Compact Mission Control) -->
-        <aside class="w-60 border-r border-white/5 bg-slateSurface/20 flex flex-col h-full z-20 shrink-0">
-            <div class="p-5 border-b border-white/5 flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-tealAccent/20 flex items-center justify-center border border-tealAccent/30">
-                    <i data-lucide="terminal" class="text-tealAccent w-4 h-4"></i>
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 glass-card border-y-0 border-l-0 rounded-none flex flex-col h-full z-20 shrink-0">
+            <div class="p-6 border-b border-glassBorder flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-tealAccent/20 flex items-center justify-center border border-tealAccent/30">
+                    <i data-lucide="terminal" class="text-tealAccent w-5 h-5"></i>
                 </div>
                 <div>
-                    <h1 class="text-sm font-bold tracking-widest uppercase text-white font-display">Command</h1>
-                    <p class="text-[9px] text-teal-400 font-mono flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span> SYS.ONLINE</p>
+                    <h1 class="text-sm font-bold tracking-widest uppercase text-white">Command</h1>
+                    <p class="text-[10px] text-teal-400 font-medium flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span> SYSTEM ONLINE</p>
                 </div>
             </div>
             
-            <nav class="flex-1 px-3 py-5 space-y-1 overflow-y-auto custom-scroll">
-                <p class="text-[10px] font-bold text-coolGray uppercase tracking-widest mb-2 px-3">Telemetry</p>
-                <button onclick="switchTab('analytics')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="analytics"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Analytics</button>
-                <button onclick="switchTab('tenants')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="tenants"><i data-lucide="server" class="w-4 h-4"></i> Tenant Nodes</button>
+            <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+                <p class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-4 px-2">Dashboards</p>
+                <button onclick="switchTab('analytics')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="analytics"><i data-lucide="layout-dashboard" class="w-5 h-5"></i> Analytics</button>
+                <button onclick="switchTab('tenants')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="tenants"><i data-lucide="server" class="w-5 h-5"></i> Tenant Mgmt</button>
+                <button onclick="switchTab('keymaker')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="keymaker"><i data-lucide="key-round" class="w-5 h-5"></i> Key Maker</button>
                 
-                <p class="text-[10px] font-bold text-coolGray uppercase tracking-widest mb-2 mt-6 px-3">Operations</p>
-                <button onclick="switchTab('keymaker')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="keymaker"><i data-lucide="key-round" class="w-4 h-4"></i> License Forge</button>
-                <button onclick="switchTab('admins')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="admins"><i data-lucide="shield-check" class="w-4 h-4"></i> Provision L2</button>
-                
-                <p class="text-[10px] font-bold text-coolGray uppercase tracking-widest mb-2 mt-6 px-3">Security Ops</p>
-                <button onclick="switchTab('surveillance')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="surveillance"><i data-lucide="radar" class="w-4 h-4"></i> Surveillance</button>
-                <button onclick="switchTab('broadcast')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="broadcast"><i data-lucide="radio" class="w-4 h-4"></i> Broadcast</button>
-                <button onclick="switchTab('audit')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-coolLight hover:bg-white/5 hover:text-white transition tab-btn text-sm font-medium" data-target="audit"><i data-lucide="file-clock" class="w-4 h-4"></i> Audit Ledger</button>
+                <p class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-4 mt-8 px-2">Security & Control</p>
+                <button onclick="switchTab('admins')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="admins"><i data-lucide="shield-check" class="w-5 h-5"></i> Provision L2</button>
+                <button onclick="switchTab('surveillance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="surveillance"><i data-lucide="eye" class="w-5 h-5"></i> Surveillance</button>
+                <button onclick="switchTab('broadcast')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="broadcast"><i data-lucide="radio" class="w-5 h-5"></i> Broadcast</button>
+                <button onclick="switchTab('audit')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coolLight hover:bg-slateSurface hover:text-white transition tab-btn" data-target="audit"><i data-lucide="file-clock" class="w-5 h-5"></i> Audit Log</button>
             </nav>
             
-            <div class="p-4 border-t border-white/5">
-                <button onclick="location.reload()" class="w-full py-2.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/20 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 uppercase tracking-wide"><i data-lucide="power" class="w-4 h-4"></i> Lock Term</button>
+            <div class="p-4 border-t border-glassBorder bg-slateSurface/30">
+                <button onclick="location.reload()" class="w-full py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/20 rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2"><i data-lucide="power" class="w-4 h-4"></i> Lock Session</button>
             </div>
         </aside>
 
         <!-- Main Workspace -->
         <div class="flex-1 flex flex-col h-full overflow-hidden relative">
-            <!-- Header -->
-            <header class="h-16 border-b border-white/5 px-6 flex items-center justify-between z-10 shrink-0 bg-slateBase/80 backdrop-blur-md">
-                <div class="text-sm font-mono text-coolGray flex items-center gap-2">
-                    <i data-lucide="globe-2" class="w-4 h-4"></i> Global Command Instance <span class="text-tealAccent">#1</span>
+            
+            <!-- Top Header -->
+            <header class="h-20 glass-card border-x-0 border-t-0 rounded-none px-8 flex items-center justify-between z-10 shrink-0">
+                <div class="w-96 relative">
+                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-coolGray"></i>
+                    <input type="text" placeholder="Global search across all tenants..." class="w-full bg-slateBase border border-glassBorder rounded-full py-2.5 pl-11 pr-4 text-sm text-white focus:outline-none focus:border-tealAccent transition shadow-inner">
                 </div>
-                <div class="flex items-center gap-4">
-                    <div class="w-8 h-8 rounded-full bg-tealAccent/20 flex items-center justify-center text-tealAccent font-bold text-xs border border-tealAccent/30 shadow-md">ROOT</div>
+                <div class="flex items-center gap-6">
+                    <button class="relative text-coolLight hover:text-white transition">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                        <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-tealAccent rounded-full border-2 border-slateSurface"></span>
+                    </button>
+                    <div class="flex items-center gap-3 border-l border-glassBorder pl-6">
+                        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            R
+                        </div>
+                        <div class="hidden md:block">
+                            <p class="text-sm font-semibold text-white leading-tight">Root Admin</p>
+                            <p class="text-[10px] text-coolGray font-mono uppercase">Level 1 Auth</p>
+                        </div>
+                    </div>
                 </div>
             </header>
 
             <!-- Scrollable Content -->
-            <main class="flex-1 overflow-y-auto p-6 relative z-0 custom-scroll">
+            <main class="flex-1 overflow-y-auto p-8 relative z-0">
                 
-                <!-- Analytics Tab -->
-                <section id="analytics" class="tab-content hidden-el space-y-6">
-                    <div class="mb-6">
-                        <h2 class="text-2xl font-bold text-white">Infrastructure Telemetry</h2>
-                        <p class="text-coolLight text-xs mt-1">Real-time metrics from all active nodes.</p>
+                <!-- Analytics Tab (Insight Cards) -->
+                <section id="analytics" class="tab-content hidden-el space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Infrastructure Overview</h2>
+                        <p class="text-coolLight text-sm">Real-time metrics from global deployments.</p>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="glass-card p-5 rounded-xl border-t-2 border-t-tealAccent">
-                            <p class="text-coolGray text-[10px] font-bold uppercase tracking-wider mb-2">Monthly Revenue (MRR)</p>
-                            <h3 class="text-3xl font-mono font-bold text-white" id="stat-revenue"><div class="skeleton h-8 w-24"></div></h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden group">
+                            <div class="absolute top-0 right-0 w-24 h-24 bg-tealAccent/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                            <div class="flex justify-between items-start mb-4 relative z-10">
+                                <p class="text-coolLight text-sm font-medium uppercase tracking-wide">Monthly Revenue</p>
+                                <div class="p-2 bg-tealAccent/20 text-tealAccent rounded-lg"><i data-lucide="dollar-sign" class="w-4 h-4"></i></div>
+                            </div>
+                            <h3 class="text-3xl font-bold text-white relative z-10" id="stat-revenue">$0</h3>
+                            <p class="text-teal-400 text-xs mt-2 font-medium flex items-center gap-1 relative z-10"><i data-lucide="trending-up" class="w-3 h-3"></i> +12.5% this month</p>
                         </div>
-                        <div class="glass-card p-5 rounded-xl border-t-2 border-t-blue-500">
-                            <p class="text-coolGray text-[10px] font-bold uppercase tracking-wider mb-2">Active Tenants</p>
-                            <h3 class="text-3xl font-mono font-bold text-white" id="stat-tenants"><div class="skeleton h-8 w-16"></div></h3>
+                        
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden group">
+                            <div class="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                            <div class="flex justify-between items-start mb-4 relative z-10">
+                                <p class="text-coolLight text-sm font-medium uppercase tracking-wide">Active Tenants</p>
+                                <div class="p-2 bg-blue-500/20 text-blue-400 rounded-lg"><i data-lucide="school" class="w-4 h-4"></i></div>
+                            </div>
+                            <h3 class="text-3xl font-bold text-white relative z-10" id="stat-tenants">0</h3>
+                            <p class="text-coolGray text-xs mt-2 relative z-10">Institutions connected</p>
                         </div>
-                        <div class="glass-card p-5 rounded-xl border-t-2 border-t-amber-500">
-                            <p class="text-coolGray text-[10px] font-bold uppercase tracking-wider mb-2">Expiring (30 Days)</p>
-                            <h3 class="text-3xl font-mono font-bold text-white" id="stat-expiring"><div class="skeleton h-8 w-16"></div></h3>
+
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden group">
+                            <div class="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                            <div class="flex justify-between items-start mb-4 relative z-10">
+                                <p class="text-coolLight text-sm font-medium uppercase tracking-wide">Expiring Licenses</p>
+                                <div class="p-2 bg-rose-500/20 text-rose-400 rounded-lg"><i data-lucide="alert-triangle" class="w-4 h-4"></i></div>
+                            </div>
+                            <h3 class="text-3xl font-bold text-white relative z-10" id="stat-expiring">0</h3>
+                            <p class="text-rose-400 text-xs mt-2 relative z-10">Expiring in next 30 days</p>
                         </div>
-                        <div class="glass-card p-5 rounded-xl border-t-2 border-t-emerald-500">
-                            <p class="text-coolGray text-[10px] font-bold uppercase tracking-wider mb-2">System Load</p>
-                            <h3 class="text-2xl font-mono font-bold text-emerald-400 mt-1">Optimized</h3>
+
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden group">
+                            <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                            <div class="flex justify-between items-start mb-4 relative z-10">
+                                <p class="text-coolLight text-sm font-medium uppercase tracking-wide">System Load</p>
+                                <div class="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg"><i data-lucide="activity" class="w-4 h-4"></i></div>
+                            </div>
+                            <h3 class="text-3xl font-bold text-white relative z-10">Optimized</h3>
+                            <p class="text-emerald-400 text-xs mt-2 flex items-center gap-1 relative z-10"><i data-lucide="check-circle" class="w-3 h-3"></i> 99.99% Uptime</p>
+                        </div>
+                    </div>
+
+                    <!-- Graph Placeholder -->
+                    <div class="glass-card p-6 rounded-2xl h-80 flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-lg font-bold text-white">Revenue & Tenant Growth</h3>
+                            <button class="px-3 py-1.5 text-xs font-medium border border-glassBorder rounded-lg hover:bg-slateSurface transition">This Year</button>
+                        </div>
+                        <div class="flex-1 graph-placeholder rounded-xl border border-glassBorder flex items-center justify-center relative overflow-hidden">
+                            <!-- Faux Graph Line -->
+                            <svg class="absolute w-full h-full text-tealAccent opacity-50" preserveAspectRatio="none" viewBox="0 0 100 100">
+                                <path d="M0,80 Q20,70 40,50 T80,30 T100,10" fill="none" stroke="currentColor" stroke-width="2"></path>
+                                <path d="M0,100 L0,80 Q20,70 40,50 T80,30 T100,10 L100,100 Z" fill="currentColor" opacity="0.1"></path>
+                            </svg>
+                            <p class="text-coolGray text-sm italic z-10 backdrop-blur-sm bg-slateBase/50 px-4 py-2 rounded-lg">Telemetry Chart Rendering Engine (Placeholder)</p>
                         </div>
                     </div>
                 </section>
 
                 <!-- Tenant Management -->
-                <section id="tenants" class="tab-content hidden-el space-y-6">
-                    <div class="flex justify-between items-end mb-4">
+                <section id="tenants" class="tab-content hidden-el space-y-8">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
                             <h2 class="text-2xl font-bold text-white">Tenant Deployment</h2>
-                            <p class="text-coolLight text-xs mt-1">Manage database instances and security states.</p>
+                            <p class="text-coolLight text-sm">Manage databases, quotas, and security states.</p>
                         </div>
-                        <button onclick="openNewSchoolModal()" class="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition"><i data-lucide="plus" class="w-4 h-4 text-tealAccent"></i> Deploy Node</button>
+                        <button onclick="openNewSchoolModal()" class="px-5 py-2.5 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-semibold shadow-lg flex items-center gap-2 transition"><i data-lucide="plus" class="w-4 h-4"></i> New Deployment</button>
                     </div>
                     
-                    <div class="glass-card rounded-xl overflow-hidden border border-white/5">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-black/20 text-coolGray text-[10px] uppercase font-bold tracking-wider">
-                                <tr>
-                                    <th class="px-5 py-3">Tenant Identity</th>
-                                    <th class="px-5 py-3">Capacity</th>
-                                    <th class="px-5 py-3">License Expiry</th>
-                                    <th class="px-5 py-3">Status</th>
-                                    <th class="px-5 py-3 text-right">Ops</th>
-                                </tr>
-                            </thead>
-                            <tbody id="schools-table-body" class="divide-y divide-white/5 text-sm">
-                                <!-- Populated via JS -->
-                            </tbody>
-                        </table>
+                    <div class="glass-card rounded-2xl overflow-hidden border border-glassBorder">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/50 text-coolGray uppercase text-xs font-bold tracking-wider">
+                                    <tr>
+                                        <th class="px-6 py-4">Tenant Identity</th>
+                                        <th class="px-6 py-4">Capacity</th>
+                                        <th class="px-6 py-4">License Expiry</th>
+                                        <th class="px-6 py-4">Status</th>
+                                        <th class="px-6 py-4 text-right">Operations</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="schools-table-body" class="divide-y divide-glassBorder text-sm">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
 
                 <!-- Key Maker -->
-                <section id="keymaker" class="tab-content hidden-el max-w-2xl space-y-6">
+                <section id="keymaker" class="tab-content hidden-el max-w-3xl space-y-8">
                     <div>
-                        <h2 class="text-2xl font-bold text-white flex items-center gap-2"><i data-lucide="key-round" class="text-tealAccent w-5 h-5"></i> License Forge</h2>
-                        <p class="text-coolLight text-xs mt-1">Cryptographically sign SaaS keys via Render Backend.</p>
+                        <h2 class="text-2xl font-bold text-white flex items-center gap-2"><i data-lucide="key-round" class="text-tealAccent w-6 h-6"></i> Security Key Forge</h2>
+                        <p class="text-coolLight text-sm mt-1">Cryptographically sign SaaS licenses for tenant databases.</p>
                     </div>
                     
-                    <div class="glass-card p-6 rounded-xl space-y-5 border border-white/5">
-                        <div class="grid grid-cols-2 gap-4">
+                    <div class="glass-card p-8 rounded-2xl space-y-6 border-t-4 border-t-tealAccent">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-1.5 block">Target Node</label>
-                                <select id="schoolSelect" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white appearance-none"></select>
+                                <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Target Tenant node</label>
+                                <select id="schoolSelect" class="input-premium w-full px-4 py-3 rounded-xl text-white cursor-pointer appearance-none">
+                                    <option value="">Loading databases...</option>
+                                </select>
                             </div>
                             <div>
-                                <label class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-1.5 block">Validity Horizon</label>
-                                <select id="validity" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white appearance-none">
-                                    <option value="1">1 Month (Trial)</option>
+                                <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Validity Horizon</label>
+                                <select id="validity" class="input-premium w-full px-4 py-3 rounded-xl text-white cursor-pointer appearance-none">
+                                    <option value="1">1 Month (Trial/Dev)</option>
                                     <option value="6">6 Months (Biannual)</option>
                                     <option value="12" selected>12 Months (Annual)</option>
                                 </select>
                             </div>
                         </div>
-                        <button onclick="generateKey()" id="genBtn" class="w-full py-3 bg-tealAccent/10 hover:bg-tealAccent border border-tealAccent/30 text-teal-400 hover:text-white rounded-lg font-bold transition flex justify-center items-center gap-2 text-sm">
-                            <i data-lucide="zap" class="w-4 h-4"></i> Generate Encrypted Key
-                        </button>
                         
-                        <div id="keyOutput" class="hidden-el bg-black/40 border border-teal-500/30 p-5 rounded-lg text-center mt-4 relative overflow-hidden">
-                            <p class="text-teal-400 font-bold uppercase tracking-widest text-[10px] mb-2 flex justify-center items-center gap-1.5"><i data-lucide="check-circle-2" class="w-3 h-3"></i> Signature Verified</p>
-                            <div class="font-mono text-lg text-white tracking-wider select-all" id="generatedKeyText"></div>
-                            <p class="text-[10px] text-coolGray mt-2 font-mono uppercase" id="keyExpiryText"></p>
+                        <div class="pt-2">
+                            <button onclick="generateKey()" id="genBtn" class="w-full py-4 bg-slateSurface hover:bg-tealAccent border border-glassBorder hover:border-tealAccent text-white rounded-xl font-bold transition shadow-lg flex justify-center items-center gap-2 group">
+                                <i data-lucide="zap" class="w-5 h-5 text-tealAccent group-hover:text-white transition"></i> Forge Encrypted Key
+                            </button>
                         </div>
+                        
+                        <div id="keyOutput" class="hidden-el bg-teal-950/40 border border-teal-500/30 p-6 rounded-xl text-center mt-6 relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-1 h-full bg-tealAccent"></div>
+                            <p class="text-teal-400 font-bold uppercase tracking-widest text-xs mb-3 flex justify-center items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4"></i> Signature Verified</p>
+                            <div class="bg-slateBase p-4 rounded-lg font-mono text-xl md:text-2xl text-white tracking-widest break-all select-all shadow-inner border border-glassBorder" id="generatedKeyText"></div>
+                            <p class="text-xs text-coolLight mt-4 font-medium" id="keyExpiryText"></p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- L2 Provisioning -->
+                <section id="admins" class="tab-content hidden-el max-w-3xl space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Provision Technical Support (L2)</h2>
+                        <p class="text-coolLight text-sm">Delegate restricted command access to sub-administrators.</p>
+                    </div>
+                    
+                    <div class="glass-card p-8 rounded-2xl space-y-6">
+                        <div>
+                            <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Identity Email</label>
+                            <input type="email" id="l2Email" placeholder="tech@coreedu.tech" class="input-premium w-full px-4 py-3 rounded-xl text-white">
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Initial Token</label>
+                                <input type="text" id="l2Pass" value="AuthToken!2026" class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Access Policy</label>
+                                <select id="l2Level" class="input-premium w-full px-4 py-3 rounded-xl text-white appearance-none">
+                                    <option value="billing">Billing & Key Manager</option>
+                                    <option value="tech">Tech Support (Read-Only DB)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="createSuperAdmin()" class="w-full py-4 bg-slateSurface hover:bg-indigo-600 border border-glassBorder text-white rounded-xl font-bold transition flex justify-center items-center gap-2 mt-4">
+                            <i data-lucide="user-plus" class="w-5 h-5"></i> Execute Provisioning
+                        </button>
                     </div>
                 </section>
 
                 <!-- Surveillance -->
-                <section id="surveillance" class="tab-content hidden-el space-y-6">
-                    <div class="flex justify-between items-end mb-4">
-                        <div>
-                            <h2 class="text-2xl font-bold text-white flex items-center gap-2"><i data-lucide="radar" class="text-tealAccent w-5 h-5"></i> Supreme Surveillance</h2>
-                            <p class="text-coolLight text-xs mt-1">Real-time telemetry of all tenant accesses.</p>
-                        </div>
-                        <!-- Search Filter -->
-                        <div class="relative w-64">
-                            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-coolGray"></i>
-                            <input type="text" id="surveillanceSearch" placeholder="Search ID or IP Vector..." class="input-premium w-full pl-9 pr-3 py-2 rounded-lg text-sm text-white font-mono">
-                        </div>
+                <section id="surveillance" class="tab-content hidden-el space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white flex items-center gap-2"><i data-lucide="radar" class="text-tealAccent w-6 h-6"></i> The Hidden Eye</h2>
+                        <p class="text-coolLight text-sm">Real-time telemetry of all tenant and sub-admin sessions.</p>
                     </div>
                     
-                    <div class="glass-card rounded-xl overflow-hidden border border-white/5">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-black/20 text-coolGray text-[10px] uppercase font-bold tracking-wider">
-                                <tr>
-                                    <th class="px-5 py-3">Timestamp</th>
-                                    <th class="px-5 py-3">Actor Identity</th>
-                                    <th class="px-5 py-3">IP Vector</th>
-                                    <th class="px-5 py-3">Device FPT</th>
-                                    <th class="px-5 py-3 text-teal-400">Geo-Location</th>
-                                </tr>
-                            </thead>
-                            <tbody id="surveillance-table-body" class="divide-y divide-white/5 text-xs font-mono text-coolLight">
-                                <!-- Populated via JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <!-- Additional Sections (Admins, Broadcast, Audit) minimized for brevity but fully structured -->
-                <section id="admins" class="tab-content hidden-el max-w-2xl space-y-6">
-                    <div><h2 class="text-2xl font-bold text-white">Provision Technical Support (L2)</h2><p class="text-coolLight text-xs mt-1">Delegate restricted command access.</p></div>
-                    <div class="glass-card p-6 rounded-xl space-y-4 border border-white/5">
-                        <input type="email" id="l2Email" placeholder="tech@coreedu.tech" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white">
-                        <div class="grid grid-cols-2 gap-4">
-                            <input type="text" id="l2Pass" value="AuthToken!2026" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white font-mono">
-                            <select id="l2Level" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white appearance-none"><option value="tech">Tech Support</option><option value="billing">Billing Manager</option></select>
+                    <div class="glass-card rounded-2xl overflow-hidden border border-glassBorder">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/50 text-coolGray uppercase text-xs font-bold tracking-wider">
+                                    <tr>
+                                        <th class="px-6 py-4">Timestamp</th>
+                                        <th class="px-6 py-4">Actor ID</th>
+                                        <th class="px-6 py-4">IP Vector</th>
+                                        <th class="px-6 py-4">Device Fingerprint</th>
+                                        <th class="px-6 py-4 text-teal-400">Geolocation</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="surveillance-table-body" class="divide-y divide-glassBorder text-sm font-mono text-coolLight">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
                         </div>
-                        <button onclick="createSuperAdmin()" class="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold transition flex justify-center items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i> Execute Provisioning</button>
                     </div>
                 </section>
 
-                <section id="broadcast" class="tab-content hidden-el max-w-2xl space-y-6">
-                    <div><h2 class="text-2xl font-bold text-white">System-Wide Broadcast</h2><p class="text-coolLight text-xs mt-1">Force UI overrides globally.</p></div>
-                    <div class="glass-card p-6 rounded-xl space-y-4 border border-white/5 border-l-2 border-l-amber-500">
-                        <select id="alertType" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white appearance-none"><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical Downtime</option></select>
-                        <textarea id="alertMsg" rows="3" placeholder="Transmission payload..." class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white resize-none"></textarea>
-                        <button onclick="sendBroadcast()" class="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-sm font-bold transition border border-rose-500/30 flex justify-center items-center gap-2"><i data-lucide="radio-tower" class="w-4 h-4"></i> Transmit</button>
+                <!-- Broadcast Command -->
+                <section id="broadcast" class="tab-content hidden-el max-w-4xl space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">System-Wide Broadcast</h2>
+                        <p class="text-coolLight text-sm">Force override UI messages across all active tenant dashboards.</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div class="glass-card p-8 rounded-2xl space-y-6 border-l-4 border-l-amber-500 h-fit">
+                            <div>
+                                <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Severity Protocol</label>
+                                <select id="alertType" class="input-premium w-full px-4 py-3 rounded-xl text-white appearance-none">
+                                    <option value="info">Standard Information (Blue)</option>
+                                    <option value="warning">Maintenance Protocol (Amber)</option>
+                                    <option value="critical">Critical Downtime (Red)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Transmission Payload</label>
+                                <textarea id="alertMsg" rows="5" placeholder="Enter transmission message..." class="input-premium w-full px-4 py-3 rounded-xl text-white resize-none"></textarea>
+                            </div>
+                            <button onclick="sendBroadcast()" class="w-full py-4 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-xl font-bold transition flex justify-center items-center gap-2">
+                                <i data-lucide="radio-tower" class="w-5 h-5"></i> Transmit Globally
+                            </button>
+                        </div>
+                        
+                        <div class="glass-card p-6 rounded-2xl flex flex-col h-full min-h-[300px]">
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-glassBorder pb-2">Recent Transmissions</h3>
+                            <div class="flex-1 flex flex-col justify-center items-center text-coolGray opacity-50 space-y-3">
+                                <i data-lucide="history" class="w-10 h-10"></i>
+                                <p class="text-sm font-medium">No recent broadcasts in the current session.</p>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
-                <section id="audit" class="tab-content hidden-el space-y-6">
-                    <div><h2 class="text-2xl font-bold text-white">Audit Ledger</h2><p class="text-coolLight text-xs mt-1">Cryptographic log of state changes.</p></div>
-                    <div class="glass-card rounded-xl overflow-hidden border border-white/5 max-h-[600px] overflow-y-auto custom-scroll">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-black/40 text-coolGray text-[10px] uppercase font-bold tracking-wider sticky top-0">
-                                <tr><th class="px-5 py-3">Time</th><th class="px-5 py-3">Root Actor</th><th class="px-5 py-3">Operation Event</th></tr>
-                            </thead>
-                            <tbody id="audit-table-body" class="divide-y divide-white/5 text-xs font-mono text-coolLight"></tbody>
-                        </table>
+                <!-- Audit Log -->
+                <section id="audit" class="tab-content hidden-el space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Immutable Audit Ledger</h2>
+                        <p class="text-coolLight text-sm">Cryptographically secured log of all root-level state changes.</p>
+                    </div>
+                    
+                    <div class="glass-card rounded-2xl overflow-hidden border border-glassBorder relative">
+                        <div class="max-h-[600px] overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface text-coolGray uppercase text-xs font-bold tracking-wider sticky top-0 z-10 border-b border-glassBorder">
+                                    <tr>
+                                        <th class="px-6 py-4">Time Entry</th>
+                                        <th class="px-6 py-4">Root Actor</th>
+                                        <th class="px-6 py-4">Operation Hash</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="audit-table-body" class="divide-y divide-glassBorder font-mono text-xs text-coolLight">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
+
             </main>
         </div>
     </div>
 
     <!-- New Tenant Modal -->
-    <div id="new-school-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden-el flex justify-center items-center px-4">
-        <div class="glass-card p-6 rounded-xl w-full max-w-sm border border-white/10 shadow-2xl">
-            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="box" class="text-tealAccent w-5 h-5"></i> Provision Node</h3>
-            <div class="space-y-3">
-                <input type="text" id="newSchoolName" placeholder="Entity Name" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white">
-                <input type="number" id="newSchoolQuota" placeholder="Capacity (e.g. 500)" class="input-premium w-full px-3 py-2.5 rounded-lg text-sm text-white">
-                <div class="flex space-x-2 pt-2">
-                    <button onclick="createSchool()" class="flex-1 py-2.5 bg-tealAccent hover:bg-tealHover text-white rounded-lg text-sm font-bold transition">Deploy</button>
-                    <button onclick="closeNewSchoolModal()" class="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-sm font-bold transition">Cancel</button>
+    <div id="new-school-modal" class="fixed inset-0 bg-slateBase/90 backdrop-blur-md z-[100] hidden-el flex justify-center items-center px-4">
+        <div class="glass-card p-8 rounded-3xl w-full max-w-md border-t-4 border-t-tealAccent shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white flex items-center gap-2"><i data-lucide="box" class="text-tealAccent"></i> Provision Tenant</h3>
+                <button onclick="closeNewSchoolModal()" class="text-coolGray hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Institution Entity Name</label>
+                    <input type="text" id="newSchoolName" placeholder="e.g. Oxford High School" class="input-premium w-full px-4 py-3 rounded-xl text-white">
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-coolGray uppercase tracking-wider mb-2 block">Student Capacity Quota</label>
+                    <input type="number" id="newSchoolQuota" placeholder="e.g. 500" class="input-premium w-full px-4 py-3 rounded-xl text-white">
+                </div>
+                <div class="flex space-x-3 pt-4">
+                    <button onclick="createSchool()" class="flex-1 py-3 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-bold transition">Deploy Node</button>
+                    <button onclick="closeNewSchoolModal()" class="flex-1 py-3 bg-slateSurface hover:bg-gray-700 border border-glassBorder text-white rounded-xl font-bold transition">Cancel</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Link JS -->
-    <script src="script.js"></script>
+    <!-- SCRIPTS -->
+    <script>
+        // Initialize Lucide Icons initially
+        lucide.createIcons();
+
+        // FIREBASE INITIALIZATION
+        const firebaseConfig = {
+            apiKey: "AIzaSyBUAoXX64MTKrhMiRKd9oJPnaT0j60SPdY",
+            authDomain: "admin-panel-17e6a.firebaseapp.com",
+            databaseURL: "https://admin-panel-17e6a-default-rtdb.firebaseio.com",
+            projectId: "admin-panel-17e6a",
+            storageBucket: "admin-panel-17e6a.firebasestorage.app",
+            messagingSenderId: "519315316570",
+            appId: "1:519315316570:web:1448a0936e9a102d849d63"
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        const appCheck = firebase.appCheck();
+        appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
+
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // UI STATE FUNCTIONS
+        function toggleDrawer() {
+            const drawer = document.getElementById('side-drawer');
+            const overlay = document.getElementById('side-drawer-overlay');
+            
+            if (drawer.classList.contains('translate-x-full')) {
+                // Open Drawer
+                overlay.classList.remove('hidden-el');
+                void overlay.offsetWidth; // Force reflow
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+                drawer.classList.remove('translate-x-full');
+            } else {
+                // Close Drawer
+                overlay.classList.remove('opacity-100');
+                overlay.classList.add('opacity-0');
+                drawer.classList.add('translate-x-full');
+                setTimeout(() => {
+                    overlay.classList.add('hidden-el');
+                }, 300); // match transition duration
+            }
+        }
+
+        function openLoginFromDrawer() {
+            toggleDrawer();
+            setTimeout(() => {
+                showLoginModal();
+            }, 300);
+        }
+
+        function showLoginModal() { 
+            const modal = document.getElementById('login-modal');
+            const box = document.getElementById('login-modal-box');
+            modal.classList.remove('hidden-el');
+            void modal.offsetWidth; // Force reflow
+            modal.classList.remove('opacity-0');
+            modal.classList.add('opacity-100');
+            box.classList.remove('scale-95');
+            box.classList.add('scale-100');
+        }
+
+        function hideLoginModal() { 
+            const modal = document.getElementById('login-modal');
+            const box = document.getElementById('login-modal-box');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0');
+            box.classList.remove('scale-100');
+            box.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden-el');
+                document.getElementById('err').classList.add('hidden-el');
+            }, 300);
+        }
+
+        function openNewSchoolModal() { document.getElementById('new-school-modal').classList.remove('hidden-el'); }
+        function closeNewSchoolModal() { document.getElementById('new-school-modal').classList.add('hidden-el'); }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden-el'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-slateSurface', 'text-white');
+                btn.classList.add('text-coolLight');
+                if(btn.dataset.target === tabId) {
+                    btn.classList.remove('text-coolLight');
+                    btn.classList.add('bg-slateSurface', 'text-white');
+                }
+            });
+            document.getElementById(tabId).classList.remove('hidden-el');
+            
+            if(tabId === 'tenants') loadSchools();
+            if(tabId === 'keymaker') loadSchoolsDropdown();
+            if(tabId === 'finance' || tabId === 'analytics') loadFinancials();
+            if(tabId === 'surveillance') loadSurveillance();
+            if(tabId === 'audit') loadAuditLog();
+            
+            // Re-render icons on new tabs if needed
+            setTimeout(() => lucide.createIcons(), 50);
+        }
+
+        // AUTHENTICATION LOGIC
+        async function loginRoot() {
+            const e = document.getElementById("adminEmail").value.trim();
+            const p = document.getElementById("adminPass").value.trim();
+            const btn = document.getElementById("loginBtn");
+            const err = document.getElementById("err");
+            const errText = document.getElementById("errText");
+            
+            if(!e || !p) {
+                err.classList.remove('hidden-el');
+                errText.innerText = "Identity and Key required.";
+                return;
+            }
+
+            const origContent = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Verifying...`;
+            lucide.createIcons();
+
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword(e, p);
+                const user = userCredential.user;
+                
+                await logMasterAction("Root Authentication Initialized", user.email);
+
+                document.getElementById("landing-page").classList.add("hidden-el");
+                document.getElementById("login-modal").classList.add("hidden-el");
+                document.getElementById("dashboard").classList.remove("hidden-el");
+                
+                switchTab('analytics');
+                
+            } catch(error) {
+                err.classList.remove('hidden-el');
+                errText.innerText = "Access Denied: " + error.message;
+                btn.innerHTML = origContent;
+                lucide.createIcons();
+            }
+        }
+
+        // MASTER LOGGING
+        async function logMasterAction(action, actor = auth.currentUser?.email || "SYSTEM_ROOT") {
+            try {
+                await db.collection("master_logs").add({
+                    action: action,
+                    actor: actor,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch(e) { console.error("Ledger write failed", e); }
+        }
+
+        // DASHBOARD: ANALYTICS
+        async function loadFinancials() {
+            try {
+                const snap = await db.collection("schools").get();
+                let activeCount = 0, expCount = 0, mrr = 0;
+                const now = new Date();
+                
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if(data.status !== 'suspended') activeCount++;
+                    
+                    if(data.expiryDate) {
+                        const exp = new Date(data.expiryDate);
+                        const diffTime = Math.abs(exp - now);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if(diffDays <= 30 && exp > now) expCount++;
+                    }
+                    
+                    const quota = parseInt(data.quota || 0);
+                    if(quota <= 500) mrr += 149;
+                    else if(quota <= 3000) mrr += 349;
+                    else mrr += 899;
+                });
+                
+                document.getElementById('stat-tenants').innerText = activeCount;
+                document.getElementById('stat-expiring').innerText = expCount;
+                document.getElementById('stat-revenue').innerText = `$${mrr.toLocaleString()}`;
+            } catch(e) { console.error(e); }
+        }
+
+        // DASHBOARD: TENANT MANAGEMENT
+        async function loadSchools() {
+            const tbody = document.getElementById("schools-table-body");
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-coolGray"><i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto mb-2"></i> Querying Database...</td></tr>';
+            lucide.createIcons();
+            
+            try {
+                const snap = await db.collection("schools").get();
+                tbody.innerHTML = '';
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    const isSuspended = data.status === 'suspended';
+                    
+                    const statusHtml = isSuspended 
+                        ? `<span class="px-2.5 py-1 bg-rose-500/10 text-rose-400 text-xs rounded-lg border border-rose-500/20 font-medium flex items-center gap-1.5 w-fit"><i data-lucide="shield-alert" class="w-3 h-3"></i> Suspended</span>`
+                        : `<span class="px-2.5 py-1 bg-tealAccent/10 text-teal-400 text-xs rounded-lg border border-tealAccent/20 font-medium flex items-center gap-1.5 w-fit"><i data-lucide="shield-check" class="w-3 h-3"></i> Active</span>`;
+                    
+                    const actionsHtml = `
+                        <div class="flex items-center justify-end gap-2">
+                            <button title="Edit Quota" class="p-1.5 text-coolGray hover:text-white bg-slateBase hover:bg-slateSurface border border-glassBorder rounded-md transition"><i data-lucide="settings-2" class="w-4 h-4"></i></button>
+                            ${isSuspended 
+                                ? `<button onclick="toggleKillSwitch('${doc.id}', false)" title="Restore Access" class="p-1.5 text-teal-500 hover:text-white bg-teal-500/10 hover:bg-teal-600 border border-teal-500/20 rounded-md transition"><i data-lucide="unlock" class="w-4 h-4"></i></button>`
+                                : `<button onclick="toggleKillSwitch('${doc.id}', true)" title="Engage Kill-Switch" class="p-1.5 text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-600 border border-rose-500/20 rounded-md transition"><i data-lucide="skull" class="w-4 h-4"></i></button>`
+                            }
+                        </div>
+                    `;
+
+                    const expiry = data.expiryDate ? new Date(data.expiryDate).toLocaleDateString() : '<span class="text-coolGray italic">No License</span>';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slateBase/50 transition">
+                            <td class="px-6 py-4">
+                                <p class="font-bold text-white">${data.schoolName}</p>
+                                <p class="text-xs text-coolGray font-mono mt-0.5">${doc.id}</p>
+                            </td>
+                            <td class="px-6 py-4 font-medium text-coolLight">${data.quota || 0}</td>
+                            <td class="px-6 py-4 text-coolLight">${expiry}</td>
+                            <td class="px-6 py-4">${statusHtml}</td>
+                            <td class="px-6 py-4">${actionsHtml}</td>
+                        </tr>
+                    `;
+                });
+                lucide.createIcons();
+            } catch(e) { 
+                tbody.innerHTML = `<tr><td colspan="5" class="text-rose-400 px-6 py-4 text-center">Error: ${e.message}</td></tr>`; 
+            }
+        }
+
+        async function createSchool() {
+            const name = document.getElementById('newSchoolName').value;
+            const quota = document.getElementById('newSchoolQuota').value;
+            if(!name || !quota) return alert("Fields required.");
+            
+            try {
+                await db.collection('schools').add({
+                    schoolName: name,
+                    quota: parseInt(quota),
+                    status: 'active',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                await logMasterAction(`Provisioned Tenant Node: ${name}`);
+                closeNewSchoolModal();
+                document.getElementById('newSchoolName').value = '';
+                document.getElementById('newSchoolQuota').value = '';
+                loadSchools();
+            } catch(e) { alert(e.message); }
+        }
+
+        async function toggleKillSwitch(schoolId, suspend) {
+            if(suspend && !confirm("WARNING: Disabling tenant database access is immediate. Proceed?")) return;
+            try {
+                await db.collection('schools').doc(schoolId).update({
+                    status: suspend ? 'suspended' : 'active'
+                });
+                await logMasterAction(`Kill-Switch: ${suspend ? 'ENGAGED' : 'DISENGAGED'} for [${schoolId}]`);
+                loadSchools();
+            } catch(e) { alert(e.message); }
+        }
+
+        // DASHBOARD: KEY MAKER
+        async function loadSchoolsDropdown() {
+            const select = document.getElementById("schoolSelect");
+            select.innerHTML = '<option value="">-- Select Target Database --</option>';
+            try {
+                const snap = await db.collection("schools").get();
+                snap.forEach(doc => {
+                    select.innerHTML += `<option value="${doc.id}">${doc.data().schoolName || "Unnamed"} (${doc.id})</option>`;
+                });
+            } catch(e) { select.innerHTML = `<option value="">Error Loading Nodes</option>`; }
+        }
+
+        async function generateKey() {
+            const schoolSelect = document.getElementById("schoolSelect");
+            const schoolId = schoolSelect.value;
+            if(!schoolId) return alert("Designate a target tenant first.");
+            
+            const schoolName = schoolSelect.options[schoolSelect.selectedIndex].text;
+            const validity = document.getElementById("validity").value;
+            const btn = document.getElementById("genBtn");
+
+            const origContent = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Processing Signature...`;
+            lucide.createIcons();
+            
+            try {
+                const response = await fetch("https://school-backend-zlgy.onrender.com/api/generate-license", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        schoolId: schoolId,
+                        schoolName: schoolName,
+                        validityMonths: validity,
+                        masterSecret: "VETO_MASTER_2026"
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if(data.success) {
+                    await logMasterAction(`Forged ${validity}m License for ${schoolName}`);
+                    document.getElementById("keyOutput").classList.remove("hidden-el");
+                    document.getElementById("generatedKeyText").innerText = data.licenseKey;
+                    document.getElementById("keyExpiryText").innerText = `Valid until: ${new Date(data.expiryDate).toLocaleDateString()}`;
+                } else {
+                    alert("Backend Rejection: " + data.error);
+                }
+            } catch(e) { 
+                alert("API Communication Failure. Check Node.js Server Status."); 
+            }
+            btn.innerHTML = origContent;
+            lucide.createIcons();
+        }
+
+        // DASHBOARD: L2 ADMINS
+        async function createSuperAdmin() {
+            const email = document.getElementById('l2Email').value;
+            const role = document.getElementById('l2Level').value;
+            if(!email) return;
+            
+            try {
+                await db.collection('super_admins').add({
+                    email: email,
+                    role: role,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                await logMasterAction(`Provisioned L2 Access: ${email}[${role.toUpperCase()}]`);
+                alert("Identity Provisioned securely.");
+                document.getElementById('l2Email').value = '';
+            } catch(e) { alert(e.message); }
+        }
+
+        // DASHBOARD: BROADCAST
+        async function sendBroadcast() {
+            const msg = document.getElementById('alertMsg').value;
+            const type = document.getElementById('alertType').value;
+            if(!msg) return;
+
+            try {
+                await db.collection('system_broadcasts').add({
+                    message: msg,
+                    type: type,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    active: true
+                });
+                await logMasterAction(`Global Broadcast Sent:[${type.toUpperCase()}]`);
+                alert("Transmission pushed to all global nodes.");
+                document.getElementById('alertMsg').value = '';
+            } catch(e) { alert(e.message); }
+        }
+
+        // DASHBOARD: SURVEILLANCE & AUDIT LOGS
+        async function loadAuditLog() {
+            const tbody = document.getElementById("audit-table-body");
+            try {
+                const snap = await db.collection("master_logs").orderBy("timestamp", "desc").limit(50).get();
+                tbody.innerHTML = '';
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    const time = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'Syncing...';
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slateBase/50 transition">
+                            <td class="px-6 py-3">${time}</td>
+                            <td class="px-6 py-3 text-teal-400">${data.actor}</td>
+                            <td class="px-6 py-3">${data.action}</td>
+                        </tr>
+                    `;
+                });
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadSurveillance() {
+            const tbody = document.getElementById("surveillance-table-body");
+            tbody.innerHTML = '';
+            
+            // Mocking telemetry data for UX demonstration
+            const mockLogs =[
+                { time: new Date().toLocaleTimeString(), id: 'admin@oxford.edu', ip: '192.168.1.104', dev: 'Win32 Chrome 120.0', loc: 'Mumbai, IN' },
+                { time: new Date(Date.now() - 3600000).toLocaleTimeString(), id: 'sys@elite.edu', ip: '203.0.113.42', dev: 'iOS 16_5 Safari', loc: 'Delhi, IN' },
+                { time: new Date(Date.now() - 7200000).toLocaleTimeString(), id: 'l2_tech@coreedu.tech', ip: '198.51.100.12', dev: 'MacIntel Firefox 122', loc: 'Bangalore, IN' }
+            ];
+
+            mockLogs.forEach(log => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slateBase/50 transition">
+                        <td class="px-6 py-3">${log.time}</td>
+                        <td class="px-6 py-3 text-white">${log.id}</td>
+                        <td class="px-6 py-3">${log.ip}</td>
+                        <td class="px-6 py-3 text-xs opacity-70">${log.dev}</td>
+                        <td class="px-6 py-3 text-teal-500 flex items-center gap-1.5"><i data-lucide="map-pin" class="w-3 h-3"></i> ${log.loc}</td>
+                    </tr>
+                `;
+            });
+            lucide.createIcons();
+        }
+    </script>
 </body>
 </html>
