@@ -1,0 +1,79 @@
+/* Base styles and typography overrides handled by Tailwind config in index.html */
+
+/* High-Contrast Navbar */
+.navbar-glass {
+    background: rgba(11, 17, 32, 0.9); /* Darker base for high contrast */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Modern Neumorphism / Glassmorphism */
+.glass-card { 
+    background: rgba(30, 41, 59, 0.4); 
+    backdrop-filter: blur(16px); 
+    -webkit-backdrop-filter: blur(16px);
+}
+
+/* Premium Input Fields */
+.input-premium {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+}
+.input-premium:focus {
+    border-color: #0D9488; /* Teal Accent */
+    box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+    outline: none;
+}
+
+/* Micro-Interactions */
+.hover-scale {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hover-scale:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    border-color: rgba(13, 148, 136, 0.3);
+}
+
+/* Custom Scrollbar for Dark Theme */
+.custom-scroll::-webkit-scrollbar,
+::-webkit-scrollbar { 
+    width: 6px; 
+    height: 6px;
+}
+.custom-scroll::-webkit-scrollbar-track,
+::-webkit-scrollbar-track { 
+    background: transparent; 
+}
+.custom-scroll::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb { 
+    background: rgba(100, 116, 139, 0.5); 
+    border-radius: 10px; 
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover { 
+    background: #0D9488; 
+}
+
+/* Utilities */
+.hidden-el { display: none !important; }
+
+/* -------------------------------------
+   Skeleton Loader Animations
+-------------------------------------- */
+.skeleton {
+    background: linear-gradient(90deg, 
+        rgba(30, 41, 59, 0.6) 25%, 
+        rgba(51, 65, 85, 0.8) 50%, 
+        rgba(30, 41, 59, 0.6) 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite linear;
+    border-radius: 0.25rem;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
