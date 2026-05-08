@@ -77,109 +77,115 @@
             </div>
         </header>
 
-        <!-- Features Section -->
-        <section class="py-20 px-6 relative z-10">
-            <div class="max-w-7xl mx-auto text-center">
-                <p class="text-tealAccent text-xs font-bold tracking-widest uppercase mb-2">Core Features</p>
-                <h3 class="text-3xl md:text-4xl font-bold text-white mb-12">Everything you need to scale</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-                    <div class="glass-card p-8 rounded-2xl">
-                        <div class="w-12 h-12 rounded-lg bg-tealAccent/20 mb-6 border border-tealAccent/30"></div>
-                        <h4 class="text-xl font-bold text-white mb-3">Multi-Tenant Architecture</h4>
-                        <p class="text-coolLight text-sm leading-relaxed">Absolute data isolation between schools with centralized master control and zero cross-contamination.</p>
+        <!-- OLD DESIGN SECTIONS ADDED BELOW -->
+
+        <section id="features" class="py-24 bg-slateSurface px-6 border-y border-glassBorder">
+            <div class="max-w-7xl mx-auto">
+                <div class="text-center mb-16">
+                    <h3 class="text-tealAccent font-semibold tracking-wider uppercase text-sm mb-2">Core Features</h3>
+                    <h2 class="text-3xl md:text-4xl font-bold">Everything you need to scale</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300">
+                        <div class="w-14 h-14 rounded-2xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent"><i data-lucide="database"></i></div>
+                        <h4 class="text-xl font-bold mb-3">Multi-Tenant Architecture</h4>
+                        <p class="text-coolLight leading-relaxed">Absolute data isolation between schools with centralized master control and zero cross-contamination.</p>
                     </div>
-                    <div class="glass-card p-8 rounded-2xl">
-                        <div class="w-12 h-12 rounded-lg bg-tealAccent/20 mb-6 border border-tealAccent/30"></div>
-                        <h4 class="text-xl font-bold text-white mb-3">Real-time Telemetry</h4>
-                        <p class="text-coolLight text-sm leading-relaxed">Live insight into financial metrics, user engagement, and system health across global deployments.</p>
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300">
+                        <div class="w-14 h-14 rounded-2xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent"><i data-lucide="bar-chart-3"></i></div>
+                        <h4 class="text-xl font-bold mb-3">Real-time Telemetry</h4>
+                        <p class="text-coolLight leading-relaxed">Live insight into financial metrics, user engagement, and system health across global deployments.</p>
                     </div>
-                    <div class="glass-card p-8 rounded-2xl">
-                        <div class="w-12 h-12 rounded-lg bg-tealAccent/20 mb-6 border border-tealAccent/30"></div>
-                        <h4 class="text-xl font-bold text-white mb-3">Instant Provisioning</h4>
-                        <p class="text-coolLight text-sm leading-relaxed">Deploy entirely new school environments, databases, and secure access keys in milliseconds.</p>
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300">
+                        <div class="w-14 h-14 rounded-2xl bg-tealAccent/20 flex items-center justify-center mb-6 text-tealAccent"><i data-lucide="zap"></i></div>
+                        <h4 class="text-xl font-bold mb-3">Instant Provisioning</h4>
+                        <p class="text-coolLight leading-relaxed">Deploy entirely new school environments, databases, and secure access keys in milliseconds.</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Security Section -->
-        <section class="py-20 px-6 relative z-10 border-y border-glassBorder bg-slateBase">
-            <div class="max-w-7xl mx-auto">
-                <div class="mb-12 text-left">
-                    <p class="text-tealAccent text-xs font-bold tracking-widest uppercase mb-2">Military-Grade Security</p>
-                    <h3 class="text-3xl md:text-4xl font-bold text-white mb-6">Data sovereignty is our highest priority.</h3>
-                    <p class="text-coolLight text-sm md:text-base max-w-3xl mb-8 leading-relaxed">We protect your institutional data using advanced cryptographic licensing, continuous surveillance, and an immutable master audit ledger. Every action is authenticated, verified, and logged.</p>
-                    <ul class="space-y-4 text-sm text-gray-300">
-                        <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> End-to-End Encryption (AES-256)</li>
-                        <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Global Kill-Switch Capabilities</li>
-                        <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Role-Based Access Control (RBAC)</li>
+        <section id="why-us" class="py-24 px-6 relative">
+            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h3 id="security" class="text-tealAccent font-semibold tracking-wider uppercase text-sm mb-2">Military-Grade Security</h3>
+                    <h2 class="text-3xl md:text-4xl font-bold mb-6">Data sovereignty is our highest priority.</h2>
+                    <p class="text-coolLight mb-6 leading-relaxed">We protect your institutional data using advanced cryptographic licensing, continuous surveillance, and an immutable master audit ledger. Every action is authenticated, verified, and logged.</p>
+                    <ul class="space-y-4">
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-tealAccent w-5 h-5"></i> <span class="text-gray-300">End-to-End Encryption (AES-256)</span></li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-tealAccent w-5 h-5"></i> <span class="text-gray-300">Global Kill-Switch Capabilities</span></li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-tealAccent w-5 h-5"></i> <span class="text-gray-300">Role-Based Access Control (RBAC)</span></li>
                     </ul>
                 </div>
-                <div class="w-full h-64 md:h-96 bg-slateSurface rounded-2xl border border-glassBorder overflow-hidden relative shadow-2xl">
-                    <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=2070&auto=format&fit=crop" alt="Circuit Board" class="w-full h-full object-cover opacity-40 mix-blend-overlay">
-                    <div class="absolute inset-0 bg-gradient-to-t from-slateBase via-transparent to-transparent"></div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-card p-2 rounded-2xl">
+                        <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" alt="Security Dashboard" class="rounded-xl opacity-80 mix-blend-luminosity hover:mix-blend-normal transition duration-500">
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Pricing Section -->
-        <section class="py-20 px-6 relative z-10">
+        <section id="pricing" class="py-24 bg-slateSurface px-6 border-y border-glassBorder">
             <div class="max-w-7xl mx-auto text-center">
-                <p class="text-tealAccent text-xs font-bold tracking-widest uppercase mb-2">Licensing</p>
-                <h3 class="text-3xl md:text-4xl font-bold text-white mb-12">Plans built for your scale</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto text-left items-center">
-                    <div class="glass-card p-8 rounded-3xl">
-                        <h4 class="text-2xl font-bold text-white mb-2">Silver</h4>
+                <h3 class="text-tealAccent font-semibold tracking-wider uppercase text-sm mb-2">Licensing</h3>
+                <h2 class="text-3xl md:text-4xl font-bold mb-16">Plans built for your scale</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left">
+                        <h4 class="text-2xl font-bold text-gray-100 mb-2">Silver</h4>
                         <p class="text-coolLight text-sm mb-6 h-10">Essential infrastructure for standalone schools.</p>
-                        <div class="mb-6"><span class="text-4xl font-bold text-white">$149</span><span class="text-coolLight">/mo</span></div>
-                        <ul class="space-y-4 text-sm text-gray-300 mb-8">
-                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Up to 500 Students</li>
-                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Standard Analytics</li>
+                        <div class="text-4xl font-extrabold mb-6">$149<span class="text-lg text-coolGray font-medium">/mo</span></div>
+                        <ul class="space-y-4 mb-8 flex-1">
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Up to 500 Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Standard Analytics</li>
                         </ul>
-                        <button class="w-full py-3 rounded-lg border border-glassBorder hover:bg-slateSurface text-white font-semibold transition">Select Silver</button>
+                        <button class="w-full py-3 rounded-xl border border-glassBorder hover:bg-slateBase transition font-semibold">Select Silver</button>
                     </div>
-                    <div class="glass-card p-8 rounded-3xl border-tealAccent relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(13,148,136,0.15)] bg-slateSurface/80">
-                        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-tealAccent text-white text-[10px] font-bold px-4 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">Enterprise Standard</div>
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border-tealAccent relative transform md:-translate-y-4 shadow-2xl shadow-tealAccent/10">
+                        <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-tealAccent text-white px-4 py-1 rounded-full text-xs font-bold tracking-wide">ENTERPRISE STANDARD</div>
                         <h4 class="text-2xl font-bold text-tealAccent mb-2">Gold</h4>
                         <p class="text-coolLight text-sm mb-6 h-10">Advanced telemetry for growing districts.</p>
-                        <div class="mb-6"><span class="text-4xl font-bold text-white">$349</span><span class="text-coolLight">/mo</span></div>
-                        <ul class="space-y-4 text-sm text-gray-300 mb-8">
-                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Up to 3,000 Students</li>
-                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Advanced AI Analytics</li>
+                        <div class="text-4xl font-extrabold mb-6">$349<span class="text-lg text-coolGray font-medium">/mo</span></div>
+                        <ul class="space-y-4 mb-8 flex-1">
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Up to 3,000 Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Advanced AI Analytics</li>
                         </ul>
-                        <button class="w-full py-3 rounded-lg bg-tealAccent hover:bg-tealHover text-white font-semibold transition">Select Gold</button>
+                        <button class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealHover transition font-semibold text-white shadow-lg">Select Gold</button>
                     </div>
-                    <div class="glass-card p-8 rounded-3xl">
-                        <h4 class="text-2xl font-bold text-white mb-2">Platinum</h4>
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left">
+                        <h4 class="text-2xl font-bold text-gray-100 mb-2">Platinum</h4>
                         <p class="text-coolLight text-sm mb-6 h-10">Infinite scalability for national deployments.</p>
-                        <div class="mb-6"><span class="text-4xl font-bold text-white">Custom</span></div>
-                        <ul class="space-y-4 text-sm text-gray-300 mb-8">
-                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Unlimited Students</li>
-                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Root API Access</li>
+                        <div class="text-4xl font-extrabold mb-6">Custom</div>
+                        <ul class="space-y-4 mb-8 flex-1">
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Unlimited Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Root API Access</li>
                         </ul>
-                        <button class="w-full py-3 rounded-lg border border-glassBorder hover:bg-slateSurface text-white font-semibold transition">Contact Sales</button>
+                        <button class="w-full py-3 rounded-xl border border-glassBorder hover:bg-slateBase transition font-semibold">Contact Sales</button>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- CTA Section -->
-        <section class="py-20 px-6 relative z-10">
-            <div class="max-w-4xl mx-auto glass-card p-10 md:p-16 rounded-3xl text-center border-t-4 border-tealAccent">
-                <h3 class="text-2xl md:text-3xl font-bold text-white mb-4">Ready to modernize your infrastructure?</h3>
-                <p class="text-coolLight text-sm mb-8">Speak to our architecture team today to schedule a technical deep-dive and platform demo.</p>
-                <div class="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
-                    <input type="email" placeholder="bf0040792@admin.com" class="input-premium flex-1 px-4 py-3 rounded-lg text-white" value="bf0040792@admin.com">
-                    <button class="px-6 py-3 bg-tealAccent hover:bg-tealHover text-white rounded-lg font-semibold transition whitespace-nowrap">Request Demo</button>
+        <section id="contact" class="py-24 px-6 relative">
+            <div class="max-w-3xl mx-auto glass-card p-10 md:p-16 rounded-3xl text-center">
+                <i data-lucide="mail" class="w-10 h-10 text-tealAccent mx-auto mb-6"></i>
+                <h2 class="text-3xl font-bold mb-4">Ready to modernize your infrastructure?</h2>
+                <p class="text-coolLight mb-8">Speak to our architecture team today to schedule a technical deep-dive and platform demo.</p>
+                <div class="flex flex-col md:flex-row gap-4 justify-center">
+                    <input type="email" placeholder="Work Email" class="input-premium px-6 py-4 rounded-xl w-full md:w-96 text-white">
+                    <button class="px-8 py-4 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-semibold transition whitespace-nowrap shadow-lg">Request Demo</button>
                 </div>
             </div>
         </section>
 
-        <!-- Footer -->
-        <footer class="py-8 border-t border-glassBorder text-center relative z-10 bg-slateBase">
-            <h4 class="text-lg font-bold text-white mb-2">CoreEdu</h4>
-            <p class="text-xs text-coolGray">© 2026 CoreEdu Tech Inc. All rights reserved.</p>
+        <footer class="py-12 border-t border-glassBorder bg-slateBase text-center relative z-20">
+            <div class="flex items-center justify-center gap-2 mb-6 opacity-50">
+                <i data-lucide="layers" class="w-6 h-6"></i> <span class="font-bold text-lg">CoreEdu</span>
+            </div>
+            <p id="secret-trigger" class="text-coolGray text-sm cursor-default select-none transition hover:text-coolLight" ondblclick="showLoginModal()">© 2026 CoreEdu Tech Inc. All rights reserved.</p>
         </footer>
+
+        <!-- END OF OLD DESIGN SECTIONS -->
+
     </div>
 
     <div id="login-modal" class="fixed inset-0 bg-slateBase/90 backdrop-blur-md z-[120] hidden-el flex justify-center items-center px-4 transition-opacity duration-300 opacity-0">
