@@ -26,9 +26,9 @@ const secondaryAuth = firebase.auth(secondaryApp);
 // Global State Variables
 window.fetchedChairmen = []; 
 window.fetchedGlobalStaffList = []; 
-window.fetchedSchoolPayments = []; 
+window.fetchedSchoolPayments =[]; 
 window.fetchedInspectStudents = []; 
-window.currentDeviceLogs = []; 
+window.currentDeviceLogs =[]; 
 let superAdminUid = ""; 
 let currentEditChairmanId = null;
 
@@ -488,7 +488,7 @@ window.searchStudentByAadhaar = async () => {
         document.getElementById("as-father").innerText = dt.fatherName || "N/A"; 
         document.getElementById("as-mother").innerText = dt.motherName || "N/A"; 
         document.getElementById("as-mobile").innerText = dt.mobile || "N/A";
-        document.getElementById("as-status").innerHTML = `<span class="${dt.status === "Approved" ? "text-emerald-400" : "text-amber-400"}">${dt.status || "Pending"}</span>`;
+        document.getElementById("as-status").innerHTML = `<span class="${dt.status === "Approved" ? "textemerald-400" : "text-amber-400"}">${dt.status || "Pending"}</span>`;
         resDiv.classList.remove("hidden-el"); window.logAudit("Aadhaar Search", input);
     } catch(e) { window.showToast("Search Error: " + e.message, "#e11d48"); }
 };

@@ -17,7 +17,7 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'], display:['Poppins', 'sans-serif'] },
+                    fontFamily: { sans:['Inter', 'sans-serif'], display:['Poppins', 'sans-serif'] },
                     colors: { slateBase: '#111827', slateSurface: '#1f2937', tealAccent: '#0D9488', tealHover: '#0F766E', coolGray: '#6B7280', coolLight: '#9CA3AF', glassBorder: 'rgba(255, 255, 255, 0.1)' }
                 }
             }
@@ -45,26 +45,141 @@
         <marquee id="ticker-text"></marquee>
     </div>
 
-    <div id="landing-page" class="flex-1 w-full relative z-10 overflow-y-auto hidden-el">
-        <nav class="w-full glass-card fixed top-0 z-50 rounded-none border-x-0 border-t-0 border-b border-glassBorder transition-all">
+    <div id="landing-page" class="flex-1 w-full relative z-10 overflow-y-auto hidden-el bg-slateBase">
+        <!-- Navbar -->
+        <nav class="w-full glass-card fixed top-0 z-50 rounded-none border-x-0 border-t-0 border-b border-glassBorder transition-all bg-slateBase/80 backdrop-blur-md">
             <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
                 <div class="flex items-center gap-2">
                     <i data-lucide="layers" class="text-tealAccent w-8 h-8"></i>
                     <h1 class="text-2xl font-bold tracking-tight text-white">CoreEdu<span class="text-tealAccent">Tech</span></h1>
                 </div>
                 <div class="flex items-center gap-4">
-                    <button onclick="showLoginModal()" class="px-5 py-2.5 bg-tealAccent hover:bg-tealHover text-white rounded-xl font-semibold transition shadow-lg flex items-center gap-2"><i data-lucide="fingerprint" class="w-4 h-4"></i> Admin Login</button>
+                    <button onclick="showLoginModal()" class="px-5 py-2.5 bg-tealAccent hover:bg-tealHover text-white rounded-lg font-semibold transition shadow-lg flex items-center gap-2 text-sm">Admin Login</button>
+                    <button class="text-white md:hidden"><i class="fas fa-bars text-xl"></i></button>
                 </div>
             </div>
         </nav>
-        
-        <header id="home" class="pt-40 pb-24 px-6 text-center relative overflow-hidden">
+
+        <!-- Hero Section -->
+        <header id="home" class="pt-40 pb-20 px-6 text-center relative overflow-hidden flex flex-col items-center">
             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-tealAccent/10 blur-[120px] rounded-full z-0 pointer-events-none"></div>
             <div class="relative z-10 max-w-4xl mx-auto">
-                <h2 class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight tracking-tight text-white">Unified Infrastructure for <br><span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-teal-600">Modern Education</span></h2>
-                <p class="text-xl text-coolLight mb-10 max-w-2xl mx-auto font-light">Deploy, scale, and secure your institution's digital ecosystem with our military-grade management command center.</p>
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-tealAccent/10 border border-tealAccent/20 text-tealAccent text-xs font-semibold mb-8">
+                    <div class="w-2 h-2 rounded-full bg-tealAccent"></div>
+                    Enterprise SaaS v4.0 is Live
+                </div>
+                <h2 class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight tracking-tight text-white">Unified Infrastructure for <br><span class="text-tealAccent">Modern Education</span></h2>
+                <p class="text-lg md:text-xl text-coolLight mb-10 max-w-2xl mx-auto font-light">Deploy, scale, and secure your institution's digital ecosystem with our military-grade management command center.</p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <button class="px-8 py-3 bg-tealAccent hover:bg-tealHover text-white rounded-lg font-semibold transition shadow-lg w-full sm:w-auto">Start Free Trial</button>
+                    <button class="px-8 py-3 bg-slateSurface hover:bg-gray-700 text-white rounded-lg font-semibold transition border border-glassBorder w-full sm:w-auto">Watch Demo</button>
+                </div>
             </div>
         </header>
+
+        <!-- Features Section -->
+        <section class="py-20 px-6 relative z-10">
+            <div class="max-w-7xl mx-auto text-center">
+                <p class="text-tealAccent text-xs font-bold tracking-widest uppercase mb-2">Core Features</p>
+                <h3 class="text-3xl md:text-4xl font-bold text-white mb-12">Everything you need to scale</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+                    <div class="glass-card p-8 rounded-2xl">
+                        <div class="w-12 h-12 rounded-lg bg-tealAccent/20 mb-6 border border-tealAccent/30"></div>
+                        <h4 class="text-xl font-bold text-white mb-3">Multi-Tenant Architecture</h4>
+                        <p class="text-coolLight text-sm leading-relaxed">Absolute data isolation between schools with centralized master control and zero cross-contamination.</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-2xl">
+                        <div class="w-12 h-12 rounded-lg bg-tealAccent/20 mb-6 border border-tealAccent/30"></div>
+                        <h4 class="text-xl font-bold text-white mb-3">Real-time Telemetry</h4>
+                        <p class="text-coolLight text-sm leading-relaxed">Live insight into financial metrics, user engagement, and system health across global deployments.</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-2xl">
+                        <div class="w-12 h-12 rounded-lg bg-tealAccent/20 mb-6 border border-tealAccent/30"></div>
+                        <h4 class="text-xl font-bold text-white mb-3">Instant Provisioning</h4>
+                        <p class="text-coolLight text-sm leading-relaxed">Deploy entirely new school environments, databases, and secure access keys in milliseconds.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Security Section -->
+        <section class="py-20 px-6 relative z-10 border-y border-glassBorder bg-slateBase">
+            <div class="max-w-7xl mx-auto">
+                <div class="mb-12 text-left">
+                    <p class="text-tealAccent text-xs font-bold tracking-widest uppercase mb-2">Military-Grade Security</p>
+                    <h3 class="text-3xl md:text-4xl font-bold text-white mb-6">Data sovereignty is our highest priority.</h3>
+                    <p class="text-coolLight text-sm md:text-base max-w-3xl mb-8 leading-relaxed">We protect your institutional data using advanced cryptographic licensing, continuous surveillance, and an immutable master audit ledger. Every action is authenticated, verified, and logged.</p>
+                    <ul class="space-y-4 text-sm text-gray-300">
+                        <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> End-to-End Encryption (AES-256)</li>
+                        <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Global Kill-Switch Capabilities</li>
+                        <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Role-Based Access Control (RBAC)</li>
+                    </ul>
+                </div>
+                <div class="w-full h-64 md:h-96 bg-slateSurface rounded-2xl border border-glassBorder overflow-hidden relative shadow-2xl">
+                    <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=2070&auto=format&fit=crop" alt="Circuit Board" class="w-full h-full object-cover opacity-40 mix-blend-overlay">
+                    <div class="absolute inset-0 bg-gradient-to-t from-slateBase via-transparent to-transparent"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section class="py-20 px-6 relative z-10">
+            <div class="max-w-7xl mx-auto text-center">
+                <p class="text-tealAccent text-xs font-bold tracking-widest uppercase mb-2">Licensing</p>
+                <h3 class="text-3xl md:text-4xl font-bold text-white mb-12">Plans built for your scale</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto text-left items-center">
+                    <div class="glass-card p-8 rounded-3xl">
+                        <h4 class="text-2xl font-bold text-white mb-2">Silver</h4>
+                        <p class="text-coolLight text-sm mb-6 h-10">Essential infrastructure for standalone schools.</p>
+                        <div class="mb-6"><span class="text-4xl font-bold text-white">$149</span><span class="text-coolLight">/mo</span></div>
+                        <ul class="space-y-4 text-sm text-gray-300 mb-8">
+                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Up to 500 Students</li>
+                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Standard Analytics</li>
+                        </ul>
+                        <button class="w-full py-3 rounded-lg border border-glassBorder hover:bg-slateSurface text-white font-semibold transition">Select Silver</button>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl border-tealAccent relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(13,148,136,0.15)] bg-slateSurface/80">
+                        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-tealAccent text-white text-[10px] font-bold px-4 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">Enterprise Standard</div>
+                        <h4 class="text-2xl font-bold text-tealAccent mb-2">Gold</h4>
+                        <p class="text-coolLight text-sm mb-6 h-10">Advanced telemetry for growing districts.</p>
+                        <div class="mb-6"><span class="text-4xl font-bold text-white">$349</span><span class="text-coolLight">/mo</span></div>
+                        <ul class="space-y-4 text-sm text-gray-300 mb-8">
+                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Up to 3,000 Students</li>
+                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Advanced AI Analytics</li>
+                        </ul>
+                        <button class="w-full py-3 rounded-lg bg-tealAccent hover:bg-tealHover text-white font-semibold transition">Select Gold</button>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl">
+                        <h4 class="text-2xl font-bold text-white mb-2">Platinum</h4>
+                        <p class="text-coolLight text-sm mb-6 h-10">Infinite scalability for national deployments.</p>
+                        <div class="mb-6"><span class="text-4xl font-bold text-white">Custom</span></div>
+                        <ul class="space-y-4 text-sm text-gray-300 mb-8">
+                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Unlimited Students</li>
+                            <li class="flex items-center gap-3"><i class="fas fa-check text-tealAccent"></i> Root API Access</li>
+                        </ul>
+                        <button class="w-full py-3 rounded-lg border border-glassBorder hover:bg-slateSurface text-white font-semibold transition">Contact Sales</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA Section -->
+        <section class="py-20 px-6 relative z-10">
+            <div class="max-w-4xl mx-auto glass-card p-10 md:p-16 rounded-3xl text-center border-t-4 border-tealAccent">
+                <h3 class="text-2xl md:text-3xl font-bold text-white mb-4">Ready to modernize your infrastructure?</h3>
+                <p class="text-coolLight text-sm mb-8">Speak to our architecture team today to schedule a technical deep-dive and platform demo.</p>
+                <div class="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
+                    <input type="email" placeholder="bf0040792@admin.com" class="input-premium flex-1 px-4 py-3 rounded-lg text-white" value="bf0040792@admin.com">
+                    <button class="px-6 py-3 bg-tealAccent hover:bg-tealHover text-white rounded-lg font-semibold transition whitespace-nowrap">Request Demo</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="py-8 border-t border-glassBorder text-center relative z-10 bg-slateBase">
+            <h4 class="text-lg font-bold text-white mb-2">CoreEdu</h4>
+            <p class="text-xs text-coolGray">© 2026 CoreEdu Tech Inc. All rights reserved.</p>
+        </footer>
     </div>
 
     <div id="login-modal" class="fixed inset-0 bg-slateBase/90 backdrop-blur-md z-[120] hidden-el flex justify-center items-center px-4 transition-opacity duration-300 opacity-0">
@@ -136,31 +251,31 @@
 
         <div class="flex-1 flex overflow-hidden relative">
             <aside class="w-64 glass-card border-y-0 border-l-0 rounded-none flex flex-col h-full z-20 shrink-0 overflow-y-auto">
-                <nav class="flex-1 px-4 py-6 space-y-1 menu-container">
+                <nav class="flex-1 px-4 py-6 space-y-2 menu-container">
                     <p class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-3 px-2">Dashboards</p>
-                    <button class="menu-item active" data-target="tab-dashboard"><i class="fas fa-chart-line text-tealAccent"></i> Analytics</button>
+                    <button class="menu-item active w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all bg-slateSurface text-white border-l-4 border-tealAccent" data-target="tab-dashboard"><i class="fas fa-chart-line text-tealAccent w-5 text-center"></i> Analytics</button>
                     
                     <p class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-3 mt-6 px-2">Entity Management</p>
-                    <button class="menu-item" data-target="tab-manage"><i class="fas fa-school text-indigo-400"></i> Chairmen & Schools</button>
-                    <button class="menu-item" data-target="tab-modules"><i class="fas fa-user-graduate text-blue-400"></i> Inspect Students</button>
-                    <button class="menu-item" data-target="tab-aadhaar-search"><i class="fas fa-id-card text-amber-400"></i> Aadhaar Search</button>
-                    <button class="menu-item" data-target="tab-staff"><i class="fas fa-users text-emerald-400"></i> Global Staff</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-manage"><i class="fas fa-school text-indigo-400 w-5 text-center"></i> Chairmen & Schools</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-modules"><i class="fas fa-user-graduate text-blue-400 w-5 text-center"></i> Inspect Students</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-aadhaar-search"><i class="fas fa-id-card text-amber-400 w-5 text-center"></i> Aadhaar Search</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-staff"><i class="fas fa-users text-emerald-400 w-5 text-center"></i> Global Staff</button>
                     
                     <p class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-3 mt-6 px-2">Finance & Auth</p>
-                    <button class="menu-item" data-target="tab-school-payment"><i class="fas fa-rupee-sign text-emerald-500"></i> School Payments</button>
-                    <button class="menu-item" data-target="tab-password-req"><i class="fas fa-key text-amber-500"></i> Password Requests</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-school-payment"><i class="fas fa-rupee-sign text-emerald-500 w-5 text-center"></i> School Payments</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-password-req"><i class="fas fa-key text-amber-500 w-5 text-center"></i> Password Requests</button>
                     
                     <p class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-3 mt-6 px-2">Infrastructure</p>
-                    <button class="menu-item" data-target="tab-backup"><i class="fas fa-database text-blue-500"></i> Backup & Rollback</button>
-                    <button class="menu-item" data-target="tab-security"><i class="fas fa-shield-alt text-rose-500"></i> System Controls</button>
-                    <button class="menu-item" data-target="tab-device-tracking"><i class="fas fa-laptop-code text-cyan-400"></i> Device Tracking</button>
-                    <button class="menu-item" data-target="tab-broadcast"><i class="fas fa-broadcast-tower text-indigo-500"></i> Broadcast Hub</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-backup"><i class="fas fa-database text-blue-500 w-5 text-center"></i> Backup & Rollback</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-security"><i class="fas fa-shield-alt text-rose-500 w-5 text-center"></i> System Controls</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-device-tracking"><i class="fas fa-laptop-code text-cyan-400 w-5 text-center"></i> Device Tracking</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-broadcast"><i class="fas fa-broadcast-tower text-indigo-500 w-5 text-center"></i> Broadcast Hub</button>
                     
                     <p class="text-[10px] font-bold text-coolGray uppercase tracking-wider mb-3 mt-6 px-2">Logs & Roles</p>
-                    <button class="menu-item" data-target="tab-audit-logs"><i class="fas fa-history text-coolLight"></i> Audit Logs</button>
-                    <button class="menu-item" data-target="tab-deletions"><i class="fas fa-hand-paper text-rose-400"></i> Master Veto</button>
-                    <button class="menu-item" data-target="tab-recycle-bin"><i class="fas fa-trash-restore text-teal-400"></i> Recycle Bin</button>
-                    <button class="menu-item" data-target="tab-role-builder"><i class="fas fa-user-shield text-amber-400"></i> Role Builder</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-audit-logs"><i class="fas fa-history text-coolLight w-5 text-center"></i> Audit Logs</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-deletions"><i class="fas fa-hand-paper text-rose-400 w-5 text-center"></i> Master Veto</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-recycle-bin"><i class="fas fa-trash-restore text-teal-400 w-5 text-center"></i> Recycle Bin</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface/50 hover:text-white" data-target="tab-role-builder"><i class="fas fa-user-shield text-amber-400 w-5 text-center"></i> Role Builder</button>
                 </nav>
                 <div class="p-4 border-t border-glassBorder bg-slateSurface/30">
                     <button id="logoutBtn" class="w-full py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/20 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2"><i class="fas fa-power-off"></i> Secure Logout</button>
