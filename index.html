@@ -39,6 +39,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-check-compat.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -75,9 +76,10 @@
 
         <!-- Hero Section -->
         <header id="home" class="pt-40 pb-20 px-6 text-center relative overflow-hidden flex flex-col items-center min-h-screen justify-center">
-            <!-- YAHAN APNI IMAGE 1 KA URL DAALEIN (Abstract Data Lines / Circuit Image) -->
+            <!-- Pure CSS Cyber Grid Background -->
             <div class="absolute inset-0 z-0">
-                <img src="https://res.cloudinary.com/disgtvs6f/image/upload/v1778245603/1778245539324_nbb3dd.png" alt="Cyber Background" class="w-full h-full object-cover opacity-100 mix-blend-screen">
+                <div class="absolute inset-0 bg-gradient-to-br from-slateBase via-slateSurface to-slateBase"></div>
+                <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
                 <div class="absolute inset-0 bg-gradient-to-b from-transparent via-slateBase/80 to-slateBase"></div>
             </div>
             
@@ -102,9 +104,12 @@
                     <h2 class="text-3xl md:text-4xl font-display font-bold text-white">Everything you need to scale</h2>
                 </div>
                 
-                <!-- YAHAN APNI IMAGE 4 YA 5 KA URL DAALEIN (Interconnected Nodes/Schools Image) -->
-                <div class="mb-16 rounded-2xl overflow-hidden border border-tealAccent/30 shadow-[0_0_30px_rgba(0,240,255,0.15)] relative">
-                    <img src="https://res.cloudinary.com/disgtvs6f/image/upload/v1778244667/Generated_Image_May_08_2026_-_12_17PM_fllzup.jpg" alt="Global Education Hub Architecture" class="w-full h-auto object-cover opacity-300 mix-blend-screen hover:opacity-100 transition duration-500">
+                <!-- Network Visualization with CSS -->
+                <div class="mb-16 rounded-2xl overflow-hidden border border-tealAccent/30 shadow-[0_0_30px_rgba(0,240,255,0.15)] relative h-64 bg-gradient-to-br from-slateSurface via-slateBase to-slateSurface">
+                    <div class="absolute inset-0 cyber-grid-bg opacity-30"></div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <div class="text-tealAccent text-6xl font-mono font-bold opacity-20 tracking-widest">NETWORK</div>
+                    </div>
                     <div class="absolute inset-0 bg-gradient-to-t from-slateBase via-transparent to-transparent"></div>
                 </div>
 
@@ -142,9 +147,12 @@
                 </div>
                 <div class="lg:w-1/2 w-full relative">
                     <div class="absolute inset-0 bg-tealAccent/20 blur-[100px] rounded-full pointer-events-none"></div>
-                    <!-- YAHAN APNI IMAGE 2 YA 3 KA URL DAALEIN (Holographic Shield / Server Image) -->
-                    <div class="glass-card p-2 rounded-2xl border border-tealAccent/30 shadow-[0_0_40px_rgba(0,240,255,0.2)] relative z-10">
-                        <img src="https://res.cloudinary.com/disgtvs6f/image/upload/v1778227037/Generated_Image_May_08_2026_-_12_18PM_vouy1v.jpg" alt="Holographic Security Server" class="rounded-xl opacity-90 mix-blend-screen hover:opacity-100 transition duration-500 w-full">
+                    <!-- Security Shield Visualization with CSS -->
+                    <div class="glass-card p-2 rounded-2xl border border-tealAccent/30 shadow-[0_0_40px_rgba(0,240,255,0.2)] relative z-10 h-80 bg-gradient-to-br from-slateSurface via-slateBase to-slateSurface overflow-hidden">
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <i data-lucide="shield-check" class="w-32 h-32 text-tealAccent opacity-30"></i>
+                        </div>
+                        <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
                     </div>
                 </div>
             </div>
@@ -502,6 +510,51 @@
                                 </thead>
                                 <tbody id="school-payment-table" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- Company Expenses Section -->
+                    <div class="glass-card p-6 rounded-2xl border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.8)]"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-6"><i class="fas fa-receipt text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]"></i> Company Expenses</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div><label class="text-[10px] font-mono text-amber-400/70 uppercase block mb-1">Expense Type</label><select id="expense-type" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"><option value="server">Server Costs</option><option value="salary">Staff Salary</option><option value="marketing">Marketing</option><option value="other">Other</option></select></div>
+                            <div><label class="text-[10px] font-mono text-amber-400/70 uppercase block mb-1">Amount (₹)</label><input type="number" id="expense-amount" placeholder="5000" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"></div>
+                            <div><label class="text-[10px] font-mono text-amber-400/70 uppercase block mb-1">Description</label><input type="text" id="expense-desc" placeholder="AWS Hosting" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"></div>
+                            <div class="flex items-end"><button onclick="window.addCompanyExpense()" class="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(245,158,11,0.4)]"><i class="fas fa-plus"></i> ADD</button></div>
+                        </div>
+
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-amber-400/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Date</th><th class="p-4">Type</th><th class="p-4">Description</th><th class="p-4">Amount (₹)</th><th class="p-4 text-right">Action</th></tr>
+                                </thead>
+                                <tbody id="expenses-table" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tally Export & GST Invoice Section -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass-card p-6 rounded-2xl border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.1)] relative">
+                            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent"></div>
+                            <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-file-export text-indigo-400"></i> Tally Export</h3>
+                            <p class="text-coolGray text-[10px] font-mono mb-6">Export billing data in Tally-compatible format (XML/CSV)</p>
+                            <div class="space-y-3">
+                                <button onclick="window.exportToTallyXML()" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i class="fas fa-file-code"></i> EXPORT XML</button>
+                                <button onclick="window.exportToTallyCSV()" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i class="fas fa-file-csv"></i> EXPORT CSV</button>
+                            </div>
+                        </div>
+
+                        <div class="glass-card p-6 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)] relative">
+                            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-tealAccent to-transparent"></div>
+                            <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-file-invoice text-tealAccent"></i> GST Invoice Generator</h3>
+                            <p class="text-coolGray text-[10px] font-mono mb-6">Generate GST-compliant invoices for school payments</p>
+                            <div class="space-y-3">
+                                <div><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Select School</label><select id="gst-school-select" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"><option value="">-- Select Node --</option></select></div>
+                                <button onclick="window.generateGSTInvoice()" class="w-full py-3 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.4)]"><i class="fas fa-file-pdf"></i> GENERATE INVOICE</button>
+                            </div>
                         </div>
                     </div>
                 </div>

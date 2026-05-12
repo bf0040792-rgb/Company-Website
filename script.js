@@ -17,6 +17,7 @@ appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
 
 const auth = firebase.auth(app);
 const db = firebase.firestore(app);
+const storage = firebase.storage(app);
 
 db.enablePersistence({synchronizeTabs: true}).catch(function(err) { console.log("Cache Error: ", err); });
 
@@ -107,21 +108,34 @@ window.robustWebViewDownload = async (blobData, filename) => {
     } catch (e) { window.showToast("❌ EXTRACTION ERROR: " + e.message, "#e11d48"); }
 };
 
-// Cloudinary Helper
-const convertToBase64 = (f) => new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res(r.result); r.onerror = (e) => rej(e); });
-const uploadToCloudinary = async (fileObj) => { 
-    if (!fileObj) return null; 
-    try { 
-        const b64 = await convertToBase64(fileObj); const formData = new FormData(); 
-        formData.append("file", b64); formData.append("upload_preset", "ml_default"); 
-        const rs = await fetch(`https://api.cloudinary.com/v1_1/disgtvs6f/image/upload`, { method: "POST", body: formData }); 
-        const d = await rs.json(); 
-        return d.secure_url || null; 
-    } catch (err) { return null; } 
+// Firebase Storage Helper
+const uploadToFirebaseStorage = async (fileObj, folder = 'uploads') => {
+    if (!fileObj) return null;
+    try {
+        const timestamp = Date.now();
+        const fileName = `${folder}/${timestamp}_${fileObj.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        const storageRef = storage.ref(fileName);
+
+        window.showToast("⏳ UPLOADING TO FIREBASE...", "#f59e0b");
+        const uploadTask = await storageRef.put(fileObj);
+        const downloadURL = await uploadTask.ref.getDownloadURL();
+
+        window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
+        return downloadURL;
+    } catch (err) {
+        window.showToast("❌ UPLOAD FAILED: " + err.message, "#e11d48");
+        return null;
+    }
 };
-const deleteCloudinaryImage = async (imageUrl) => {
-    if (imageUrl && imageUrl.includes("cloudinary.com")) {
-        try { await fetch("https://school-backend-zlgy.onrender.com/api/delete-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageUrl: imageUrl }) }); } catch(e) {}
+
+const deleteFirebaseStorageImage = async (imageUrl) => {
+    if (imageUrl && imageUrl.includes("firebasestorage.googleapis.com")) {
+        try {
+            const storageRef = storage.refFromURL(imageUrl);
+            await storageRef.delete();
+        } catch(e) {
+            console.log("Delete error:", e);
+        }
     }
 };
 
@@ -273,13 +287,16 @@ window.initQuotaMonitor = () => {
 // ==========================================
 document.getElementById("createChairmanBtn").addEventListener("click", async () => {
     const sN = document.getElementById("schoolName").value.trim(); const cN = document.getElementById("chairmanName").value.trim(); const em = document.getElementById("chairmanEmail").value.trim(); const pA = document.getElementById("chairmanPassword").value.trim(); const lF = document.getElementById("schoolLogo").files[0]; const b = document.getElementById("createChairmanBtn");
-    if (!sN || !cN || !em || !pA) return window.showToast("FILL ALL PARAMETERS!", "#e11d48"); 
+    if (!sN || !cN || !em || !pA) return window.showToast("FILL ALL PARAMETERS!", "#e11d48");
     b.innerText = "DEPLOYING NODE...";
     try {
-        let lU = "https://via.placeholder.com/40"; 
-        if (lF) { b.innerText = "UPLOADING ASSET..."; const upU = await uploadToCloudinary(lF); if(upU) { lU = upU; } else { window.showToast("ASSET UPLOAD FAILED.", "#e11d48"); b.innerText = "DEPLOY NODE"; return; } }
+        let lU = "https://via.placeholder.com/40";
+        if (lF) {
+            const upU = await uploadToFirebaseStorage(lF, 'school_logos');
+            if(upU) { lU = upU; } else { window.showToast("ASSET UPLOAD FAILED.", "#e11d48"); b.innerText = "DEPLOY NODE"; return; }
+        }
         b.innerText = "PROVISIONING ID...";
-        const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA); 
+        const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA);
         const nuId = uC.user.uid; const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
         await db.collection("users").doc(nuId).set({ name: cN, email: em, role: "chairman", plainPassword: pA, schoolId: sId, schoolName: sN, logoUrl: lU, status: "active", blockReason: "" });
         await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU });
@@ -344,24 +361,30 @@ window.openEditChairman = async (uid) => {
 
 window.saveChairmanEdit = async () => {
     const uid = window.currentEditChairmanId; const ch = window.fetchedChairmen.find(c => c.id === uid); if(!ch) return;
-    const newSchoolName = document.getElementById("edit-schoolName").value.trim(); const newChairmanName = document.getElementById("edit-chairmanName").value.trim(); let newEmail = document.getElementById("edit-chairmanEmail").value.trim(); 
+    const newSchoolName = document.getElementById("edit-schoolName").value.trim(); const newChairmanName = document.getElementById("edit-chairmanName").value.trim(); let newEmail = document.getElementById("edit-chairmanEmail").value.trim();
     const maxStudents = document.getElementById("edit-maxStudents").value.trim(); const themeColor = document.getElementById("edit-themeColor").value;
     const logoFile = document.getElementById("edit-schoolLogo").files[0]; const btn = document.getElementById("save-chairman-edit-btn");
     if(!newSchoolName || !newChairmanName || !newEmail) return window.showToast("FILL TEXT DETAILS!", "#e11d48");
-    
+
     btn.innerText = "PROCESSING...";
     try {
         let finalLogoUrl = ch.logoUrl;
-        if(logoFile) { btn.innerText = "UPLOADING ASSET..."; const uploaded = await uploadToCloudinary(logoFile); if(uploaded) finalLogoUrl = uploaded; }
+        if(logoFile) {
+            const uploaded = await uploadToFirebaseStorage(logoFile, 'school_logos');
+            if(uploaded) {
+                if(finalLogoUrl) await deleteFirebaseStorageImage(finalLogoUrl);
+                finalLogoUrl = uploaded;
+            }
+        }
         if(newEmail !== ch.email) {
             const response = await fetch("https://school-backend-zlgy.onrender.com/changeEmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newEmail: newEmail }) });
             const data = await response.json();
             if(!data.success) { btn.innerText = "WRITE CHANGES"; return window.showToast("❌ SERVER ERROR: " + data.error, "#e11d48"); }
         }
-        
+
         await db.collection("users").doc(uid).update({ name: newChairmanName, schoolName: newSchoolName, email: newEmail, logoUrl: finalLogoUrl });
         if(ch.schoolId) { await db.collection("schools").doc(ch.schoolId).update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: maxStudents?Number(maxStudents):null, themeColor: themeColor }); }
-        
+
         window.showToast("✅ DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
         window.closeCustomModal("edit-chairman-modal"); loadChairmen(); loadSchoolsForDropdown();
     } catch(e) { window.showToast("❌ ERROR: " + e.message, "#e11d48"); } finally { btn.innerText = "WRITE CHANGES"; }
@@ -385,29 +408,29 @@ window.updateStatus = (uid, ns) => {
 window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await db.collection("users").doc(uid).update({ shadowBan: state }); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); loadChairmen(); window.logAudit(state?"Shadow Banned":"Unbanned", uid); }); };
 
 // Cascade Delete
-window.deleteChairman = (uid, sid) => { 
-    window.customConfirm("DANGER: ENTIRE NODE (School, Chairman, Staff, Students, Photos) WILL BE WIPED PERMANENTLY. PROCEED?", async () => { 
-        try { 
+window.deleteChairman = (uid, sid) => {
+    window.customConfirm("DANGER: ENTIRE NODE (School, Chairman, Staff, Students, Photos) WILL BE WIPED PERMANENTLY. PROCEED?", async () => {
+        try {
             window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
             if(uid) {
                 const uDoc = await db.collection("users").doc(uid).get();
-                if(uDoc.exists && uDoc.data().logoUrl) await deleteCloudinaryImage(uDoc.data().logoUrl);
-                await db.collection("users").doc(uid).delete(); 
+                if(uDoc.exists && uDoc.data().logoUrl) await deleteFirebaseStorageImage(uDoc.data().logoUrl);
+                await db.collection("users").doc(uid).delete();
             }
-            if(sid && sid !== "undefined" && sid !== "null") { 
+            if(sid && sid !== "undefined" && sid !== "null") {
                 const sDoc = await db.collection("schools").doc(sid).get();
-                if(sDoc.exists && sDoc.data().logoUrl) await deleteCloudinaryImage(sDoc.data().logoUrl);
-                await db.collection("schools").doc(sid).delete(); 
-                
+                if(sDoc.exists && sDoc.data().logoUrl) await deleteFirebaseStorageImage(sDoc.data().logoUrl);
+                await db.collection("schools").doc(sid).delete();
+
                 const students = await db.collection("students").where("schoolId", "==", sid).get();
-                for (const doc of students.docs) { await deleteCloudinaryImage(doc.data().photoUrl); await db.collection("students").doc(doc.id).delete(); }
+                for (const doc of students.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("students").doc(doc.id).delete(); }
 
                 const staff = await db.collection("users").where("schoolId", "==", sid).where("role", "==", "staff").get();
-                for (const doc of staff.docs) { await deleteCloudinaryImage(doc.data().photoUrl); await db.collection("users").doc(doc.id).delete(); }
-            } 
-            window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid); 
-        } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); } 
-    }); 
+                for (const doc of staff.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("users").doc(doc.id).delete(); }
+            }
+            window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
+        } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
+    });
 };
 
 window.impersonateUser = async (uid, schoolId, email, pass) => {
@@ -466,7 +489,7 @@ window.deleteInspectStudent = (id) => {
     window.customConfirm("DELETE THIS SUBJECT GLOBALLY?", async () => {
         try {
             const stDoc = await db.collection("students").doc(id).get();
-            if(stDoc.exists) await deleteCloudinaryImage(stDoc.data().photoUrl);
+            if(stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl);
             await db.collection("students").doc(id).delete();
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
             document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
@@ -535,7 +558,7 @@ window.filterStaffList = () => {
     document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>"; 
 };
 
-window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get(); if(stDoc.exists) await deleteCloudinaryImage(stDoc.data().photoUrl); await db.collection("users").doc(uid).delete(); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch(e) {} }); };
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get(); if(stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl); await db.collection("users").doc(uid).delete(); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch(e) {} }); };
 window.showStaffDetail = (sId) => { 
     const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if(!st) return; 
     document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80"; 
@@ -560,7 +583,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
 // ==========================================
 // 9. SCHOOL PAYMENTS & BILLING
 // ==========================================
-window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments =[]; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if(dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); } catch(e) {} };
+window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments =[]; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if(dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); window.populateGSTSchoolDropdown(); } catch(e) {} };
 window.filterPaymentList = () => { 
     const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments; 
     if(sid !== "ALL") { ls = ls.filter(s => s.id === sid); } 
@@ -640,37 +663,221 @@ window.downloadAllPaymentsPDF = async () => {
     } catch(e) {} 
 };
 
-async function checkAndSendBillingAlerts() { 
-    try { 
-        const sp = await db.collection("schools").get(); const nw = Date.now(); 
-        sp.forEach(async (d) => { 
-            const dt = d.data(); 
-            if(dt.billingDate && dt.appFee) { 
-                const bD = new Date(dt.billingDate).getTime(); const dD = Math.floor((nw - bD) / (1000 * 60 * 60 * 24)); 
-                if(dD >= 30) { 
-                    if(!dt.paymentAlertSentAt) { 
-                        const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get(); 
-                        cS.forEach(async (cD) => { await db.collection("direct_messages").doc().set({ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); }); 
-                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: nw }); 
-                    } else { 
-                        const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60); 
-                        if(hP >= 6 && !dt.paymentBlocked) { 
-                            const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get(); 
-                            cS.forEach(async (cD) => { await db.collection("users").doc(cD.id).update({ status: "blocked", blockReason: "System Locked: Pending Financial Clearance." }); }); 
-                            await db.collection("schools").doc(d.id).update({ paymentBlocked: true }); 
-                        } 
-                    } 
-                } else { 
-                    if(dt.paymentAlertSentAt || dt.paymentBlocked) { 
-                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: firebase.firestore.FieldValue.delete(), paymentBlocked: firebase.firestore.FieldValue.delete() }); 
-                        const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get(); 
-                        cS.forEach(async (cD) => { if(cD.data().blockReason && cD.data().blockReason.includes("Financial Clearance")) { await db.collection("users").doc(cD.id).update({ status: "active", blockReason: "" }); } }); 
-                    } 
-                } 
-            } 
-        }); 
-    } catch(e) {} 
+async function checkAndSendBillingAlerts() {
+    try {
+        const sp = await db.collection("schools").get(); const nw = Date.now();
+        sp.forEach(async (d) => {
+            const dt = d.data();
+            if(dt.billingDate && dt.appFee) {
+                const bD = new Date(dt.billingDate).getTime(); const dD = Math.floor((nw - bD) / (1000 * 60 * 60 * 24));
+                if(dD >= 30) {
+                    if(!dt.paymentAlertSentAt) {
+                        const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
+                        cS.forEach(async (cD) => { await db.collection("direct_messages").doc().set({ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); });
+                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: nw });
+                    } else {
+                        const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60);
+                        if(hP >= 6 && !dt.paymentBlocked) {
+                            const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
+                            cS.forEach(async (cD) => { await db.collection("users").doc(cD.id).update({ status: "blocked", blockReason: "System Locked: Pending Financial Clearance." }); });
+                            await db.collection("schools").doc(d.id).update({ paymentBlocked: true });
+                        }
+                    }
+                } else {
+                    if(dt.paymentAlertSentAt || dt.paymentBlocked) {
+                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: firebase.firestore.FieldValue.delete(), paymentBlocked: firebase.firestore.FieldValue.delete() });
+                        const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
+                        cS.forEach(async (cD) => { if(cD.data().blockReason && cD.data().blockReason.includes("Financial Clearance")) { await db.collection("users").doc(cD.id).update({ status: "active", blockReason: "" }); } });
+                    }
+                }
+            }
+        });
+    } catch(e) {}
 }
+
+// ==========================================
+// 9A. COMPANY EXPENSES MANAGEMENT
+// ==========================================
+window.addCompanyExpense = async () => {
+    const type = document.getElementById("expense-type").value;
+    const amount = document.getElementById("expense-amount").value.trim();
+    const desc = document.getElementById("expense-desc").value.trim();
+    if(!amount || !desc) return window.showToast("FILL ALL FIELDS!", "#e11d48");
+    try {
+        await db.collection("company_expenses").add({
+            type: type,
+            amount: Number(amount),
+            description: desc,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: superAdminUid
+        });
+        window.showToast("✅ EXPENSE RECORDED!");
+        document.getElementById("expense-amount").value = "";
+        document.getElementById("expense-desc").value = "";
+        window.loadCompanyExpenses();
+        window.logAudit("Added Expense", `${type}: ₹${amount}`);
+    } catch(e) {
+        window.showToast("❌ ERROR: " + e.message, "#e11d48");
+    }
+};
+
+window.loadCompanyExpenses = async () => {
+    try {
+        const snap = await db.collection("company_expenses").orderBy("createdAt", "desc").limit(50).get();
+        let html = "";
+        snap.forEach(doc => {
+            const d = doc.data();
+            const date = d.createdAt ? new Date(d.createdAt.toMillis()).toLocaleDateString() : "N/A";
+            html += `<tr class="hover:bg-slateSurface/50 transition">
+                <td class="p-4 text-coolGray tracking-widest">${date}</td>
+                <td class="p-4"><span class="bg-amber-500/10 border border-amber-500/50 text-amber-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.type}</span></td>
+                <td class="p-4 text-white">${d.description}</td>
+                <td class="p-4 text-emerald-400 font-bold">₹ ${d.amount.toLocaleString()}</td>
+                <td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteExpense('${doc.id}')"><i class="fas fa-trash"></i></button></td>
+            </tr>`;
+        });
+        document.getElementById("expenses-table").innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO EXPENSES RECORDED.</td></tr>";
+    } catch(e) {}
+};
+
+window.deleteExpense = (id) => {
+    window.customConfirm("DELETE THIS EXPENSE?", async () => {
+        await db.collection("company_expenses").doc(id).delete();
+        window.showToast("✅ EXPENSE DELETED!");
+        window.loadCompanyExpenses();
+    });
+};
+
+// ==========================================
+// 9B. TALLY EXPORT FUNCTIONS
+// ==========================================
+window.exportToTallyXML = async () => {
+    if(!window.fetchedSchoolPayments || window.fetchedSchoolPayments.length === 0) return;
+    window.showToast("GENERATING TALLY XML...", "#f59e0b");
+
+    let xmlContent = `<?xml version="1.0" encoding="UTF-8"?>\n<ENVELOPE>\n<HEADER>\n<TALLYREQUEST>Import Data</TALLYREQUEST>\n</HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC>\n<REPORTNAME>Vouchers</REPORTNAME>\n</REQUESTDESC>\n<REQUESTDATA>\n`;
+
+    window.fetchedSchoolPayments.forEach(s => {
+        if(s.appFee && s.billingDate) {
+            const date = new Date(s.billingDate).toLocaleDateString('en-GB').replace(/\//g, '');
+            xmlContent += `<TALLYMESSAGE xmlns:UDF="TallyUDF">\n<VOUCHER VCHTYPE="Receipt" ACTION="Create">\n<DATE>${date}</DATE>\n<NARRATION>Platform Fee - ${s.schoolName}</NARRATION>\n<VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>\n<VOUCHERNUMBER>${s.id}</VOUCHERNUMBER>\n<ALLLEDGERENTRIES.LIST>\n<LEDGERNAME>${s.schoolName}</LEDGERNAME>\n<AMOUNT>${s.appFee}</AMOUNT>\n</ALLLEDGERENTRIES.LIST>\n</VOUCHER>\n</TALLYMESSAGE>\n`;
+        }
+    });
+
+    xmlContent += `</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>`;
+
+    const blob = new Blob([xmlContent], { type: "application/xml" });
+    await window.robustWebViewDownload(blob, `Tally_Export_${Date.now()}.xml`);
+    window.logAudit("Exported Tally XML", "All Schools");
+};
+
+window.exportToTallyCSV = async () => {
+    if(!window.fetchedSchoolPayments || window.fetchedSchoolPayments.length === 0) return;
+    window.showToast("GENERATING TALLY CSV...", "#f59e0b");
+
+    let csvContent = "Date,Voucher Type,Voucher Number,Ledger Name,Amount,Narration\n";
+
+    window.fetchedSchoolPayments.forEach(s => {
+        if(s.appFee && s.billingDate) {
+            const date = new Date(s.billingDate).toLocaleDateString('en-GB');
+            csvContent += `${date},Receipt,${s.id},"${s.schoolName}",${s.appFee},"Platform Fee - ${s.schoolName}"\n`;
+        }
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    await window.robustWebViewDownload(blob, `Tally_Export_${Date.now()}.csv`);
+    window.logAudit("Exported Tally CSV", "All Schools");
+};
+
+// ==========================================
+// 9C. GST INVOICE GENERATOR
+// ==========================================
+window.populateGSTSchoolDropdown = () => {
+    const select = document.getElementById("gst-school-select");
+    if(!select) return;
+    let html = '<option value="">-- Select Node --</option>';
+    window.fetchedSchoolPayments.forEach(s => {
+        html += `<option value="${s.id}">${s.schoolName}</option>`;
+    });
+    select.innerHTML = html;
+};
+
+window.generateGSTInvoice = async () => {
+    const schoolId = document.getElementById("gst-school-select").value;
+    if(!schoolId) return window.showToast("SELECT A SCHOOL!", "#e11d48");
+
+    const school = window.fetchedSchoolPayments.find(s => s.id === schoolId);
+    if(!school || !school.appFee) return window.showToast("NO PAYMENT DATA!", "#e11d48");
+
+    window.showToast("GENERATING GST INVOICE...", "#f59e0b");
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Company Details
+        doc.setFontSize(20);
+        doc.setTextColor(0, 240, 255);
+        doc.text("CoreEdu Tech Inc.", 105, 20, { align: "center" });
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("GSTIN: 29ABCDE1234F1Z5", 105, 28, { align: "center" });
+        doc.text("Address: Tech Park, Bangalore - 560001", 105, 34, { align: "center" });
+
+        // Invoice Header
+        doc.setFontSize(16);
+        doc.setTextColor(0, 0, 0);
+        doc.text("TAX INVOICE", 105, 50, { align: "center" });
+
+        // Invoice Details
+        doc.setFontSize(10);
+        const invoiceNo = "INV-" + Date.now();
+        const invoiceDate = new Date().toLocaleDateString('en-IN');
+
+        doc.text(`Invoice No: ${invoiceNo}`, 20, 65);
+        doc.text(`Date: ${invoiceDate}`, 20, 72);
+
+        // Bill To
+        doc.setFontSize(12);
+        doc.text("Bill To:", 20, 85);
+        doc.setFontSize(10);
+        doc.text(school.schoolName, 20, 92);
+        doc.text(`School ID: ${school.id}`, 20, 99);
+
+        // Table
+        const amount = Number(school.appFee);
+        const gstRate = 18;
+        const gstAmount = (amount * gstRate) / 100;
+        const totalAmount = amount + gstAmount;
+
+        doc.autoTable({
+            startY: 110,
+            head: [["Description", "HSN/SAC", "Amount (₹)", "GST %", "GST Amount (₹)", "Total (₹)"]],
+            body: [
+                ["Platform Subscription Fee", "998314", amount.toFixed(2), gstRate + "%", gstAmount.toFixed(2), totalAmount.toFixed(2)]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [0, 240, 255], textColor: [5, 11, 20] }
+        });
+
+        // Total
+        const finalY = doc.lastAutoTable.finalY + 10;
+        doc.setFontSize(12);
+        doc.text(`Total Amount: ₹ ${totalAmount.toFixed(2)}`, 150, finalY);
+
+        // Footer
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text("This is a computer-generated invoice and does not require a signature.", 105, 280, { align: "center" });
+
+        const pdfBlob = doc.output('blob');
+        await window.robustWebViewDownload(pdfBlob, `GST_Invoice_${school.schoolName.replace(/\s/g, '_')}_${Date.now()}.pdf`);
+        window.logAudit("Generated GST Invoice", school.schoolName);
+    } catch(e) {
+        window.showToast("❌ ERROR: " + e.message, "#e11d48");
+    }
+};
 
 // ==========================================
 // 10. PASSWORDS, BACKUPS & SECURITY SHIELD
@@ -773,7 +980,7 @@ document.getElementById("csvExportBtn").addEventListener("click", async () => {
     } catch(e) {} 
 });
 
-document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for(const d of sn.docs) { await deleteCloudinaryImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`);} catch(e) {} }); });
+document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for(const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`);} catch(e) {} }); });
 
 window.toggleServerShield = async () => { const btn = document.getElementById("serverShieldBtn"); if(btn.innerText.includes("TOGGLE")) { await db.collection("system_config").doc("shield").set({ active: true }); window.showToast("SERVER SHIELD ACTIVATED!"); window.logAudit("Activated Shield", "Global"); } };
 
@@ -845,7 +1052,7 @@ window.logAudit = async (action, target) => { try { await db.collection("audit_l
 window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const snap = await db.collection("audit_logs").orderBy("timestamp", "desc").limit(50).get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch(e) {} };
 
 window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const snap = await db.collection("pending_deletions").get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type}</span></td><td class="p-4 sensitive-data text-white">${d.details || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${d.refCollection}', '${d.refId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch(e) {} };
-window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const orgDoc = await db.collection(collection).doc(docRefId).get(); if(orgDoc.exists) { await db.collection("recycle_bin").add({ originalCollection: collection, originalId: docRefId, data: orgDoc.data(), deletedAt: firebase.firestore.FieldValue.serverTimestamp() }); await deleteCloudinaryImage(orgDoc.data().photoUrl || orgDoc.data().logoUrl); await db.collection(collection).doc(docRefId).delete(); } await db.collection("pending_deletions").doc(docId).delete(); window.showToast("DELETED & MOVED TO BIN."); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch(e) {} }); };
+window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const orgDoc = await db.collection(collection).doc(docRefId).get(); if(orgDoc.exists) { await db.collection("recycle_bin").add({ originalCollection: collection, originalId: docRefId, data: orgDoc.data(), deletedAt: firebase.firestore.FieldValue.serverTimestamp() }); await deleteFirebaseStorageImage(orgDoc.data().photoUrl || orgDoc.data().logoUrl); await db.collection(collection).doc(docRefId).delete(); } await db.collection("pending_deletions").doc(docId).delete(); window.showToast("DELETED & MOVED TO BIN."); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch(e) {} }); };
 window.rejectDeletion = async (docId) => { try { await db.collection("pending_deletions").doc(docId).delete(); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch(e) {} };
 
 window.loadRecycleBin = async () => { const tbody = document.getElementById("recycle-bin-body"); try { const snap = await db.collection("recycle_bin").orderBy("deletedAt", "desc").limit(30).get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.deletedAt ? new Date(d.deletedAt.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4"><span class="bg-teal-500/10 border border-teal-500/50 text-teal-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.originalCollection}</span></td><td class="p-4 sensitive-data max-w-[200px] truncate text-coolGray">${JSON.stringify(d.data).substring(0,50)}...</td><td class="p-4 text-right"><button class="px-3 py-1 bg-teal-600/20 border border-teal-500 hover:bg-teal-600 text-teal-400 hover:text-slateBase font-bold rounded text-[10px] transition font-mono" onclick="window.restoreItem('${doc.id}', '${d.originalCollection}', '${d.originalId}')"><i class="fas fa-undo"></i> RESTORE</button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>BIN IS EMPTY.</td></tr>"; } catch(e) {} };
