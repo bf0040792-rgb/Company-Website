@@ -583,7 +583,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
 // ==========================================
 // 9. SCHOOL PAYMENTS & BILLING
 // ==========================================
-window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments =[]; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if(dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); window.populateGSTSchoolDropdown(); } catch(e) {} };
+window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments =[]; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if(dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch(e) {} };
 window.filterPaymentList = () => { 
     const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments; 
     if(sid !== "ALL") { ls = ls.filter(s => s.id === sid); } 
@@ -792,93 +792,6 @@ window.exportToTallyCSV = async () => {
 // ==========================================
 // 9C. GST INVOICE GENERATOR
 // ==========================================
-window.populateGSTSchoolDropdown = () => {
-    const select = document.getElementById("gst-school-select");
-    if(!select) return;
-    let html = '<option value="">-- Select Node --</option>';
-    window.fetchedSchoolPayments.forEach(s => {
-        html += `<option value="${s.id}">${s.schoolName}</option>`;
-    });
-    select.innerHTML = html;
-};
-
-window.generateGSTInvoice = async () => {
-    const schoolId = document.getElementById("gst-school-select").value;
-    if(!schoolId) return window.showToast("SELECT A SCHOOL!", "#e11d48");
-
-    const school = window.fetchedSchoolPayments.find(s => s.id === schoolId);
-    if(!school || !school.appFee) return window.showToast("NO PAYMENT DATA!", "#e11d48");
-
-    window.showToast("GENERATING GST INVOICE...", "#f59e0b");
-
-    try {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-
-        // Company Details
-        doc.setFontSize(20);
-        doc.setTextColor(0, 240, 255);
-        doc.text("CoreEdu Tech Inc.", 105, 20, { align: "center" });
-
-        doc.setFontSize(10);
-        doc.setTextColor(100, 100, 100);
-        doc.text("GSTIN: 29ABCDE1234F1Z5", 105, 28, { align: "center" });
-        doc.text("Address: Tech Park, Bangalore - 560001", 105, 34, { align: "center" });
-
-        // Invoice Header
-        doc.setFontSize(16);
-        doc.setTextColor(0, 0, 0);
-        doc.text("TAX INVOICE", 105, 50, { align: "center" });
-
-        // Invoice Details
-        doc.setFontSize(10);
-        const invoiceNo = "INV-" + Date.now();
-        const invoiceDate = new Date().toLocaleDateString('en-IN');
-
-        doc.text(`Invoice No: ${invoiceNo}`, 20, 65);
-        doc.text(`Date: ${invoiceDate}`, 20, 72);
-
-        // Bill To
-        doc.setFontSize(12);
-        doc.text("Bill To:", 20, 85);
-        doc.setFontSize(10);
-        doc.text(school.schoolName, 20, 92);
-        doc.text(`School ID: ${school.id}`, 20, 99);
-
-        // Table
-        const amount = Number(school.appFee);
-        const gstRate = 18;
-        const gstAmount = (amount * gstRate) / 100;
-        const totalAmount = amount + gstAmount;
-
-        doc.autoTable({
-            startY: 110,
-            head: [["Description", "HSN/SAC", "Amount (₹)", "GST %", "GST Amount (₹)", "Total (₹)"]],
-            body: [
-                ["Platform Subscription Fee", "998314", amount.toFixed(2), gstRate + "%", gstAmount.toFixed(2), totalAmount.toFixed(2)]
-            ],
-            theme: 'grid',
-            headStyles: { fillColor: [0, 240, 255], textColor: [5, 11, 20] }
-        });
-
-        // Total
-        const finalY = doc.lastAutoTable.finalY + 10;
-        doc.setFontSize(12);
-        doc.text(`Total Amount: ₹ ${totalAmount.toFixed(2)}`, 150, finalY);
-
-        // Footer
-        doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
-        doc.text("This is a computer-generated invoice and does not require a signature.", 105, 280, { align: "center" });
-
-        const pdfBlob = doc.output('blob');
-        await window.robustWebViewDownload(pdfBlob, `GST_Invoice_${school.schoolName.replace(/\s/g, '_')}_${Date.now()}.pdf`);
-        window.logAudit("Generated GST Invoice", school.schoolName);
-    } catch(e) {
-        window.showToast("❌ ERROR: " + e.message, "#e11d48");
-    }
-};
-
 // ==========================================
 // 10. PASSWORDS, BACKUPS & SECURITY SHIELD
 // ==========================================

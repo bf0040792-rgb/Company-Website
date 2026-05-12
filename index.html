@@ -50,7 +50,7 @@
 </head>
 <body class="antialiased h-screen flex flex-col relative text-gray-100 bg-slateBase">
 
-    <div id="auth-overlay" class="fixed inset-0 bg-slateBase z-[99999] flex justify-center items-center text-tealAccent text-xl font-mono font-bold tracking-widest uppercase">
+    <div id="auth-overlay" class="fixed inset-0 bg-slateBase z-[99999] justify-center items-center text-tealAccent text-xl font-mono font-bold tracking-widest uppercase hidden-el">
         <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
         <i data-lucide="loader-2" class="w-8 h-8 animate-spin mr-3 text-tealAccent"></i> Initializing Secure Core...
     </div>
@@ -59,7 +59,7 @@
         <marquee id="ticker-text"></marquee>
     </div>
 
-    <div id="landing-page" class="flex-1 w-full relative z-10 overflow-y-auto hidden-el bg-slateBase">
+    <div id="landing-page" class="flex-1 w-full relative z-10 overflow-y-auto bg-slateBase">
         <!-- Navbar -->
         <nav class="w-full glass-card fixed top-0 z-50 rounded-none border-x-0 border-t-0 border-b border-tealAccent/30 transition-all bg-slateBase/80 backdrop-blur-md shadow-[0_4px_30px_rgba(0,240,255,0.1)]">
             <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
@@ -81,18 +81,37 @@
                 <div class="absolute inset-0 bg-gradient-to-br from-slateBase via-slateSurface to-slateBase"></div>
                 <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
                 <div class="absolute inset-0 bg-gradient-to-b from-transparent via-slateBase/80 to-slateBase"></div>
+                <div class="absolute top-20 left-10 w-72 h-72 bg-tealAccent/10 rounded-full blur-[120px] animate-pulse"></div>
+                <div class="absolute bottom-20 right-10 w-96 h-96 bg-cyan-500/10 rounded-full blur-[150px] animate-pulse" style="animation-delay: 1s;"></div>
             </div>
-            
-            <div class="relative z-10 max-w-4xl mx-auto">
-                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-tealAccent/10 border border-tealAccent/40 text-tealAccent text-xs font-mono font-bold mb-8 shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-                    <div class="w-2 h-2 rounded-full bg-tealAccent animate-pulse shadow-[0_0_8px_rgba(0,240,255,1)]"></div>
-                    MASTER CORE v4.0 ONLINE
+
+            <div class="relative z-10 max-w-5xl mx-auto">
+                <div class="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-tealAccent/10 border border-tealAccent/40 text-tealAccent text-xs font-mono font-bold mb-8 shadow-[0_0_20px_rgba(0,240,255,0.3)]">
+                    <div class="w-2 h-2 rounded-full bg-tealAccent animate-pulse shadow-[0_0_10px_rgba(0,240,255,1)]"></div>
+                    MASTER CORE v4.1 • GLOBAL NETWORK ACTIVE
                 </div>
-                <h2 class="text-5xl md:text-7xl font-display font-extrabold mb-6 leading-tight tracking-tight text-white">Global Command Center for <br><span class="text-tealAccent drop-shadow-[0_0_15px_rgba(0,240,255,0.5)]">Modern Education</span></h2>
-                <p class="text-lg md:text-xl text-coolLight mb-10 max-w-2xl mx-auto font-light">Deploy, scale, and secure your institution's digital ecosystem with our military-grade management infrastructure.</p>
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <button class="px-8 py-3 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-bold transition shadow-[0_0_20px_rgba(0,240,255,0.4)] w-full sm:w-auto font-mono">INITIALIZE DEPLOYMENT</button>
-                    <button class="px-8 py-3 bg-slateSurface/50 hover:bg-slateSurface text-tealAccent rounded-lg font-bold transition border border-tealAccent/30 w-full sm:w-auto font-mono backdrop-blur-sm">ACCESS TERMINAL</button>
+                <h2 class="text-5xl md:text-7xl lg:text-8xl font-display font-extrabold mb-8 leading-[1.1] tracking-tight text-white">The Ultimate Command Center for <br><span class="text-tealAccent drop-shadow-[0_0_20px_rgba(0,240,255,0.6)]">Educational Excellence</span></h2>
+                <p class="text-xl md:text-2xl text-gray-300 mb-6 max-w-3xl mx-auto font-light leading-relaxed">From small neighborhood schools to prestigious national institutions, CoreEdu Tech powers the complete digital transformation of educational organizations across every scale.</p>
+                <p class="text-base md:text-lg text-coolLight mb-12 max-w-3xl mx-auto leading-relaxed">Trusted by chairmen and administrators worldwide to manage student data, staff operations, financial systems, attendance tracking, and institutional security with military-grade precision.</p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+                    <button onclick="showLoginModal()" class="px-10 py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-bold transition shadow-[0_0_25px_rgba(0,240,255,0.5)] w-full sm:w-auto font-mono text-base hover:shadow-[0_0_35px_rgba(0,240,255,0.7)] hover:scale-105">DEPLOY YOUR INSTITUTION</button>
+                    <button class="px-10 py-4 bg-slateSurface/50 hover:bg-slateSurface text-tealAccent rounded-xl font-bold transition border border-tealAccent/40 w-full sm:w-auto font-mono backdrop-blur-sm text-base hover:border-tealAccent hover:shadow-[0_0_20px_rgba(0,240,255,0.2)]">EXPLORE FEATURES</button>
+                </div>
+
+                <!-- Trust Indicators -->
+                <div class="grid grid-cols-3 gap-8 max-w-2xl mx-auto pt-8 border-t border-tealAccent/20">
+                    <div class="text-center">
+                        <div class="text-3xl md:text-4xl font-mono font-bold text-tealAccent mb-2 drop-shadow-[0_0_10px_rgba(0,240,255,0.6)]">500+</div>
+                        <div class="text-xs md:text-sm text-coolLight font-mono uppercase tracking-wider">Active Institutions</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-3xl md:text-4xl font-mono font-bold text-tealAccent mb-2 drop-shadow-[0_0_10px_rgba(0,240,255,0.6)]">99.9%</div>
+                        <div class="text-xs md:text-sm text-coolLight font-mono uppercase tracking-wider">System Uptime</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-3xl md:text-4xl font-mono font-bold text-tealAccent mb-2 drop-shadow-[0_0_10px_rgba(0,240,255,0.6)]">24/7</div>
+                        <div class="text-xs md:text-sm text-coolLight font-mono uppercase tracking-wider">Global Support</div>
+                    </div>
                 </div>
             </div>
         </header>
@@ -100,59 +119,169 @@
         <section id="features" class="py-24 bg-slateSurface/50 px-6 border-y border-glassBorder relative">
             <div class="max-w-7xl mx-auto">
                 <div class="text-center mb-16">
-                    <h3 class="text-tealAccent font-mono font-bold tracking-widest uppercase text-sm mb-2 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Core Infrastructure</h3>
-                    <h2 class="text-3xl md:text-4xl font-display font-bold text-white">Everything you need to scale</h2>
-                </div>
-                
-                <!-- Network Visualization with CSS -->
-                <div class="mb-16 rounded-2xl overflow-hidden border border-tealAccent/30 shadow-[0_0_30px_rgba(0,240,255,0.15)] relative h-64 bg-gradient-to-br from-slateSurface via-slateBase to-slateSurface">
-                    <div class="absolute inset-0 cyber-grid-bg opacity-30"></div>
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <div class="text-tealAccent text-6xl font-mono font-bold opacity-20 tracking-widest">NETWORK</div>
-                    </div>
-                    <div class="absolute inset-0 bg-gradient-to-t from-slateBase via-transparent to-transparent"></div>
+                    <h3 class="text-tealAccent font-mono font-bold tracking-widest uppercase text-sm mb-3 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Complete Authority & Control</h3>
+                    <h2 class="text-4xl md:text-5xl font-display font-bold text-white mb-4">Built for Every Institution Size</h2>
+                    <p class="text-coolLight text-lg max-w-3xl mx-auto leading-relaxed">Whether you're managing a small private school with 50 students or a prestigious university network with 50,000+ enrollments, CoreEdu Tech scales seamlessly to meet your exact requirements.</p>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-tealAccent/20 hover:border-tealAccent/50 hover:shadow-[0_0_25px_rgba(0,240,255,0.2)]">
-                        <div class="w-14 h-14 rounded-xl bg-tealAccent/10 border border-tealAccent/30 flex items-center justify-center mb-6 text-tealAccent shadow-[0_0_15px_rgba(0,240,255,0.2)]"><i data-lucide="database"></i></div>
-                        <h4 class="text-xl font-display font-bold mb-3 text-white">Multi-Tenant Architecture</h4>
-                        <p class="text-coolLight leading-relaxed">Absolute data isolation between schools with centralized master control and zero cross-contamination.</p>
+                <!-- Authority Spectrum -->
+                <div class="mb-16 glass-card p-8 rounded-2xl border border-tealAccent/30 shadow-[0_0_30px_rgba(0,240,255,0.15)]">
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-8">
+                        <div class="flex-1 text-center md:text-left">
+                            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold mb-3">
+                                <i data-lucide="home" class="w-4 h-4"></i> SMALL INSTITUTIONS
+                            </div>
+                            <h4 class="text-xl font-display font-bold text-white mb-2">Neighborhood Schools</h4>
+                            <p class="text-coolLight text-sm">50-500 students • Single campus • Essential modules</p>
+                        </div>
+                        <div class="hidden md:block">
+                            <i data-lucide="arrow-right" class="w-8 h-8 text-tealAccent/50"></i>
+                        </div>
+                        <div class="flex-1 text-center">
+                            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-bold mb-3">
+                                <i data-lucide="building-2" class="w-4 h-4"></i> MEDIUM INSTITUTIONS
+                            </div>
+                            <h4 class="text-xl font-display font-bold text-white mb-2">District Networks</h4>
+                            <p class="text-coolLight text-sm">500-5,000 students • Multi-campus • Advanced analytics</p>
+                        </div>
+                        <div class="hidden md:block">
+                            <i data-lucide="arrow-right" class="w-8 h-8 text-tealAccent/50"></i>
+                        </div>
+                        <div class="flex-1 text-center md:text-right">
+                            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono font-bold mb-3">
+                                <i data-lucide="landmark" class="w-4 h-4"></i> LARGE INSTITUTIONS
+                            </div>
+                            <h4 class="text-xl font-display font-bold text-white mb-2">National Universities</h4>
+                            <p class="text-coolLight text-sm">5,000+ students • Global reach • Enterprise infrastructure</p>
+                        </div>
                     </div>
-                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-tealAccent/20 hover:border-tealAccent/50 hover:shadow-[0_0_25px_rgba(0,240,255,0.2)]">
-                        <div class="w-14 h-14 rounded-xl bg-tealAccent/10 border border-tealAccent/30 flex items-center justify-center mb-6 text-tealAccent shadow-[0_0_15px_rgba(0,240,255,0.2)]"><i data-lucide="activity"></i></div>
-                        <h4 class="text-xl font-display font-bold mb-3 text-white">Real-time Telemetry</h4>
-                        <p class="text-coolLight leading-relaxed">Live insight into financial metrics, user engagement, and system health across global deployments.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-[0_0_25px_rgba(16,185,129,0.2)]">
+                        <div class="w-14 h-14 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-6 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]"><i data-lucide="users"></i></div>
+                        <h4 class="text-xl font-display font-bold mb-3 text-white">Student Management</h4>
+                        <p class="text-coolLight leading-relaxed text-sm">Complete student lifecycle from admission to graduation. Track attendance, grades, behavior, medical records, and parent communications in one unified system.</p>
                     </div>
+
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-amber-500/20 hover:border-amber-500/50 hover:shadow-[0_0_25px_rgba(245,158,11,0.2)]">
+                        <div class="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-6 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]"><i data-lucide="indian-rupee"></i></div>
+                        <h4 class="text-xl font-display font-bold mb-3 text-white">Financial Operations</h4>
+                        <p class="text-coolLight leading-relaxed text-sm">Fee collection, expense tracking, payroll management, and automated billing. Export to Tally ERP with one click for seamless accounting integration.</p>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-rose-500/20 hover:border-rose-500/50 hover:shadow-[0_0_25px_rgba(244,63,94,0.2)]">
+                        <div class="w-14 h-14 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-6 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]"><i data-lucide="shield-alert"></i></div>
+                        <h4 class="text-xl font-display font-bold mb-3 text-white">Security & Access Control</h4>
+                        <p class="text-coolLight leading-relaxed text-sm">Role-based permissions, biometric integration, geofencing, time-locks, and emergency kill-switch. Protect sensitive data with military-grade encryption.</p>
+                    </div>
+
                     <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-tealAccent/20 hover:border-tealAccent/50 hover:shadow-[0_0_25px_rgba(0,240,255,0.2)]">
-                        <div class="w-14 h-14 rounded-xl bg-tealAccent/10 border border-tealAccent/30 flex items-center justify-center mb-6 text-tealAccent shadow-[0_0_15px_rgba(0,240,255,0.2)]"><i data-lucide="zap"></i></div>
-                        <h4 class="text-xl font-display font-bold mb-3 text-white">Instant Provisioning</h4>
-                        <p class="text-coolLight leading-relaxed">Deploy entirely new school environments, databases, and secure access keys in milliseconds.</p>
+                        <div class="w-14 h-14 rounded-xl bg-tealAccent/10 border border-tealAccent/30 flex items-center justify-center mb-6 text-tealAccent shadow-[0_0_15px_rgba(0,240,255,0.2)]"><i data-lucide="calendar-check"></i></div>
+                        <h4 class="text-xl font-display font-bold mb-3 text-white">Attendance & Biometrics</h4>
+                        <p class="text-coolLight leading-relaxed text-sm">RFID card readers, fingerprint scanners, and facial recognition integration. Real-time attendance tracking with automated parent notifications.</p>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-indigo-500/20 hover:border-indigo-500/50 hover:shadow-[0_0_25px_rgba(99,102,241,0.2)]">
+                        <div class="w-14 h-14 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mb-6 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i data-lucide="briefcase"></i></div>
+                        <h4 class="text-xl font-display font-bold mb-3 text-white">Staff & HR Management</h4>
+                        <p class="text-coolLight leading-relaxed text-sm">Employee records, payroll processing, leave management, performance reviews, and credential verification. Streamline your entire HR workflow.</p>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl hover:-translate-y-2 transition duration-300 border border-cyan-500/20 hover:border-cyan-500/50 hover:shadow-[0_0_25px_rgba(6,182,212,0.2)]">
+                        <div class="w-14 h-14 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-6 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]"><i data-lucide="bar-chart-3"></i></div>
+                        <h4 class="text-xl font-display font-bold mb-3 text-white">Analytics & Reporting</h4>
+                        <p class="text-coolLight leading-relaxed text-sm">Real-time dashboards, custom reports, predictive analytics, and data visualization. Make informed decisions backed by comprehensive institutional insights.</p>
                     </div>
                 </div>
             </div>
         </section>
 
         <section id="why-us" class="py-24 px-6 relative">
-            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
-                <div class="lg:w-1/2">
-                    <h3 id="security" class="text-tealAccent font-mono font-bold tracking-widest uppercase text-sm mb-2 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Military-Grade Security</h3>
-                    <h2 class="text-3xl md:text-4xl font-display font-bold mb-6 text-white">Data sovereignty is our highest priority.</h2>
-                    <p class="text-coolLight mb-6 leading-relaxed">We protect your institutional data using advanced cryptographic licensing, continuous surveillance, and an immutable master audit ledger. Every action is authenticated, verified, and logged.</p>
-                    <ul class="space-y-4 font-mono text-sm">
-                        <li class="flex items-center gap-3"><i data-lucide="shield-check" class="text-tealAccent w-5 h-5 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> <span class="text-gray-300">End-to-End Encryption (AES-256)</span></li>
-                        <li class="flex items-center gap-3"><i data-lucide="power-off" class="text-rose-500 w-5 h-5 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]"></i> <span class="text-gray-300">Global Kill-Switch Capabilities</span></li>
-                        <li class="flex items-center gap-3"><i data-lucide="fingerprint" class="text-tealAccent w-5 h-5 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> <span class="text-gray-300">Role-Based Access Control (RBAC)</span></li>
-                    </ul>
+            <div class="max-w-7xl mx-auto">
+                <div class="text-center mb-16">
+                    <h3 class="text-tealAccent font-mono font-bold tracking-widest uppercase text-sm mb-3 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Why Chairmen Choose CoreEdu Tech</h3>
+                    <h2 class="text-4xl md:text-5xl font-display font-bold text-white mb-4">Trusted Authority Across All Scales</h2>
+                    <p class="text-coolLight text-lg max-w-3xl mx-auto leading-relaxed">From managing a single school to overseeing an entire educational empire, our platform gives you complete command and visibility over every aspect of your institution.</p>
                 </div>
-                <div class="lg:w-1/2 w-full relative">
-                    <div class="absolute inset-0 bg-tealAccent/20 blur-[100px] rounded-full pointer-events-none"></div>
-                    <!-- Security Shield Visualization with CSS -->
-                    <div class="glass-card p-2 rounded-2xl border border-tealAccent/30 shadow-[0_0_40px_rgba(0,240,255,0.2)] relative z-10 h-80 bg-gradient-to-br from-slateSurface via-slateBase to-slateSurface overflow-hidden">
-                        <div class="absolute inset-0 flex items-center justify-center">
-                            <i data-lucide="shield-check" class="w-32 h-32 text-tealAccent opacity-30"></i>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-16">
+                    <div class="glass-card p-8 rounded-2xl border border-tealAccent/30 shadow-[0_0_30px_rgba(0,240,255,0.15)]">
+                        <div class="flex items-start gap-4 mb-6">
+                            <div class="w-12 h-12 rounded-lg bg-tealAccent/10 border border-tealAccent/30 flex items-center justify-center text-tealAccent shadow-[0_0_15px_rgba(0,240,255,0.2)] flex-shrink-0">
+                                <i data-lucide="crown" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xl font-display font-bold text-white mb-2">Complete Institutional Control</h4>
+                                <p class="text-coolLight leading-relaxed text-sm">As a chairman or administrator, you get a master dashboard with god-mode visibility. Monitor every student, staff member, financial transaction, and system event across all your campuses from one unified interface.</p>
+                            </div>
                         </div>
-                        <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+                        <div class="flex items-start gap-4 mb-6">
+                            <div class="w-12 h-12 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)] flex-shrink-0">
+                                <i data-lucide="trending-up" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xl font-display font-bold text-white mb-2">Scale Without Limits</h4>
+                                <p class="text-coolLight leading-relaxed text-sm">Start with one school and expand to hundreds. Our multi-tenant architecture ensures each institution's data remains completely isolated while you maintain centralized oversight and control.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.15)]">
+                        <div class="flex items-start gap-4 mb-6">
+                            <div class="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)] flex-shrink-0">
+                                <i data-lucide="shield-check" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xl font-display font-bold text-white mb-2">Military-Grade Security</h4>
+                                <p class="text-coolLight leading-relaxed text-sm">Protect sensitive student and financial data with AES-256 encryption, role-based access control, audit logging, and emergency kill-switch capabilities. Your data sovereignty is our highest priority.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl border border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.15)]">
+                        <div class="flex items-start gap-4 mb-6">
+                            <div class="w-12 h-12 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)] flex-shrink-0">
+                                <i data-lucide="zap" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xl font-display font-bold text-white mb-2">Instant Deployment</h4>
+                                <p class="text-coolLight leading-relaxed text-sm">Launch a new school in minutes, not months. Our automated provisioning creates complete environments with databases, user accounts, and security configurations instantly.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Showcase -->
+                <div class="glass-card p-10 rounded-2xl border border-rose-500/30 shadow-[0_0_40px_rgba(244,63,94,0.15)] relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-96 h-96 bg-rose-500/5 rounded-full blur-[120px]"></div>
+                    <div class="relative z-10 flex flex-col lg:flex-row items-center gap-12">
+                        <div class="lg:w-1/2">
+                            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono font-bold mb-4">
+                                <i data-lucide="lock" class="w-4 h-4"></i> ENTERPRISE SECURITY
+                            </div>
+                            <h3 class="text-3xl font-display font-bold text-white mb-4">Data Protection You Can Trust</h3>
+                            <p class="text-coolLight mb-6 leading-relaxed">Every action is authenticated, encrypted, and logged. From student records to financial transactions, your institutional data is protected with the same security standards used by banks and government agencies.</p>
+                            <ul class="space-y-3 font-mono text-sm">
+                                <li class="flex items-center gap-3"><i data-lucide="shield-check" class="text-tealAccent w-5 h-5 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> <span class="text-gray-300">End-to-End AES-256 Encryption</span></li>
+                                <li class="flex items-center gap-3"><i data-lucide="fingerprint" class="text-tealAccent w-5 h-5 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> <span class="text-gray-300">Biometric Authentication Support</span></li>
+                                <li class="flex items-center gap-3"><i data-lucide="file-text" class="text-tealAccent w-5 h-5 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> <span class="text-gray-300">Immutable Audit Trail</span></li>
+                                <li class="flex items-center gap-3"><i data-lucide="power-off" class="text-rose-400 w-5 h-5 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]"></i> <span class="text-gray-300">Emergency Kill-Switch Protocol</span></li>
+                            </ul>
+                        </div>
+                        <div class="lg:w-1/2 w-full relative">
+                            <div class="glass-card p-2 rounded-2xl border border-tealAccent/30 shadow-[0_0_40px_rgba(0,240,255,0.2)] relative z-10 h-80 bg-gradient-to-br from-slateSurface via-slateBase to-slateSurface overflow-hidden">
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <i data-lucide="shield-check" class="w-40 h-40 text-tealAccent opacity-20"></i>
+                                </div>
+                                <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
+                                <div class="absolute top-4 left-4 text-xs font-mono text-tealAccent/60">SECURITY_LEVEL: MAXIMUM</div>
+                                <div class="absolute bottom-4 right-4 text-xs font-mono text-tealAccent/60">STATUS: PROTECTED</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -160,55 +289,138 @@
 
         <section id="pricing" class="py-24 bg-slateSurface/50 px-6 border-y border-glassBorder">
             <div class="max-w-7xl mx-auto text-center">
-                <h3 class="text-tealAccent font-mono font-bold tracking-widest uppercase text-sm mb-2 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Licensing</h3>
-                <h2 class="text-3xl md:text-4xl font-display font-bold mb-16 text-white">Plans built for your scale</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border border-glassBorder hover:border-tealAccent/30 transition">
-                        <h4 class="text-2xl font-display font-bold text-gray-100 mb-2">Silver Node</h4>
-                        <p class="text-coolLight text-sm mb-6 h-10">Essential infrastructure for standalone schools.</p>
-                        <div class="text-4xl font-mono font-bold mb-6 text-white">$149<span class="text-lg text-coolGray font-sans">/mo</span></div>
+                <h3 class="text-tealAccent font-mono font-bold tracking-widest uppercase text-sm mb-3 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Flexible Licensing</h3>
+                <h2 class="text-4xl md:text-5xl font-display font-bold mb-4 text-white">Plans That Grow With You</h2>
+                <p class="text-coolLight text-lg mb-16 max-w-3xl mx-auto">Whether you're launching your first school or managing a nationwide network, we have the perfect plan to match your scale and ambition.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border border-emerald-500/30 hover:border-emerald-500/50 transition hover:shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold mb-4 w-fit">
+                            <i data-lucide="home" class="w-3 h-3"></i> STARTER
+                        </div>
+                        <h4 class="text-2xl font-display font-bold text-white mb-2">Silver Node</h4>
+                        <p class="text-coolLight text-sm mb-6 h-12">Perfect for small schools and coaching centers starting their digital journey.</p>
+                        <div class="text-4xl font-mono font-bold mb-6 text-white">₹12,999<span class="text-lg text-coolGray font-sans">/year</span></div>
                         <ul class="space-y-4 mb-8 flex-1">
-                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Up to 500 Students</li>
-                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Standard Analytics</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-emerald-400 w-4 h-4"></i> Up to 500 Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-emerald-400 w-4 h-4"></i> 10 Staff Accounts</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-emerald-400 w-4 h-4"></i> Basic Analytics Dashboard</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-emerald-400 w-4 h-4"></i> Fee Management & Tally Export</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-emerald-400 w-4 h-4"></i> Email Support</li>
                         </ul>
-                        <button class="w-full py-3 rounded-xl border border-glassBorder hover:bg-slateBase hover:border-tealAccent text-white transition font-mono font-bold">SELECT SILVER</button>
+                        <button onclick="showLoginModal()" class="w-full py-3 rounded-xl border border-emerald-500/50 hover:bg-emerald-500/10 text-white transition font-mono font-bold hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]">GET STARTED</button>
                     </div>
-                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border-tealAccent relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(0,240,255,0.15)]">
-                        <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-tealAccent text-slateBase px-4 py-1 rounded-full text-xs font-mono font-bold tracking-widest shadow-[0_0_10px_rgba(0,240,255,0.5)]">ENTERPRISE STANDARD</div>
+
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border-2 border-tealAccent relative transform md:-translate-y-4 shadow-[0_0_40px_rgba(0,240,255,0.2)]">
+                        <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-tealAccent text-slateBase px-5 py-1.5 rounded-full text-xs font-mono font-bold tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.6)]">MOST POPULAR</div>
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-tealAccent/10 border border-tealAccent/40 text-tealAccent text-xs font-mono font-bold mb-4 w-fit">
+                            <i data-lucide="building-2" class="w-3 h-3"></i> PROFESSIONAL
+                        </div>
                         <h4 class="text-2xl font-display font-bold text-tealAccent mb-2 drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">Gold Cluster</h4>
-                        <p class="text-coolLight text-sm mb-6 h-10">Advanced telemetry for growing districts.</p>
-                        <div class="text-4xl font-mono font-bold mb-6 text-white">$349<span class="text-lg text-coolGray font-sans">/mo</span></div>
+                        <p class="text-coolLight text-sm mb-6 h-12">Ideal for established schools and multi-campus institutions seeking advanced control.</p>
+                        <div class="text-4xl font-mono font-bold mb-6 text-white">₹29,999<span class="text-lg text-coolGray font-sans">/year</span></div>
                         <ul class="space-y-4 mb-8 flex-1">
                             <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Up to 3,000 Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Unlimited Staff Accounts</li>
                             <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Advanced AI Analytics</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Biometric Integration (RFID/Fingerprint)</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Priority Support (24/7)</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Custom Branding</li>
                         </ul>
-                        <button class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealHover transition font-mono font-bold text-slateBase shadow-[0_0_15px_rgba(0,240,255,0.4)]">SELECT GOLD</button>
+                        <button onclick="showLoginModal()" class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealHover transition font-mono font-bold text-slateBase shadow-[0_0_20px_rgba(0,240,255,0.5)] hover:shadow-[0_0_30px_rgba(0,240,255,0.7)]">GET STARTED</button>
                     </div>
-                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border border-glassBorder hover:border-tealAccent/30 transition">
-                        <h4 class="text-2xl font-display font-bold text-gray-100 mb-2">Platinum Core</h4>
-                        <p class="text-coolLight text-sm mb-6 h-10">Infinite scalability for national deployments.</p>
+
+                    <div class="glass-card p-10 rounded-2xl flex flex-col text-left border border-purple-500/30 hover:border-purple-500/50 transition hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono font-bold mb-4 w-fit">
+                            <i data-lucide="landmark" class="w-3 h-3"></i> ENTERPRISE
+                        </div>
+                        <h4 class="text-2xl font-display font-bold text-white mb-2">Platinum Core</h4>
+                        <p class="text-coolLight text-sm mb-6 h-12">Unlimited power for universities, chains, and national education networks.</p>
                         <div class="text-4xl font-mono font-bold mb-6 text-white">Custom</div>
                         <ul class="space-y-4 mb-8 flex-1">
-                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Unlimited Students</li>
-                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-tealAccent w-4 h-4"></i> Root API Access</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-purple-400 w-4 h-4"></i> Unlimited Students</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-purple-400 w-4 h-4"></i> Multi-Campus Management</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-purple-400 w-4 h-4"></i> White-Label Solution</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-purple-400 w-4 h-4"></i> Dedicated Infrastructure</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-purple-400 w-4 h-4"></i> API Access & Custom Integrations</li>
+                            <li class="flex items-center gap-3 text-sm text-gray-300"><i data-lucide="check" class="text-purple-400 w-4 h-4"></i> Dedicated Account Manager</li>
                         </ul>
-                        <button class="w-full py-3 rounded-xl border border-glassBorder hover:bg-slateBase hover:border-tealAccent text-white transition font-mono font-bold">CONTACT SALES</button>
+                        <button onclick="showLoginModal()" class="w-full py-3 rounded-xl border border-purple-500/50 hover:bg-purple-500/10 text-white transition font-mono font-bold hover:shadow-[0_0_20px_rgba(168,85,247,0.2)]">CONTACT SALES</button>
                     </div>
+                </div>
+
+                <div class="mt-12 text-center">
+                    <p class="text-coolLight text-sm font-mono">All plans include: Automatic backups • 99.9% uptime SLA • Data encryption • Regular updates</p>
                 </div>
             </div>
         </section>
 
         <section id="contact" class="py-24 px-6 relative">
-            <div class="max-w-3xl mx-auto glass-card p-10 md:p-16 rounded-3xl text-center border border-tealAccent/20 shadow-[0_0_30px_rgba(0,240,255,0.1)]">
-                <i data-lucide="terminal" class="w-12 h-12 text-tealAccent mx-auto mb-6 drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]"></i>
-                <h2 class="text-3xl font-display font-bold mb-4 text-white">Ready to modernize your infrastructure?</h2>
-                <p class="text-coolLight mb-8">Speak to our architecture team today to schedule a technical deep-dive and platform demo.</p>
-                <div class="flex flex-col md:flex-row gap-4 justify-center">
-                    <input type="email" placeholder="Enter Secure Comm Email" class="input-premium px-6 py-4 rounded-xl w-full md:w-96 text-white font-mono">
-                    <button class="px-8 py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition whitespace-nowrap shadow-[0_0_15px_rgba(0,240,255,0.4)]">REQUEST DEMO</button>
+            <div class="max-w-4xl mx-auto glass-card p-12 md:p-16 rounded-3xl text-center border border-tealAccent/30 shadow-[0_0_40px_rgba(0,240,255,0.15)] relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-tealAccent to-transparent"></div>
+                <div class="absolute -top-20 -right-20 w-64 h-64 bg-tealAccent/10 rounded-full blur-[100px]"></div>
+                <div class="relative z-10">
+                    <i data-lucide="terminal" class="w-16 h-16 text-tealAccent mx-auto mb-6 drop-shadow-[0_0_10px_rgba(0,240,255,0.8)]"></i>
+                    <h2 class="text-4xl md:text-5xl font-display font-bold mb-4 text-white">Ready to Transform Your Institution?</h2>
+                    <p class="text-coolLight text-lg mb-8 max-w-2xl mx-auto leading-relaxed">Join hundreds of forward-thinking chairmen and administrators who trust CoreEdu Tech to power their educational vision. Schedule a personalized demo and see how we can elevate your institution.</p>
+                    <div class="flex flex-col md:flex-row gap-4 justify-center mb-8">
+                        <input type="email" placeholder="Enter your official email address" class="input-premium px-6 py-4 rounded-xl w-full md:w-96 text-white font-mono text-sm">
+                        <button class="px-10 py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition whitespace-nowrap shadow-[0_0_20px_rgba(0,240,255,0.5)] hover:shadow-[0_0_30px_rgba(0,240,255,0.7)] hover:scale-105">REQUEST DEMO</button>
+                    </div>
+                    <p class="text-coolLight text-xs font-mono">Or call us directly: <span class="text-tealAccent">+91-XXXX-XXXXXX</span> • Available 24/7</p>
                 </div>
             </div>
         </section>
+
+        <!-- Footer -->
+        <footer class="py-12 px-6 border-t border-glassBorder bg-slateSurface/30">
+            <div class="max-w-7xl mx-auto">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                    <div>
+                        <div class="flex items-center gap-2 mb-4">
+                            <i data-lucide="hexagon" class="text-tealAccent w-8 h-8"></i>
+                            <h3 class="text-xl font-display font-bold text-white">CoreEdu<span class="text-tealAccent">Tech</span></h3>
+                        </div>
+                        <p class="text-coolLight text-sm leading-relaxed">Empowering educational institutions with next-generation management infrastructure.</p>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-mono font-bold text-sm mb-4 uppercase tracking-wider">Platform</h4>
+                        <ul class="space-y-2 text-coolLight text-sm">
+                            <li><a href="#features" class="hover:text-tealAccent transition">Features</a></li>
+                            <li><a href="#pricing" class="hover:text-tealAccent transition">Pricing</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">Documentation</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">API Reference</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-mono font-bold text-sm mb-4 uppercase tracking-wider">Company</h4>
+                        <ul class="space-y-2 text-coolLight text-sm">
+                            <li><a href="#" class="hover:text-tealAccent transition">About Us</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">Careers</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">Blog</a></li>
+                            <li><a href="#contact" class="hover:text-tealAccent transition">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-mono font-bold text-sm mb-4 uppercase tracking-wider">Legal</h4>
+                        <ul class="space-y-2 text-coolLight text-sm">
+                            <li><a href="#" class="hover:text-tealAccent transition">Privacy Policy</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">Terms of Service</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">Security</a></li>
+                            <li><a href="#" class="hover:text-tealAccent transition">Compliance</a></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="pt-8 border-t border-glassBorder flex flex-col md:flex-row justify-between items-center gap-4">
+                    <p class="text-coolLight text-xs font-mono">© 2026 CoreEdu Tech Inc. All rights reserved. Built with precision.</p>
+                    <div class="flex items-center gap-4">
+                        <a href="#" class="text-coolLight hover:text-tealAccent transition"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-coolLight hover:text-tealAccent transition"><i class="fab fa-linkedin"></i></a>
+                        <a href="#" class="text-coolLight hover:text-tealAccent transition"><i class="fab fa-github"></i></a>
+                    </div>
+                </div>
+            </div>
+        </footer>
 
         <footer class="py-12 border-t border-glassBorder bg-slateBase text-center relative z-20">
             <div class="flex items-center justify-center gap-2 mb-6 opacity-50">
@@ -535,26 +747,14 @@
                         </div>
                     </div>
 
-                    <!-- Tally Export & GST Invoice Section -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="glass-card p-6 rounded-2xl border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.1)] relative">
-                            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent"></div>
-                            <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-file-export text-indigo-400"></i> Tally Export</h3>
-                            <p class="text-coolGray text-[10px] font-mono mb-6">Export billing data in Tally-compatible format (XML/CSV)</p>
-                            <div class="space-y-3">
-                                <button onclick="window.exportToTallyXML()" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i class="fas fa-file-code"></i> EXPORT XML</button>
-                                <button onclick="window.exportToTallyCSV()" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i class="fas fa-file-csv"></i> EXPORT CSV</button>
-                            </div>
-                        </div>
-
-                        <div class="glass-card p-6 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)] relative">
-                            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-tealAccent to-transparent"></div>
-                            <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-file-invoice text-tealAccent"></i> GST Invoice Generator</h3>
-                            <p class="text-coolGray text-[10px] font-mono mb-6">Generate GST-compliant invoices for school payments</p>
-                            <div class="space-y-3">
-                                <div><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Select School</label><select id="gst-school-select" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"><option value="">-- Select Node --</option></select></div>
-                                <button onclick="window.generateGSTInvoice()" class="w-full py-3 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.4)]"><i class="fas fa-file-pdf"></i> GENERATE INVOICE</button>
-                            </div>
+                    <!-- Tally Export Section -->
+                    <div class="glass-card p-6 rounded-2xl border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.1)] relative max-w-md">
+                        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-file-export text-indigo-400"></i> Tally Export</h3>
+                        <p class="text-coolGray text-[10px] font-mono mb-6">Export billing data in Tally-compatible format (XML/CSV)</p>
+                        <div class="space-y-3">
+                            <button onclick="window.exportToTallyXML()" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i class="fas fa-file-code"></i> EXPORT XML</button>
+                            <button onclick="window.exportToTallyCSV()" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]"><i class="fas fa-file-csv"></i> EXPORT CSV</button>
                         </div>
                     </div>
                 </div>
