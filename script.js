@@ -150,6 +150,7 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
     if(!e || !p) { err.innerText = "CREDENTIALS REQUIRED."; err.classList.remove('hidden-el'); return; } 
     b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> VERIFYING HASH...`; 
     try { 
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         await auth.signInWithEmailAndPassword(e, p); 
         window.logAudit("Master Login Success", "System Core"); 
     } catch (error) { 
@@ -332,6 +333,7 @@ window.filterChairmenList = () => {
             <td class="p-4 text-right flex justify-end gap-1">
                 <button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.impersonateUser('${dt.id}', '${dt.schoolId}', '${dt.email}', '${dt.plainPassword}')"><i class="fas fa-user-secret"></i></button>
                 <button class="px-2 py-1 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded text-[10px] transition" onclick="window.openEditChairman('${dt.id}')"><i class="fas fa-edit"></i></button>
+                <button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.openLicenseModal('${dt.schoolId}')"><i class="fas fa-calendar-check"></i></button>
                 ${bb} ${shadowBtn}
                 <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteChairman('${dt.id}', '${dt.schoolId}')"><i class="fas fa-trash"></i></button>
             </td>
@@ -388,6 +390,35 @@ window.saveChairmanEdit = async () => {
         window.showToast("✅ DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
         window.closeCustomModal("edit-chairman-modal"); loadChairmen(); loadSchoolsForDropdown();
     } catch(e) { window.showToast("❌ ERROR: " + e.message, "#e11d48"); } finally { btn.innerText = "WRITE CHANGES"; }
+};
+
+window.openLicenseModal = async (schoolId) => {
+    if(!schoolId) return window.showToast("INVALID NODE ID", "#e11d48");
+    document.getElementById("license-school-id").value = schoolId;
+    try {
+        const doc = await db.collection("schools").doc(schoolId).get();
+        if(doc.exists && doc.data().licenseExpiry) {
+            document.getElementById("license-expiry-date").value = doc.data().licenseExpiry;
+        } else {
+            document.getElementById("license-expiry-date").value = "";
+        }
+        openCustomModal("license-modal");
+    } catch(e) { window.showToast("ERROR FETCHING LICENSE", "#e11d48"); }
+};
+
+window.saveLicenseDate = async () => {
+    const schoolId = document.getElementById("license-school-id").value;
+    const expiryDate = document.getElementById("license-expiry-date").value;
+    if(!expiryDate) return window.showToast("SELECT EXPIRY DATE!", "#e11d48");
+    
+    try {
+        await db.collection("schools").doc(schoolId).update({ licenseExpiry: expiryDate });
+        window.showToast("✅ LICENSE UPDATED SUCCESSFULLY!", "#10B981");
+        window.closeCustomModal("license-modal");
+        window.logAudit("Renewed License", schoolId);
+    } catch(e) {
+        window.showToast("ERROR: " + e.message, "#e11d48");
+    }
 };
 
 window.updateStatus = (uid, ns) => { 
