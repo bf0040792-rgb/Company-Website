@@ -518,6 +518,7 @@
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-modules"><i class="fas fa-user-astronaut text-blue-400 w-5 text-center"></i> Inspect Subjects</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-aadhaar-search"><i class="fas fa-fingerprint text-amber-400 w-5 text-center"></i> Identity Search</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-staff"><i class="fas fa-users-cog text-emerald-400 w-5 text-center"></i> Global Staff</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-feature-toggles"><i class="fas fa-toggle-on text-pink-400 w-5 text-center"></i> Feature Toggles</button>
                     
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">Finance & Auth</p>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-school-payment"><i class="fas fa-coins text-emerald-500 w-5 text-center"></i> Billing Ledger</button>
@@ -610,6 +611,20 @@
                         <button id="createChairmanBtn" class="mt-4 px-6 py-2 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)] transition">DEPLOY NODE</button>
                     </div>
 
+                    <div class="glass-card p-6 rounded-2xl border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.1)] mb-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-display font-bold text-white"><i class="fas fa-rocket text-rose-400"></i> Session Upgrade Requests</h3>
+                        </div>
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-rose-400 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Node Name</th><th class="p-4">Commander</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr>
+                                </thead>
+                                <tbody id="upgradeRequestsTableBody" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div class="glass-card p-6 rounded-2xl border border-glassBorder">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-display font-bold text-white"><i class="fas fa-network-wired text-indigo-400"></i> Active Network Nodes</h3>
@@ -647,6 +662,40 @@
                                 </thead>
                                 <tbody id="ins-student-table" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-feature-toggles" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-pink-500/30 shadow-[0_0_20px_rgba(244,114,182,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-pink-500 shadow-[0_0_10px_rgba(244,114,182,0.8)]"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-toggle-on text-pink-400 drop-shadow-[0_0_5px_rgba(244,114,182,0.8)]"></i> Advanced Module Management</h3>
+                        <div class="mb-6">
+                            <label class="text-[10px] font-mono text-pink-400/70 uppercase block mb-2">Select Target Node</label>
+                            <select id="featureSchoolSelect" class="input-premium w-full max-w-md px-4 py-3 rounded-xl text-white font-mono" onchange="loadFeatureTogglesForSchool()"><option value="">-- SELECT TARGET --</option></select>
+                        </div>
+                        <div id="feature-toggles-container" class="hidden-el space-y-4 max-w-md">
+                            <div class="flex items-center justify-between p-4 bg-slateSurface rounded-xl border border-glassBorder">
+                                <span class="font-mono text-sm text-gray-200">QR Fee Module</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" id="toggle-qr-fee" class="sr-only peer" onchange="saveFeatureToggles()">
+                                  <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between p-4 bg-slateSurface rounded-xl border border-glassBorder">
+                                <span class="font-mono text-sm text-gray-200">Admit Card Module</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" id="toggle-admit-card" class="sr-only peer" onchange="saveFeatureToggles()">
+                                  <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between p-4 bg-slateSurface rounded-xl border border-glassBorder">
+                                <span class="font-mono text-sm text-gray-200">WhatsApp Module</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" id="toggle-whatsapp" class="sr-only peer" onchange="saveFeatureToggles()">
+                                  <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>

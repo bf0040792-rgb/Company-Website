@@ -843,10 +843,94 @@ window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt
 
 async function loadSchoolsForDropdown() { 
     const h = '<option value="ALL">-- GLOBAL NETWORK --</option>'; 
-    const t =["inspectSchoolSelect", "backupScopeSelect", "secSchoolSelect", "staffSchoolSelect", "paymentSchoolSelect", "filterChairmenSchool", "deviceSchoolSelect", "pwdReqSchoolSelect", "broadcastSchoolTarget", "rollbackSchoolSelect"]; 
-    t.forEach(id => { const el = document.getElementById(id); if(el) { el.innerHTML = (id==="inspectSchoolSelect"||id==="secSchoolSelect") ? '<option value="">-- SELECT TARGET --</option><option value="ALL">-- GLOBAL OVERRIDE --</option>' : h; } }); 
-    try { const sp = await db.collection("schools").get(); sp.forEach(d => { const op = `<option value="${d.id}">${d.data().schoolName.toUpperCase()}</option>`; t.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML += op; }); }); } catch(e) {} 
+    const t =["inspectSchoolSelect", "backupScopeSelect", "secSchoolSelect", "staffSchoolSelect", "paymentSchoolSelect", "filterChairmenSchool", "deviceSchoolSelect", "pwdReqSchoolSelect", "broadcastSchoolTarget", "rollbackSchoolSelect", "featureSchoolSelect"]; 
+    t.forEach(id => { const el = document.getElementById(id); if(el) { el.innerHTML = (id==="inspectSchoolSelect"||id==="secSchoolSelect"||id==="featureSchoolSelect") ? '<option value="">-- SELECT TARGET --</option>' : h; } }); 
+    
+    try { 
+        const sp = await db.collection("schools").get(); 
+        let requestsHtml = "";
+        
+        sp.forEach(d => { 
+            const data = d.data();
+            const op = `<option value="${d.id}">${data.schoolName.toUpperCase()}</option>`; 
+            t.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML += op; }); 
+            
+            if (data.sessionUpgradeStatus === "pending") {
+                const chairman = window.fetchedChairmen ? window.fetchedChairmen.find(c => c.schoolId === d.id) : null;
+                const cName = chairman ? chairman.name : "N/A";
+                requestsHtml += `<tr class="hover:bg-slateSurface/50 transition">
+                    <td class="p-4 font-bold text-white">${data.schoolName}</td>
+                    <td class="p-4 text-gray-200">${cName}</td>
+                    <td class="p-4"><span class="text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10 px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">PENDING APPROVAL</span></td>
+                    <td class="p-4 text-right">
+                        <button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="approveSessionUpgrade('${d.id}')"><i class="fas fa-check"></i> APPROVE</button>
+                    </td>
+                </tr>`;
+            }
+        }); 
+        
+        const reqTable = document.getElementById("upgradeRequestsTableBody");
+        if (reqTable) {
+            reqTable.innerHTML = requestsHtml || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>NO PENDING REQUESTS</td></tr>";
+        }
+    } catch(e) {} 
 }
+
+window.approveSessionUpgrade = (schoolId) => {
+    window.customConfirm("APPROVE SESSION UPGRADE FOR THIS NODE? The Chairman will be able to execute bulk promotions.", async () => {
+        try {
+            await db.collection("schools").doc(schoolId).update({ sessionUpgradeStatus: "approved" });
+            window.showToast("✅ UPGRADE APPROVED!");
+            window.logAudit("Approved Session Upgrade", schoolId);
+            loadSchoolsForDropdown(); // Refresh table
+        } catch (e) {
+            window.showToast("ERROR: " + e.message, "#e11d48");
+        }
+    });
+};
+
+window.loadFeatureTogglesForSchool = async () => {
+    const sid = document.getElementById("featureSchoolSelect").value;
+    const container = document.getElementById("feature-toggles-container");
+    if (!sid || sid === "ALL") {
+        container.classList.add("hidden-el");
+        return;
+    }
+    
+    try {
+        const doc = await db.collection("schools").doc(sid).get();
+        if (doc.exists) {
+            const data = doc.data();
+            const enabledModules = data.enabledModules || [];
+            
+            document.getElementById("toggle-qr-fee").checked = enabledModules.includes("QR Fee Module");
+            document.getElementById("toggle-admit-card").checked = enabledModules.includes("Admit Card Module");
+            document.getElementById("toggle-whatsapp").checked = enabledModules.includes("WhatsApp Module");
+            
+            container.classList.remove("hidden-el");
+        }
+    } catch(e) {
+        window.showToast("ERROR LOADING TOGGLES: " + e.message, "#e11d48");
+    }
+};
+
+window.saveFeatureToggles = async () => {
+    const sid = document.getElementById("featureSchoolSelect").value;
+    if (!sid || sid === "ALL") return;
+    
+    const enabledModules = [];
+    if (document.getElementById("toggle-qr-fee").checked) enabledModules.push("QR Fee Module");
+    if (document.getElementById("toggle-admit-card").checked) enabledModules.push("Admit Card Module");
+    if (document.getElementById("toggle-whatsapp").checked) enabledModules.push("WhatsApp Module");
+    
+    try {
+        await db.collection("schools").doc(sid).update({ enabledModules });
+        window.showToast("✅ MODULES UPDATED FOR NODE");
+        window.logAudit("Updated Module Toggles", sid);
+    } catch(e) {
+        window.showToast("ERROR: " + e.message, "#e11d48");
+    }
+};
 
 window.generateSystemBackup = async () => { 
     const sc = document.getElementById("backupScopeSelect").value; let bD = {}; const bn = document.getElementById("sysBakBtn"); bn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> PACKAGING...`; 
