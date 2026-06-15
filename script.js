@@ -1246,28 +1246,42 @@ window.loadCustomRoles = async () => { const tbody = document.getElementById("cu
 window.deleteRole = async (rId) => { window.customConfirm("PURGE POLICY?", async () => { await db.collection("global_roles").doc(rId).delete(); window.loadCustomRoles(); }); };
 
 // ==========================================
-// MAINTENANCE HEATMAP
+// MAINTENANCE HEATMAP (CHART.JS)
 // ==========================================
 window.renderMaintenanceHeatmap = () => {
-    const canvas = document.getElementById("maintenanceHeatmap");
+    const canvas = document.getElementById("apiHeatmap");
     if(!canvas) return;
+    
+    // Check if chart already exists
+    if(window.apiHeatmapChart) window.apiHeatmapChart.destroy();
+    
     const ctx = canvas.getContext("2d");
-    const cw = canvas.clientWidth || 800;
-    const ch = canvas.clientHeight || 250;
-    canvas.width = cw; canvas.height = ch;
+    const data = {
+        labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+        datasets: [{
+            label: 'API Load Heatmap',
+            data: [12, 19, 3, 5, 2, 3, 10],
+            backgroundColor: 'rgba(0, 240, 255, 0.2)',
+            borderColor: 'rgba(0, 240, 255, 1)',
+            borderWidth: 2,
+            tension: 0.4,
+            fill: true
+        }]
+    };
     
-    const cols = 24; const rows = 7;
-    const blockW = (cw - 40) / cols;
-    const blockH = (ch - 40) / rows;
-    
-    for(let r=0; r<rows; r++) {
-        for(let c=0; c<cols; c++) {
-            const isHighUsage = Math.random() > 0.8;
-            const isLowUsage = Math.random() < 0.3;
-            ctx.fillStyle = isHighUsage ? '#f43f5e' : (isLowUsage ? '#10b981' : '#334155');
-            ctx.fillRect(20 + c*(blockW+2), 20 + r*(blockH+2), blockW, blockH);
+    window.apiHeatmapChart = new Chart(ctx, {
+        type: 'line',
+        data: data,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#94a3b8' } }
+            },
+            plugins: { legend: { labels: { color: '#f8fafc', font: { family: 'monospace' } } } }
         }
-    }
+    });
 };
 setTimeout(window.renderMaintenanceHeatmap, 2000);
 
@@ -1298,3 +1312,125 @@ window.loadTickets = async () => {
     }
 };
 document.querySelector('[data-target="tab-tickets"]')?.addEventListener('click', window.loadTickets);
+
+// ==========================================
+// AI ASSISTANT CHAT LOGIC
+// ==========================================
+window.toggleAIChat = () => {
+    const chatWindow = document.getElementById("ai-chat-window");
+    if(chatWindow) chatWindow.classList.toggle("hidden-el");
+};
+
+window.sendAIMessage = async () => {
+    const input = document.getElementById("ai-chat-input");
+    const msg = input.value.trim();
+    if(!msg) return;
+    input.value = "";
+    
+    const messagesDiv = document.getElementById("ai-chat-messages");
+    if(!messagesDiv) return;
+
+    messagesDiv.innerHTML += `<div class="text-right mb-2"><span class="bg-tealAccent/20 px-3 py-2 rounded-lg text-tealAccent inline-block max-w-[85%] border border-tealAccent/50">${msg}</span></div>`;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    const loadingId = "msg-" + Date.now();
+    messagesDiv.innerHTML += `<div id="${loadingId}" class="text-left mb-2"><span class="bg-slateSurface px-3 py-2 rounded-lg text-coolGray inline-block max-w-[85%] border border-glassBorder"><i class="fas fa-circle-notch fa-spin"></i> Analyzing Core Data...</span></div>`;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    try {
+        const schoolsSnap = await db.collection("schools").get();
+        const schools = schoolsSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        const txSnap = await db.collection("transactions").get();
+        const transactions = txSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        const contextData = JSON.stringify({ schools, transactions });
+
+        const res = await fetch("http://localhost:5000/api/ai-assistant", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: msg, context: contextData })
+        });
+        
+        const data = await res.json();
+        document.getElementById(loadingId).outerHTML = `<div class="text-left mb-2"><span class="bg-slateSurface px-3 py-2 rounded-lg text-white inline-block max-w-[85%] border border-tealAccent/20">${data.reply ? data.reply.replace(/\n/g, '<br>') : "NO RESPONSE"}</span></div>`;
+    } catch(e) {
+        document.getElementById(loadingId).outerHTML = `<div class="text-left mb-2"><span class="bg-rose-500/20 px-3 py-2 rounded-lg text-rose-400 inline-block max-w-[85%] border border-rose-500">Error: Unable to reach AI Backend.</span></div>`;
+    }
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+};
+
+// ==========================================
+// GST INVOICE LOGIC
+// ==========================================
+window.generateGSTInvoice = async (schoolId) => {
+    if(!schoolId || schoolId === 'ALL') {
+        window.showToast("PLEASE SELECT A SPECIFIC NODE", "#e11d48");
+        return;
+    }
+    window.showToast("FETCHING DATA...", "#3b82f6");
+    try {
+        const sDoc = await db.collection("schools").doc(schoolId).get();
+        if(!sDoc.exists) return window.showToast("NODE NOT FOUND", "#e11d48");
+        const sData = sDoc.data();
+        
+        const uDoc = await db.collection("users").doc(sData.chairmanUid).get();
+        const email = uDoc.exists ? uDoc.data().email : "unknown@domain.com";
+        const tier = sData.subscriptionTier || 'Starter';
+        const schoolName = sData.schoolName || 'Unknown School';
+        
+        window.showToast("GENERATING GST INVOICE...", "#3b82f6");
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        let basePrice = 5000;
+        if(tier === 'Professional') basePrice = 12000;
+        if(tier === 'Enterprise') basePrice = 25000;
+        
+        const gst = basePrice * 0.18;
+        const total = basePrice + gst;
+        
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.text("GST INVOICE", 105, 20, null, null, "center");
+        
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Invoice Date: ${new Date().toLocaleDateString()}`, 20, 40);
+        doc.text(`Invoice No: INV-${Date.now().toString().slice(-6)}`, 20, 48);
+        
+        doc.text(`Billed To:`, 120, 40);
+        doc.setFont("helvetica", "bold");
+        doc.text(`${schoolName}`, 120, 48);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Email: ${email}`, 120, 56);
+        doc.text(`School ID: ${schoolId}`, 120, 64);
+        
+        doc.autoTable({
+            startY: 80,
+            head: [['Description', 'Quantity', 'Unit Price (INR)', 'Amount (INR)']],
+            body: [
+                [`Master Core SaaS - ${tier} Tier (Monthly)`, '1', basePrice.toFixed(2), basePrice.toFixed(2)],
+            ],
+            foot: [
+                ['', '', 'Subtotal:', basePrice.toFixed(2)],
+                ['', '', 'GST (18%):', gst.toFixed(2)],
+                ['', '', 'Total Due:', total.toFixed(2)]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [15, 23, 42] },
+            footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] }
+        });
+        
+        doc.setFontSize(10);
+        doc.text("Thank you for your business. Please remit payment within 7 days.", 20, doc.lastAutoTable.finalY + 20);
+        doc.text("Provider: CoreEdu Tech Pvt Ltd | GSTIN: 27AABCU9603R1ZM", 20, doc.lastAutoTable.finalY + 28);
+        
+        const fileName = `Invoice_${schoolName.replace(/ /g, '_')}_${Date.now()}.pdf`;
+        doc.save(fileName);
+        window.logAudit("Generated Invoice", schoolName);
+        
+    } catch(err) {
+        console.error(err);
+        window.showToast("INVOICE ERROR: " + err.message, "#e11d48");
+    }
+};
