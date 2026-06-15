@@ -1277,7 +1277,7 @@ window.loadInboxMessages = async () => { const t = document.getElementById("inbo
 window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await db.collection("direct_messages").doc(mid).delete(); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
 window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if(!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch(e) {} }; };
 
-document.getElementById("sendBroadcastBtn").addEventListener("click", async () => { const tg = document.getElementById("broadcastTarget").value; const st = document.getElementById("broadcastSchoolTarget").value; const ti = document.getElementById("broadcastTitle").value.trim(); const bd = document.getElementById("broadcastBody").value.trim(); if(!ti || !bd) return; try { await db.collection("global_notifications").doc().set({ target: tg, schoolId: st === "ALL" ? null : st, title: ti, body: bd, date: new Date().toLocaleDateString(), createdAt: firebase.firestore.FieldValue.serverTimestamp() }); window.showToast("✅ PAYLOAD DEPLOYED!"); window.logAudit("Sent Broadcast", ti); document.getElementById("broadcastTitle").value=""; document.getElementById("broadcastBody").value=""; } catch(e) {} });
+// Removed Broadcast Event Listeners for UI Redesign
 
 window.sendEmergencyTicker = async () => { const txt = document.getElementById("emergencyTickerInput").value.trim(); if(!txt) return; try { await db.collection("system_config").doc("ticker").set({ text: txt, active: true, timestamp: Date.now() }); window.showToast("OVERRIDE TRANSMITTED!", "#e11d48"); window.logAudit("Broadcasted Ticker", txt); document.getElementById("emergencyTickerInput").value = ""; } catch(e) {} };
 window.clearEmergencyTicker = async () => { try { await db.collection("system_config").doc("ticker").update({ active: false }); window.showToast("OVERRIDE CLEARED."); } catch(e) {} };
@@ -1932,3 +1932,61 @@ if (originalSwitchTab) {
         });
     });
 }
+
+// ==========================================
+// 15. CORE AI ASSISTANT LOGIC
+// ==========================================
+window.toggleAIChat = () => {
+    const box = document.getElementById("ai-chat-box");
+    if (box.classList.contains("hidden-el")) {
+        box.classList.remove("hidden-el");
+    } else {
+        box.classList.add("hidden-el");
+    }
+};
+
+window.sendAIMessage = async () => {
+    const input = document.getElementById("ai-input");
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const messagesDiv = document.getElementById("ai-messages");
+    
+    // Append User Message
+    const userMsg = document.createElement("div");
+    userMsg.className = "text-right mb-4";
+    userMsg.innerHTML = `<span class="inline-block bg-teal-600/20 border border-teal-500/50 text-teal-400 px-3 py-2 rounded-xl text-xs font-mono">${text}</span>`;
+    messagesDiv.appendChild(userMsg);
+    
+    input.value = "";
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    // Append AI Loading Message
+    const aiMsg = document.createElement("div");
+    aiMsg.className = "text-left mb-4";
+    aiMsg.innerHTML = `<span class="inline-block bg-slateBase border border-glassBorder text-coolGray px-3 py-2 rounded-xl text-xs font-mono"><i class="fas fa-spinner fa-spin text-tealAccent"></i> ANALYZING...</span>`;
+    messagesDiv.appendChild(aiMsg);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    try {
+        // Fetch to Google Gemini API (Mocked Endpoint, using a placeholder fetch or just a mock response for now)
+        // Note: Replace the API Key and endpoint when connecting properly to Vertex/Gemini
+        
+        setTimeout(() => {
+            aiMsg.innerHTML = `<span class="inline-block bg-slateBase border border-glassBorder text-coolGray px-3 py-2 rounded-xl text-xs font-mono"><i class="fas fa-robot text-tealAccent"></i> The system architecture is fully stable. Geo-Fencing limits active connections outside of the root admin coordinates. How else may I assist your deployment?</span>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }, 1500);
+        
+    } catch (e) {
+        aiMsg.innerHTML = `<span class="inline-block bg-rose-600/20 border border-rose-500/50 text-rose-400 px-3 py-2 rounded-xl text-xs font-mono">CONNECTION DROPPED</span>`;
+    }
+};
+
+document.getElementById("ai-input")?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") window.sendAIMessage();
+});
+
+window.loadTickets = () => {
+    // Placeholder for SLA Support Tickets logic
+    console.log("Loading SLA Tickets...");
+};
