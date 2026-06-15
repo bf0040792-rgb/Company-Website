@@ -1523,6 +1523,7 @@ window.generateGSTInvoice = async (schoolId) => {
     }
 };
 // ==========================================
+// ==========================================
 // MASSIVE UPGRADES - NEW LOGIC
 // ==========================================
 
@@ -1597,8 +1598,7 @@ window.submitSchoolRegistration = async () => {
     btn.disabled = true;
 
     try {
-        // Mock upload using base64 for simplicity in frontend (since Cloudinary needs backend signature ideally or unsigned setup)
-        // We will just read as DataURL to save in Firebase for pending approval viewing
+        // Mock upload using base64 for simplicity in frontend
         const readAsDataURL = (file) => new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result);
@@ -1680,17 +1680,17 @@ window.loadPendingRegistrations = () => {
         snapshot.forEach(doc => {
             const data = doc.data();
             const tr = document.createElement("tr");
-            tr.innerHTML = 
-                <td class="p-4"><img src="\" class="w-10 h-10 rounded-full border border-glassBorder object-cover"></td>
-                <td class="p-4 font-bold text-white">\<br><span class="text-[10px] text-emerald-400 font-mono">\</span></td>
-                <td class="p-4 text-xs text-gray-300">\<br><span class="text-[10px] text-gray-500">\</span></td>
-                <td class="p-4 text-xs text-gray-300">\, \</td>
-                <td class="p-4"><a href="\" download="Authority_\.pdf" class="text-indigo-400 hover:text-indigo-300 underline"><i class="fas fa-download"></i> View</a></td>
+            tr.innerHTML = `
+                <td class="p-4"><img src="${data.logoUrl}" class="w-10 h-10 rounded-full border border-glassBorder object-cover"></td>
+                <td class="p-4 font-bold text-white">${data.schoolName}<br><span class="text-[10px] text-emerald-400 font-mono">${data.email}</span></td>
+                <td class="p-4 text-xs text-gray-300">${data.principalName}<br><span class="text-[10px] text-gray-500">${data.phone}</span></td>
+                <td class="p-4 text-xs text-gray-300">${data.district}, ${data.state}</td>
+                <td class="p-4"><a href="${data.authorityLetterUrl}" download="Authority_${data.schoolName}.pdf" class="text-indigo-400 hover:text-indigo-300 underline"><i class="fas fa-download"></i> View</a></td>
                 <td class="p-4 text-right flex gap-2 justify-end">
-                    <button onclick="window.approveRegistration('\')" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded border border-emerald-500 transition"><i class="fas fa-check"></i></button>
-                    <button onclick="window.rejectRegistration('\')" class="px-3 py-1.5 bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded border border-rose-500 transition"><i class="fas fa-times"></i></button>
+                    <button onclick="window.approveRegistration('${doc.id}')" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded border border-emerald-500 transition"><i class="fas fa-check"></i></button>
+                    <button onclick="window.rejectRegistration('${doc.id}')" class="px-3 py-1.5 bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded border border-rose-500 transition"><i class="fas fa-times"></i></button>
                 </td>
-            ;
+            `;
             tbody.appendChild(tr);
         });
     });
@@ -1774,15 +1774,15 @@ window.loadCommHubSchools = () => {
             const div = document.createElement("div");
             div.className = "school-list-item p-3 border-b border-glassBorder flex items-center gap-3";
             div.onclick = () => window.openCommChat(doc.id, data.name);
-            div.innerHTML = 
+            div.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-slateBase border border-glassBorder overflow-hidden shrink-0">
-                    <img src="\" class="w-full h-full object-cover">
+                    <img src="${data.logoUrl || 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}" class="w-full h-full object-cover">
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h4 class="text-white text-xs font-bold truncate">\</h4>
+                    <h4 class="text-white text-xs font-bold truncate">${data.name}</h4>
                     <p class="text-[9px] text-coolGray truncate">Tap to open comm channel</p>
                 </div>
-            ;
+            `;
             list.appendChild(div);
         });
     });
@@ -1814,22 +1814,22 @@ window.openCommChat = (schoolId, schoolName) => {
               const msg = doc.data();
               const isMaster = msg.sender === 'master';
               const wrap = document.createElement("div");
-              wrap.className = lex w-full \;
+              wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
               
               const timeStr = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
               
               let fileHTML = '';
               if (msg.attachmentUrl) {
-                  fileHTML = <a href="\" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>;
+                  fileHTML = `<a href="${msg.attachmentUrl}" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>`;
               }
 
-              wrap.innerHTML = 
-                  <div class="chat-bubble \">
-                      \
-                      <span>\</span>
-                      <span class="timestamp">\</span>
+              wrap.innerHTML = `
+                  <div class="chat-bubble ${isMaster ? 'sent' : 'received'}">
+                      ${fileHTML}
+                      <span>${msg.text}</span>
+                      <span class="timestamp">${timeStr}</span>
                   </div>
-              ;
+              `;
               historyBox.appendChild(wrap);
           });
           
@@ -1898,7 +1898,7 @@ window.bulkDeletePasswordReqs = async () => {
         window.showToast("NO TARGETS SELECTED", "#e11d48");
         return;
     }
-    if (!confirm(DELETE \ TARGETS?)) return;
+    if (!confirm(`DELETE ${checkboxes.length} TARGETS?`)) return;
     
     try {
         const batch = db.batch();
@@ -1924,7 +1924,6 @@ const originalSwitchTab = window.switchTab;
 if (originalSwitchTab) {
     // If we want to intercept
 } else {
-    // We attach an observer or rely on clicks
     document.querySelectorAll('.menu-item').forEach(btn => {
         btn.addEventListener('click', () => {
             const t = btn.getAttribute('data-target');
