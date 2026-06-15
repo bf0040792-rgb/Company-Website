@@ -359,6 +359,7 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
     const tier = document.getElementById("subscriptionTier") ? document.getElementById("subscriptionTier").value : "Starter";
     const isSubNode = document.getElementById("isSubNode") ? document.getElementById("isSubNode").checked : false;
     const masterNodeId = (isSubNode && document.getElementById("masterNodeId")) ? document.getElementById("masterNodeId").value : "";
+    const watermarkUrl = document.getElementById("watermarkUrl") ? document.getElementById("watermarkUrl").value.trim() : "";
     b.innerText = "DEPLOYING NODE...";
     try {
         let lU = "https://via.placeholder.com/40";
@@ -370,9 +371,10 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
         const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA);
         const nuId = uC.user.uid; const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
         await db.collection("users").doc(nuId).set({ name: cN, email: em, role: "chairman", plainPassword: pA, schoolId: sId, schoolName: sN, logoUrl: lU, status: "active", blockReason: "" });
-        await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId });
+        await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId, watermarkUrl: watermarkUrl });
         window.showToast("✅ TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
         document.getElementById("schoolName").value = ""; document.getElementById("chairmanName").value = ""; document.getElementById("chairmanEmail").value = ""; document.getElementById("chairmanPassword").value = ""; document.getElementById("schoolLogo").value = "";
+        if(document.getElementById("watermarkUrl")) document.getElementById("watermarkUrl").value = "";
         loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff();
     } catch (err) { window.showToast("ERROR: " + err.message, "#e11d48"); } finally { await secondaryAuth.signOut().catch(e=>{}); b.innerText = "DEPLOY NODE"; }
 });
@@ -1242,3 +1244,57 @@ window.restoreItem = async (binId, collection, docId) => { window.customConfirm(
 window.saveCustomRole = async () => { const rName = document.getElementById("customRoleName").value.trim(); if(!rName) return; const perms = Array.from(document.querySelectorAll(".role-perm")).filter(cb => cb.checked).map(cb => cb.value); try { await db.collection("global_roles").doc(rName.toLowerCase().replace(/ /g, '_')).set({ name: rName, permissions: perms }); window.showToast("CUSTOM POLICY FORGED!"); document.getElementById("customRoleName").value = ""; Array.from(document.querySelectorAll(".role-perm")).forEach(c => c.checked=false); window.loadCustomRoles(); window.logAudit("Created Role", rName); } catch(e) {} };
 window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const snap = await db.collection("global_roles").get(); let html = ""; snap.forEach(doc => { let d = doc.data(); html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch(e) {} };
 window.deleteRole = async (rId) => { window.customConfirm("PURGE POLICY?", async () => { await db.collection("global_roles").doc(rId).delete(); window.loadCustomRoles(); }); };
+
+// ==========================================
+// MAINTENANCE HEATMAP
+// ==========================================
+window.renderMaintenanceHeatmap = () => {
+    const canvas = document.getElementById("maintenanceHeatmap");
+    if(!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const cw = canvas.clientWidth || 800;
+    const ch = canvas.clientHeight || 250;
+    canvas.width = cw; canvas.height = ch;
+    
+    const cols = 24; const rows = 7;
+    const blockW = (cw - 40) / cols;
+    const blockH = (ch - 40) / rows;
+    
+    for(let r=0; r<rows; r++) {
+        for(let c=0; c<cols; c++) {
+            const isHighUsage = Math.random() > 0.8;
+            const isLowUsage = Math.random() < 0.3;
+            ctx.fillStyle = isHighUsage ? '#f43f5e' : (isLowUsage ? '#10b981' : '#334155');
+            ctx.fillRect(20 + c*(blockW+2), 20 + r*(blockH+2), blockW, blockH);
+        }
+    }
+};
+setTimeout(window.renderMaintenanceHeatmap, 2000);
+
+// ==========================================
+// TICKETS LOGIC
+// ==========================================
+window.loadTickets = async () => {
+    const tbody = document.getElementById("ticketsTableBody");
+    if(!tbody) return;
+    try {
+        const snap = await db.collection("tickets").get();
+        let html = "";
+        snap.forEach(doc => {
+            const d = doc.data();
+            html += `<tr class="hover:bg-slateSurface/50 transition border-l-2 ${d.status === 'Open' ? 'border-rose-500' : 'border-tealAccent'}">
+                <td class="p-4 font-mono font-bold text-white">${doc.id.substring(0, 8).toUpperCase()}</td>
+                <td class="p-4 text-coolLight">${d.schoolName || 'Unknown'}</td>
+                <td class="p-4 text-coolGray">${d.subject}</td>
+                <td class="p-4"><span class="px-2 py-1 rounded text-[10px] uppercase ${d.status === 'Open' ? 'bg-rose-500/20 text-rose-400' : 'bg-tealAccent/20 text-tealAccent'}">${d.status}</span></td>
+                <td class="p-4 text-right">
+                    <button class="px-2 py-1 bg-indigo-600/20 text-indigo-400 border border-indigo-500 hover:bg-indigo-600 hover:text-white rounded text-[10px]"><i class="fas fa-eye"></i></button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO SLA TICKETS FOUND.</td></tr>";
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan='5' class='p-4 text-center text-rose-500'>ERROR LOADING TICKETS</td></tr>`;
+    }
+};
+document.querySelector('[data-target="tab-tickets"]')?.addEventListener('click', window.loadTickets);

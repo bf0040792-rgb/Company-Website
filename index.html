@@ -535,6 +535,7 @@
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-security"><i class="fas fa-shield-virus text-rose-500 w-5 text-center"></i> System Limits</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-device-tracking"><i class="fas fa-crosshairs text-cyan-400 w-5 text-center"></i> Radar Tracking</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-broadcast"><i class="fas fa-broadcast-tower text-indigo-500 w-5 text-center"></i> Comm Hub</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-tickets"><i class="fas fa-ticket-alt text-teal-400 w-5 text-center"></i> Tickets</button>
                     
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">Logs & Policies</p>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-audit-logs"><i class="fas fa-terminal text-coolLight w-5 text-center"></i> Audit Matrix</button>
@@ -626,6 +627,7 @@
                                     <option value="">Select Master Node...</option>
                                 </select>
                             </div>
+                            <div class="col-span-1"><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Watermark URL</label><input type="text" id="watermarkUrl" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono" placeholder="Optional URL"></div>
                         </div>
                         <button id="createChairmanBtn" class="mt-4 px-6 py-2 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)] transition">DEPLOY NODE</button>
                     </div>
@@ -888,6 +890,11 @@
                             <div class="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/50 flex items-center justify-center text-purple-400 group-hover:scale-110 transition shadow-[0_0_10px_rgba(168,85,247,0.5)]"><i class="fas fa-ban text-xl"></i></div>
                             <span class="font-mono font-bold text-purple-500 text-xs">GLOBAL BLACKLIST</span>
                         </button>
+                    </div>
+
+                    <div class="glass-card p-8 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]">
+                        <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-chart-line text-tealAccent"></i> Maintenance Window / Heatmap</h3>
+                        <canvas id="maintenanceHeatmap" class="w-full h-64 bg-slateSurface rounded-lg"></canvas>
                     </div>
 
                     <div class="glass-card p-8 rounded-2xl border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.1)] relative">
