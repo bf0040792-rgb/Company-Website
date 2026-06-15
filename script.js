@@ -935,7 +935,7 @@ window.exportToTallyCSV = async () => {
 // ==========================================
 // 9C. GST INVOICE GENERATOR
 // ==========================================
-// =======================================window.loadPasswordRequests = () => { 
+window.loadPasswordRequests = () => { 
     const sid = document.getElementById("pwdReqSchoolSelect").value; let html = ""; let ls = window.fetchedChairmen; 
     if(sid !== "ALL" && sid !== "") { ls = ls.filter(c => c.schoolId === sid); } 
     ls.forEach(dt => { 
