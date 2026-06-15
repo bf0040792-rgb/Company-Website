@@ -233,6 +233,12 @@ window.unlockDashboard = () => {
     pinWrapper.classList.add("hidden-el");
     dashboardWrapper.classList.remove("hidden-el");
     lucide.createIcons();
+    
+    const savedTab = sessionStorage.getItem('companyActiveTab');
+    if (savedTab) {
+        const targetMenu = document.querySelector(`.menu-item[data-target="${savedTab}"]`);
+        if (targetMenu) targetMenu.click();
+    }
 };
 
 window.saveNewPin = async () => {
@@ -260,6 +266,8 @@ document.querySelectorAll('.menu-item').forEach(i => {
     i.addEventListener('click', (e) => { 
         const t = e.target.closest('.menu-item'); 
         if(!t || !t.dataset.target) return; 
+        
+        sessionStorage.setItem('companyActiveTab', t.dataset.target);
         
         document.querySelectorAll('.menu-item').forEach(m => { 
             m.classList.remove('active', 'bg-tealAccent/10', 'text-tealAccent', 'border-l-2', 'border-tealAccent', 'shadow-[inset_2px_0_10px_rgba(0,240,255,0.1)]'); 
@@ -312,6 +320,9 @@ window.initQuotaMonitor = () => {
 document.getElementById("createChairmanBtn").addEventListener("click", async () => {
     const sN = document.getElementById("schoolName").value.trim(); const cN = document.getElementById("chairmanName").value.trim(); const em = document.getElementById("chairmanEmail").value.trim(); const pA = document.getElementById("chairmanPassword").value.trim(); const lF = document.getElementById("schoolLogo").files[0]; const b = document.getElementById("createChairmanBtn");
     if (!sN || !cN || !em || !pA) return window.showToast("FILL ALL PARAMETERS!", "#e11d48");
+    const tier = document.getElementById("subscriptionTier") ? document.getElementById("subscriptionTier").value : "Starter";
+    const isSubNode = document.getElementById("isSubNode") ? document.getElementById("isSubNode").checked : false;
+    const masterNodeId = (isSubNode && document.getElementById("masterNodeId")) ? document.getElementById("masterNodeId").value : "";
     b.innerText = "DEPLOYING NODE...";
     try {
         let lU = "https://via.placeholder.com/40";
@@ -323,7 +334,7 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
         const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA);
         const nuId = uC.user.uid; const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
         await db.collection("users").doc(nuId).set({ name: cN, email: em, role: "chairman", plainPassword: pA, schoolId: sId, schoolName: sN, logoUrl: lU, status: "active", blockReason: "" });
-        await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU });
+        await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId });
         window.showToast("✅ TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
         document.getElementById("schoolName").value = ""; document.getElementById("chairmanName").value = ""; document.getElementById("chairmanEmail").value = ""; document.getElementById("chairmanPassword").value = ""; document.getElementById("schoolLogo").value = "";
         loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff();
@@ -866,8 +877,8 @@ window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt
 
 async function loadSchoolsForDropdown() { 
     const h = '<option value="ALL">-- GLOBAL NETWORK --</option>'; 
-    const t =["inspectSchoolSelect", "backupScopeSelect", "secSchoolSelect", "staffSchoolSelect", "paymentSchoolSelect", "filterChairmenSchool", "deviceSchoolSelect", "pwdReqSchoolSelect", "broadcastSchoolTarget", "rollbackSchoolSelect", "featureSchoolSelect"]; 
-    t.forEach(id => { const el = document.getElementById(id); if(el) { el.innerHTML = (id==="inspectSchoolSelect"||id==="secSchoolSelect"||id==="featureSchoolSelect") ? '<option value="">-- SELECT TARGET --</option>' : h; } }); 
+    const t =["masterNodeId", "inspectSchoolSelect", "backupScopeSelect", "secSchoolSelect", "staffSchoolSelect", "paymentSchoolSelect", "filterChairmenSchool", "deviceSchoolSelect", "pwdReqSchoolSelect", "broadcastSchoolTarget", "rollbackSchoolSelect", "featureSchoolSelect"]; 
+    t.forEach(id => { const el = document.getElementById(id); if(el) { el.innerHTML = (id==="inspectSchoolSelect"||id==="secSchoolSelect"||id==="featureSchoolSelect"||id==="masterNodeId") ? '<option value="">-- SELECT TARGET --</option>' : h; } }); 
     
     try { 
         const sp = await db.collection("schools").get(); 
@@ -1031,9 +1042,88 @@ document.getElementById("csvExportBtn").addEventListener("click", async () => {
     } catch(e) {} 
 });
 
-document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for(const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`);} catch(e) {} }); });
+document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for(const d in sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`);} catch(e) {} }); });
+
+window.deployNewNode = async () => {
+    const sName = document.getElementById("newNodeName").value;
+    const tier = document.getElementById("newNodeTier").value;
+    const subs = document.getElementById("newNodeSubs").value;
+    if(!sName || !tier) return window.showToast("REQUIRED FIELDS MISSING", "#e11d48");
+    try {
+        const docRef = await db.collection("schools").add({
+            schoolName: sName,
+            tier: tier,
+            subNodes: parseInt(subs) || 0,
+            status: "active",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        window.showToast("✅ NODE DEPLOYED: " + docRef.id);
+        window.logAudit("Deployed New Node", sName);
+    } catch(e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
 
 window.toggleServerShield = async () => { const btn = document.getElementById("serverShieldBtn"); if(btn.innerText.includes("TOGGLE")) { await db.collection("system_config").doc("shield").set({ active: true }); window.showToast("SERVER SHIELD ACTIVATED!"); window.logAudit("Activated Shield", "Global"); } };
+
+// ==========================================
+// 🛡️ GLOBAL BLACKLIST SYSTEM
+// ==========================================
+window.openGlobalBlacklistModal = () => {
+    document.getElementById("blacklist-modal").style.display = "flex";
+    window.loadGlobalBlacklist();
+};
+
+window.loadGlobalBlacklist = async () => {
+    const tbody = document.getElementById("blacklist-table-body");
+    tbody.innerHTML = "<tr><td colspan='3' class='p-3 text-center'>Loading...</td></tr>";
+    try {
+        const snap = await db.collection("global_blacklist").get();
+        let html = "";
+        snap.forEach(doc => {
+            const d = doc.data();
+            html += `<tr class="hover:bg-slateSurface/50">
+                <td class="p-3 uppercase font-bold text-purple-400">${d.type}</td>
+                <td class="p-3 text-white">${d.value}</td>
+                <td class="p-3 text-right">
+                    <button onclick="window.removeBlacklistEntry('${doc.id}')" class="px-2 py-1 bg-rose-500/20 text-rose-400 border border-rose-500 hover:bg-rose-500 hover:text-white rounded text-[10px]"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html || "<tr><td colspan='3' class='p-3 text-center text-coolGray'>No entries found.</td></tr>";
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan='3' class='p-3 text-center text-rose-500'>Error: ${e.message}</td></tr>`;
+    }
+};
+
+window.addBlacklistEntry = async () => {
+    const val = document.getElementById("blacklist-input").value.trim();
+    const type = document.getElementById("blacklist-type").value;
+    if(!val) return window.showToast("Enter a value!", "#e11d48");
+    const btn = document.getElementById("add-blacklist-btn");
+    btn.innerText = "WAIT...";
+    try {
+        const q = await db.collection("global_blacklist").where("type", "==", type).where("value", "==", val).get();
+        if(!q.empty) { window.showToast("ALREADY BLACKLISTED", "#f59e0b"); btn.innerHTML = `<i class="fas fa-plus"></i> ADD`; return; }
+        
+        await db.collection("global_blacklist").add({
+            type: type,
+            value: val,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        document.getElementById("blacklist-input").value = "";
+        window.showToast("ADDED TO BLACKLIST", "#a855f7");
+        window.loadGlobalBlacklist();
+    } catch(e) { window.showToast("ERROR: "+e.message, "#e11d48"); }
+    btn.innerHTML = `<i class="fas fa-plus"></i> ADD`;
+};
+
+window.removeBlacklistEntry = async (id) => {
+    if(!confirm("Remove from Global Blacklist?")) return;
+    try {
+        await db.collection("global_blacklist").doc(id).delete();
+        window.showToast("ENTRY REMOVED", "#10b981");
+        window.loadGlobalBlacklist();
+    } catch(e) { window.showToast("ERROR: "+e.message, "#e11d48"); }
+};
 
 // ==========================================
 // 11. DEVICE TRACKING

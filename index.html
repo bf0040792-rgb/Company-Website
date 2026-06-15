@@ -50,7 +50,7 @@
 </head>
 <body class="antialiased h-screen flex flex-col relative text-gray-100 bg-slateBase">
 
-    <div id="auth-overlay" class="fixed inset-0 bg-slateBase z-[99999] justify-center items-center text-tealAccent text-xl font-mono font-bold tracking-widest uppercase hidden-el">
+    <div id="auth-overlay" class="fixed inset-0 bg-slateBase z-[99999] flex justify-center items-center text-tealAccent text-xl font-mono font-bold tracking-widest uppercase">
         <div class="absolute inset-0 cyber-grid-bg opacity-20"></div>
         <i data-lucide="loader-2" class="w-8 h-8 animate-spin mr-3 text-tealAccent"></i> Initializing Secure Core...
     </div>
@@ -607,6 +607,19 @@
                             <div class="col-span-1"><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Commander Name</label><input type="text" id="chairmanName" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
                             <div class="col-span-1"><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Auth Email</label><input type="email" id="chairmanEmail" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
                             <div class="col-span-1"><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Initial Key</label><input type="text" id="chairmanPassword" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
+                            
+                            <div class="col-span-1"><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Tier</label>
+                                <select id="subscriptionTier" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono">
+                                    <option value="Starter">Starter</option>
+                                    <option value="Professional">Professional</option>
+                                    <option value="Enterprise">Enterprise</option>
+                                </select>
+                            </div>
+                            <div class="col-span-1"><label class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1 flex items-center gap-1"><input type="checkbox" id="isSubNode" onchange="document.getElementById('masterNodeId').style.display = this.checked ? 'block' : 'none'"> Is Branch?</label>
+                                <select id="masterNodeId" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono hidden-el" style="display:none;">
+                                    <option value="">Select Master Node...</option>
+                                </select>
+                            </div>
                         </div>
                         <button id="createChairmanBtn" class="mt-4 px-6 py-2 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)] transition">DEPLOY NODE</button>
                     </div>
@@ -864,6 +877,10 @@
                         <button id="cleanupBtn" class="glass-card p-6 rounded-2xl border border-rose-500/30 hover:border-rose-500 hover:bg-rose-500/10 transition text-left flex flex-col items-center justify-center gap-3 group shadow-[0_0_15px_rgba(244,63,94,0.1)]">
                             <div class="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center text-rose-400 group-hover:scale-110 transition shadow-[0_0_10px_rgba(244,63,94,0.5)]"><i class="fas fa-broom text-xl"></i></div>
                             <span class="font-mono font-bold text-rose-500 text-xs">PURGE PENDING</span>
+                        </button>
+                        <button id="globalBlacklistBtn" onclick="window.openGlobalBlacklistModal()" class="glass-card p-6 rounded-2xl border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 transition text-left flex flex-col items-center justify-center gap-3 group shadow-[0_0_15px_rgba(168,85,247,0.1)]">
+                            <div class="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/50 flex items-center justify-center text-purple-400 group-hover:scale-110 transition shadow-[0_0_10px_rgba(168,85,247,0.5)]"><i class="fas fa-ban text-xl"></i></div>
+                            <span class="font-mono font-bold text-purple-500 text-xs">GLOBAL BLACKLIST</span>
                         </button>
                     </div>
 
@@ -1233,6 +1250,37 @@
                     <button onclick="window.closeCustomModal('license-modal')" class="flex-1 py-3 bg-slateSurface text-white rounded-xl font-mono font-bold border border-glassBorder hover:bg-slate-800 transition">ABORT</button>
                     <button onclick="window.saveLicenseDate()" class="flex-1 py-3 bg-emerald-500/20 border border-emerald-500 hover:bg-emerald-500 text-emerald-400 hover:text-slateBase rounded-xl font-mono font-bold shadow-[0_0_15px_rgba(16,185,129,0.3)] transition">UPDATE</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Blacklist Modal -->
+    <div id="blacklist-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-md z-[10000] hidden-el flex justify-center items-center px-4">
+        <div class="glass-card p-8 rounded-3xl w-full max-w-2xl border border-purple-500/50 shadow-[0_0_40px_rgba(168,85,247,0.2)] relative flex flex-col max-h-[90vh]">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500 to-transparent"></div>
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <span class="font-display font-bold text-white"><i class="fas fa-ban text-purple-400 drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]"></i> Global Blacklist</span>
+                <button onclick="window.closeCustomModal('blacklist-modal')" class="text-coolGray hover:text-purple-400 border border-glassBorder p-1 rounded"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="flex gap-3 mb-6 shrink-0">
+                <input type="text" id="blacklist-input" placeholder="Enter Mobile, Email, or Aadhaar..." class="input-premium flex-1 px-4 py-2 rounded-lg text-white font-mono text-sm">
+                <select id="blacklist-type" class="input-premium px-4 py-2 rounded-lg text-white font-mono text-sm w-32">
+                    <option value="mobile">Mobile</option>
+                    <option value="email">Email</option>
+                    <option value="aadhaar">Aadhaar</option>
+                </select>
+                <button id="add-blacklist-btn" onclick="window.addBlacklistEntry()" class="px-6 py-2 bg-purple-500/20 border border-purple-500 hover:bg-purple-500 text-purple-400 hover:text-white rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(168,85,247,0.3)] transition"><i class="fas fa-plus"></i> ADD</button>
+            </div>
+            
+            <div class="overflow-y-auto rounded-xl border border-glassBorder flex-1 min-h-[200px]">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slateSurface/80 text-purple-400 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder sticky top-0">
+                        <tr><th class="p-3">Type</th><th class="p-3">Value</th><th class="p-3 text-right">Action</th></tr>
+                    </thead>
+                    <tbody id="blacklist-table-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono">
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
