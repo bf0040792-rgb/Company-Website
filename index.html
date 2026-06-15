@@ -848,6 +848,52 @@
                     </div>
                 </div>
 
+                <div id="tab-role-builder" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.8)]"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-6"><i class="fas fa-user-shield text-amber-500"></i> Policy Forge (Role Builder)</h3>
+                        
+                        <div class="flex gap-4 mb-6">
+                            <input type="text" id="customRoleName" placeholder="Role Name (e.g. Finance_Admin)" class="input-premium flex-1 px-4 py-2 rounded-lg text-white font-mono text-xs">
+                            <button onclick="window.saveCustomRole()" class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-slateBase font-bold rounded-lg text-xs transition shadow-[0_0_10px_rgba(245,158,11,0.5)]"><i class="fas fa-hammer"></i> FORGE POLICY</button>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 bg-slateSurface/50 p-4 rounded-xl border border-glassBorder">
+                            <label class="flex items-center gap-2 text-xs font-mono text-coolLight"><input type="checkbox" class="role-perm w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" value="READ_NODES"> READ NODES</label>
+                            <label class="flex items-center gap-2 text-xs font-mono text-coolLight"><input type="checkbox" class="role-perm w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" value="WRITE_NODES"> WRITE NODES</label>
+                            <label class="flex items-center gap-2 text-xs font-mono text-coolLight"><input type="checkbox" class="role-perm w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" value="BILLING"> MANAGE BILLING</label>
+                            <label class="flex items-center gap-2 text-xs font-mono text-coolLight"><input type="checkbox" class="role-perm w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" value="SECURITY"> SECURITY OP</label>
+                        </div>
+
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-amber-500/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Policy UID</th><th class="p-4">Directives</th><th class="p-4 text-right">Action</th></tr>
+                                </thead>
+                                <tbody id="custom-roles-body" class="divide-y divide-glassBorder text-xs text-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-tickets" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-tealAccent shadow-[0_0_10px_rgba(0,240,255,0.8)]"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-6"><i class="fas fa-ticket-alt text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> Dedicated SLA Ticketing System</h3>
+                        
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Ticket ID</th><th class="p-4">Node / School</th><th class="p-4">Subject</th><th class="p-4">Status</th><th class="p-4 text-right">Action</th></tr>
+                                </thead>
+                                <tbody id="ticketsTableBody" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono">
+                                    <tr><td colspan='5' class='p-4 text-center text-coolGray'>LOADING TICKETS...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="tab-backup" class="tab-content hidden-el space-y-8">
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <div class="glass-card p-6 rounded-2xl border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.1)] flex flex-col relative">
@@ -1086,39 +1132,6 @@
                     </div>
                 </div>
 
-                <div id="tab-role-builder" class="tab-content hidden-el space-y-8">
-                    <div class="glass-card p-6 rounded-2xl border border-amber-400/30 shadow-[0_0_20px_rgba(251,191,36,0.1)] relative">
-                        <div class="absolute top-0 left-0 w-1 h-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]"></div>
-                        <h3 class="text-xl font-display font-bold text-white mb-6"><i class="fas fa-cogs text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]"></i> Dynamic Policy Forge</h3>
-                        
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div class="lg:col-span-1 space-y-4">
-                                <div><label class="text-[10px] font-mono text-amber-400/70 block mb-1 uppercase tracking-widest">Custom Identifier</label><input type="text" id="customRoleName" placeholder="e.g. Audit Manager" class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono font-bold"></div>
-                                <div class="bg-slateSurface p-4 rounded-xl border border-glassBorder space-y-3">
-                                    <p class="text-[10px] font-mono text-amber-400/70 uppercase tracking-widest border-b border-glassBorder pb-2">Assign Privileges</p>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 role-perm rounded text-amber-400 bg-slateBase border-glassBorder" value="read_all"><span class="text-xs font-mono text-gray-300">Read Global Data</span></label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 role-perm rounded text-amber-400 bg-slateBase border-glassBorder" value="write_finance"><span class="text-xs font-mono text-gray-300">Write Finance</span></label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 role-perm rounded text-amber-400 bg-slateBase border-glassBorder" value="delete_students"><span class="text-xs font-mono text-gray-300">Delete Subjects</span></label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 role-perm rounded text-amber-400 bg-slateBase border-glassBorder" value="approve_staff"><span class="text-xs font-mono text-gray-300">Approve Staff</span></label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 role-perm rounded text-amber-400 bg-slateBase border-glassBorder" value="bypass_timelock"><span class="text-xs font-mono text-gray-300">Bypass Time-Lock</span></label>
-                                </div>
-                                <button onclick="window.saveCustomRole()" class="w-full py-3 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded-xl font-mono font-bold transition shadow-[0_0_15px_rgba(251,191,36,0.2)]">FORGE POLICY</button>
-                            </div>
-                            
-                            <div class="lg:col-span-2">
-                                <div class="overflow-x-auto rounded-xl border border-glassBorder h-full">
-                                    <table class="w-full text-left border-collapse">
-                                        <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
-                                            <tr><th class="p-4">Identifier</th><th class="p-4">Privilege Matrix</th><th class="p-4 text-right">Purge</th></tr>
-                                        </thead>
-                                        <tbody id="custom-roles-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
             </main>
         </div>
         
@@ -1312,7 +1325,7 @@
     </div>
 
     <!-- AI Assistant Floating Widget -->
-    <div id="ai-chat-widget" class="fixed bottom-6 right-6 z-[10000] flex flex-col items-end hidden-el">
+    <div id="ai-chat-widget" class="fixed bottom-6 right-6 z-[10000] flex flex-col items-end">
         <!-- Chat Window -->
         <div id="ai-chat-window" class="glass-card mb-4 w-80 h-96 rounded-2xl border border-tealAccent/50 shadow-[0_0_30px_rgba(0,240,255,0.2)] flex flex-col overflow-hidden hidden-el">
             <div class="bg-slateSurface/80 border-b border-glassBorder p-3 flex justify-between items-center shrink-0">
