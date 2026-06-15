@@ -8,8 +8,8 @@ async function verifyGeoFence() {
         const res = await fetch('https://api.ipify.org?format=json');
         const data = await res.json();
         if (!allowedMasterIPs.includes(data.ip)) {
-            console.warn(`Unauthorized Access Attempt from IP: ${data.ip}`);
-            window.location.href = "403.html";
+            console.warn(`Unauthorized Access Attempt from IP: ${data.ip} (Geo-Fence currently disabled for testing)`);
+            // window.location.href = "403.html"; // Temporarily disabled
         } else {
             console.log(`✅ Geo-Fence Passed: ${data.ip}`);
         }
