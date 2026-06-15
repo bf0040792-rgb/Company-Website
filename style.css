@@ -178,3 +178,67 @@ body.light-theme .cyber-grid-bg {
     mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
 }
+/* Comm Hub WhatsApp Style UI */
+.chat-bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    position: relative;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    word-wrap: break-word;
+}
+.chat-bubble.sent {
+    background: rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(99, 102, 241, 0.5);
+    color: #f8fafc;
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+}
+.chat-bubble.received {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #e2e8f0;
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
+}
+.chat-bubble .timestamp {
+    font-size: 0.6rem;
+    opacity: 0.6;
+    margin-top: 4px;
+    text-align: right;
+    display: block;
+}
+
+.school-list-item {
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+}
+.school-list-item:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+.school-list-item.active {
+    background: rgba(99, 102, 241, 0.2);
+    border-left-color: #6366f1;
+}
+
+/* Light Theme Overrides for Chat */
+body.light-theme .chat-bubble.received {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #0f172a;
+}
+body.light-theme .chat-bubble.sent {
+    background: #e0e7ff;
+    border-color: #c7d2fe;
+    color: #312e81;
+}
+body.light-theme .school-list-item:hover {
+    background: #f1f5f9;
+}
+body.light-theme .school-list-item.active {
+    background: #e2e8f0;
+    border-left-color: #3b82f6;
+}

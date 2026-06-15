@@ -71,8 +71,7 @@
                     <h1 class="text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">Tech</span></h1>
                 </div>
                 <div class="flex items-center gap-4">
-                    <button onclick="showLoginModal()" class="px-5 py-2.5 bg-tealAccent/10 hover:bg-tealAccent/20 text-tealAccent border border-tealAccent rounded-lg font-mono font-semibold transition shadow-[0_0_15px_rgba(0,240,255,0.2)] flex items-center gap-2 text-sm hover:shadow-[0_0_25px_rgba(0,240,255,0.4)]">SYSTEM LOGIN</button>
-                    <button class="text-tealAccent md:hidden"><i class="fas fa-bars text-xl"></i></button>
+                    <button onclick="window.toggleHamburger()" class="text-tealAccent hover:text-white transition transform hover:scale-110 p-2"><i class="fas fa-bars text-2xl drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i></button>
                 </div>
             </div>
         </nav>
@@ -485,6 +484,93 @@
         </div>
     </div>
 
+    <!-- Hamburger Dropdown Modal -->
+    <div id="hamburger-modal" class="fixed inset-0 bg-slateBase/90 backdrop-blur-sm z-[150] hidden-el flex justify-center items-center transition-opacity duration-300 opacity-0 px-4">
+        <div class="absolute inset-0" onclick="window.toggleHamburger()"></div>
+        <div id="hamburger-modal-box" class="glass-card p-6 rounded-2xl w-full max-w-sm relative transform scale-95 transition-transform duration-300 shadow-[0_0_30px_rgba(0,240,255,0.2)] border border-tealAccent/30 z-10 flex flex-col gap-3">
+            <button onclick="window.toggleHamburger(); showLoginModal();" class="w-full py-4 bg-tealAccent/10 hover:bg-tealAccent/20 border border-tealAccent text-tealAccent rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
+                <i class="fas fa-server"></i> SYSTEM LOGIN (ROOT)
+            </button>
+            <button onclick="window.toggleHamburger(); window.showToast('REDIRECTING TO SCHOOL NODE...', '#00F0FF');" class="w-full py-4 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500 text-indigo-400 rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
+                <i class="fas fa-school"></i> SCHOOL LOGIN
+            </button>
+            <button onclick="window.toggleHamburger(); window.showRegistrationModal();" class="w-full py-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500 text-emerald-400 rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
+                <i class="fas fa-plus-circle"></i> REGISTRATION NEW SCHOOL
+            </button>
+            <button onclick="window.toggleHamburger(); window.showForgotPasswordModal();" class="w-full py-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500 text-amber-400 rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
+                <i class="fas fa-key"></i> FORGOT PASSWORD
+            </button>
+        </div>
+    </div>
+
+    <!-- Registration New School Modal -->
+    <div id="registration-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[160] hidden-el flex justify-center items-center px-4 overflow-y-auto py-10">
+        <div class="glass-card p-8 rounded-3xl w-full max-w-2xl relative shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-emerald-500/30 my-auto">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 class="text-2xl font-display font-bold text-white flex items-center gap-2"><i class="fas fa-plus-circle text-emerald-400"></i> NEW SCHOOL DEPLOYMENT</h2>
+                    <p class="text-emerald-400/70 text-xs font-mono mt-1 tracking-widest">REQUEST NODE ALLOCATION</p>
+                </div>
+                <button onclick="window.closeCustomModal('registration-modal')" class="text-coolGray hover:text-emerald-400 transition p-2 bg-slateSurface rounded-lg border border-glassBorder"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">School Name *</label><input type="text" id="reg-school-name" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Principal Name *</label><input type="text" id="reg-principal-name" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Official Email ID *</label><input type="email" id="reg-email" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Desired Password *</label><input type="password" id="reg-password" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Phone Number *</label><input type="text" id="reg-phone" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">School Logo *</label><input type="file" id="reg-logo" accept="image/*" class="input-premium w-full px-3 py-1.5 rounded-lg text-white text-xs" required></div>
+            </div>
+
+            <div class="bg-slateSurface/50 p-4 rounded-xl border border-glassBorder mb-4">
+                <h4 class="text-xs font-mono font-bold text-coolLight mb-3 tracking-widest border-b border-glassBorder pb-2">LOCATION DATA</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">Country *</label>
+                        <select id="reg-country" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" onchange="window.updateStateDropdown()" required>
+                            <option value="">Select Country</option><option value="India">India</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">State *</label>
+                        <select id="reg-state" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" disabled required>
+                            <option value="">Select State</option><option value="Delhi">Delhi</option><option value="Maharashtra">Maharashtra</option><option value="Karnataka">Karnataka</option><option value="Tamil Nadu">Tamil Nadu</option>
+                        </select>
+                    </div>
+                    <div><label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">District *</label><input type="text" id="reg-district" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                    <div><label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">Pincode *</label><input type="text" id="reg-pincode" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                    <div class="md:col-span-2"><label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">Full Address *</label><textarea id="reg-address" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm h-16" required></textarea></div>
+                </div>
+            </div>
+
+            <div class="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20 mb-6">
+                <a href="#" onclick="window.downloadAuthorityTemplate()" class="text-emerald-400 hover:text-emerald-300 font-mono text-xs font-bold flex items-center gap-2 mb-3 underline underline-offset-4"><i class="fas fa-download"></i> Download Official Authority Letter Template</a>
+                <label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Upload Signed Authority Letter (PDF/IMG) *</label>
+                <input type="file" id="reg-authority-letter" accept=".pdf,image/*" class="input-premium w-full px-3 py-1.5 rounded-lg text-white text-xs border-emerald-500/50" required>
+            </div>
+
+            <button id="submitRegBtn" onclick="window.submitSchoolRegistration()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(16,185,129,0.3)]">SUBMIT DEPLOYMENT REQUEST</button>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div id="forgot-password-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[160] hidden-el flex justify-center items-center px-4">
+        <div class="glass-card p-8 rounded-3xl w-full max-w-sm relative shadow-[0_0_40px_rgba(245,158,11,0.2)] border border-amber-500/30 text-center">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent"></div>
+            <button onclick="window.closeCustomModal('forgot-password-modal')" class="absolute top-4 right-4 text-coolGray hover:text-amber-400 transition"><i class="fas fa-times"></i></button>
+            <i class="fas fa-key text-4xl text-amber-500 mb-4 drop-shadow-[0_0_10px_rgba(245,158,11,0.8)]"></i>
+            <h2 class="text-2xl font-display font-bold text-white mb-2">Recover Access</h2>
+            <p class="text-amber-500/70 text-xs font-mono mb-6">Request master reset.</p>
+            <div class="space-y-4 text-left">
+                <div><label class="text-[10px] font-mono text-amber-500 uppercase tracking-widest mb-1 block">User ID / Email</label><input type="text" id="forgot-id" class="input-premium w-full px-4 py-3 rounded-xl text-white text-sm"></div>
+                <div><label class="text-[10px] font-mono text-amber-500 uppercase tracking-widest mb-1 block">Registered Phone</label><input type="text" id="forgot-phone" class="input-premium w-full px-4 py-3 rounded-xl text-white text-sm"></div>
+            </div>
+            <button id="submitForgotBtn" onclick="window.submitForgotPassword()" class="w-full mt-6 py-3 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded-xl font-mono font-bold transition shadow-[0_0_15px_rgba(245,158,11,0.3)]">SEND RESET REQUEST</button>
+        </div>
+    </div>
+
     <!-- Dashboard Wrapper -->
     <div id="dashboard-wrapper" class="hidden-el h-screen w-full flex flex-col bg-slateBase overflow-hidden relative">
         <div class="absolute inset-0 cyber-grid-bg opacity-[0.03] pointer-events-none z-0"></div>
@@ -521,6 +607,7 @@
                     <button class="menu-item active w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all bg-tealAccent/10 text-tealAccent border-l-2 border-tealAccent shadow-[inset_2px_0_10px_rgba(0,240,255,0.1)] font-mono text-xs" data-target="tab-dashboard"><i class="fas fa-satellite-dish w-5 text-center"></i> Analytics</button>
                     
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">Entity Control</p>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-pending-approvals"><i class="fas fa-user-plus text-emerald-400 w-5 text-center"></i> Pending Approvals</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-manage"><i class="fas fa-server text-indigo-400 w-5 text-center"></i> Nodes & Chairmen</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-modules"><i class="fas fa-user-astronaut text-blue-400 w-5 text-center"></i> Inspect Subjects</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-aadhaar-search"><i class="fas fa-fingerprint text-amber-400 w-5 text-center"></i> Identity Search</button>
@@ -605,6 +692,23 @@
                 </div>
 
                 <!-- Manage Nodes Tab -->
+                <div id="tab-pending-approvals" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-4 flex items-center gap-2"><i class="fas fa-user-plus text-emerald-400"></i> Pending Node Registrations</h3>
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder mt-4">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-emerald-400/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Logo</th><th class="p-4">School Name</th><th class="p-4">Principal Info</th><th class="p-4">Location</th><th class="p-4">Authority Letter</th><th class="p-4 text-right">Action</th></tr>
+                                </thead>
+                                <tbody id="pending-approvals-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono">
+                                    <tr><td colspan='6' class='text-center p-4 text-coolGray font-mono'>NO PENDING REQUESTS</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="tab-manage" class="tab-content hidden-el space-y-8">
                     <div class="glass-card p-6 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)] relative">
                         <div class="absolute top-0 left-0 w-1 h-full bg-tealAccent shadow-[0_0_10px_rgba(0,240,255,0.8)]"></div>
@@ -833,14 +937,17 @@
 
                 <div id="tab-password-req" class="tab-content hidden-el space-y-8">
                     <div class="glass-card p-6 rounded-2xl border border-amber-500/30">
-                        <div class="flex justify-between items-center mb-4">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                             <h3 class="text-lg font-display font-bold text-white"><i class="fas fa-key text-amber-500"></i> Auth Key Management</h3>
-                            <select id="pwdReqSchoolSelect" onchange="window.loadPasswordRequests()" class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono"><option value="ALL">-- GLOBAL --</option></select>
+                            <div class="flex items-center gap-3">
+                                <button onclick="window.bulkDeletePasswordReqs()" class="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-mono font-bold transition shadow-[0_0_10px_rgba(244,63,94,0.3)]"><i class="fas fa-trash-alt"></i> BULK DELETE</button>
+                                <select id="pwdReqSchoolSelect" onchange="window.loadPasswordRequests()" class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono"><option value="ALL">-- GLOBAL --</option></select>
+                            </div>
                         </div>
                         <div class="overflow-x-auto rounded-xl border border-glassBorder">
                             <table class="w-full text-left border-collapse">
                                 <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
-                                    <tr><th class="p-4">Node & Commander</th><th class="p-4">Current Hash</th><th class="p-4">Pending Request</th><th class="p-4 text-right">Execute</th></tr>
+                                    <tr><th class="p-4 w-10"><input type="checkbox" id="selectAllPwdReq" class="w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" onchange="window.toggleSelectAllPwdReq(this)"></th><th class="p-4">Node & Commander</th><th class="p-4">Current Hash</th><th class="p-4">Pending Request</th><th class="p-4 text-right">Execute</th></tr>
                                 </thead>
                                 <tbody id="password-req-table" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
                             </table>
@@ -1037,44 +1144,53 @@
                     </div>
                 </div>
 
-                <div id="tab-broadcast" class="tab-content hidden-el space-y-8">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <div class="space-y-8">
-                            <div class="glass-card p-6 rounded-2xl border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.1)] relative">
-                                <div class="absolute top-0 left-0 w-1 h-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
-                                <h3 class="text-lg font-display font-bold text-white mb-2"><i class="fas fa-exclamation-triangle text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]"></i> God-Level Override</h3>
-                                <p class="text-[9px] font-mono text-rose-400/70 uppercase mb-4 tracking-widest">Forces unclosable marquee across all active sessions.</p>
-                                <div class="flex gap-2">
-                                    <input type="text" id="emergencyTickerInput" placeholder="Enter critical payload..." class="input-premium flex-1 px-4 py-2 rounded-xl text-rose-400 font-mono border-rose-500/30 focus:border-rose-500">
-                                    <button onclick="window.sendEmergencyTicker()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-mono font-bold rounded-xl shadow-[0_0_15px_rgba(225,29,72,0.4)] transition">TRANSMIT</button>
-                                    <button onclick="window.clearEmergencyTicker()" class="px-4 py-2 bg-slateSurface hover:bg-slate-800 border border-glassBorder text-white font-mono font-bold rounded-xl transition">CLEAR</button>
-                                </div>
+                <div id="tab-broadcast" class="tab-content hidden-el h-full w-full">
+                    <div class="flex h-[80vh] bg-slateSurface/30 rounded-2xl border border-glassBorder overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                        <!-- Left Pane: School List -->
+                        <div class="w-1/3 bg-slateSurface border-r border-glassBorder flex flex-col">
+                            <div class="p-4 border-b border-glassBorder bg-slateBase/50 shrink-0">
+                                <h3 class="text-white font-display font-bold flex items-center gap-2"><i class="fas fa-broadcast-tower text-indigo-400"></i> Comm Hub</h3>
+                                <input type="text" id="comm-search" placeholder="Search schools..." class="input-premium w-full mt-3 px-3 py-2 rounded-lg text-xs font-mono">
                             </div>
-                            
-                            <div class="glass-card p-6 rounded-2xl border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.1)] relative">
-                                <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)]"></div>
-                                <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-broadcast-tower text-indigo-400 drop-shadow-[0_0_5px_rgba(99,102,241,0.8)]"></i> Push Engine</h3>
-                                <div class="space-y-4">
-                                    <div class="flex gap-4">
-                                        <div class="flex-1"><label class="text-[10px] font-mono text-indigo-400/70 uppercase block mb-1">Target Role</label><select id="broadcastTarget" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"><option value="all">Global</option><option value="chairmen">Commanders</option><option value="staff">Staff</option><option value="students">Subjects</option></select></div>
-                                        <div class="flex-1"><label class="text-[10px] font-mono text-indigo-400/70 uppercase block mb-1">Target Node</label><select id="broadcastSchoolTarget" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"><option value="ALL">- ENTIRE SYSTEM -</option></select></div>
-                                    </div>
-                                    <div><input type="text" id="broadcastTitle" placeholder="Payload Title" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono font-bold"></div>
-                                    <div><textarea id="broadcastBody" rows="3" placeholder="Payload content..." class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono resize-none"></textarea></div>
-                                    <button id="sendBroadcastBtn" class="w-full py-3 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white font-mono font-bold rounded-xl transition shadow-[0_0_15px_rgba(99,102,241,0.2)]">DEPLOY PAYLOAD</button>
-                                </div>
+                            <div id="comm-school-list" class="flex-1 overflow-y-auto space-y-1 p-2">
+                                <!-- Dynamic School Items Here -->
+                                <div class="text-center p-4 text-coolGray text-xs font-mono">Loading networks...</div>
                             </div>
                         </div>
-                        
-                        <div class="glass-card p-6 rounded-2xl flex flex-col h-full min-h-[400px] border border-blue-500/30">
-                            <h3 class="text-lg font-display font-bold text-white mb-4 border-b border-glassBorder pb-4"><i class="fas fa-inbox text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.8)]"></i> Secure Comm Inbox</h3>
-                            <div class="flex-1 overflow-auto rounded-xl border border-glassBorder">
-                                <table class="w-full text-left border-collapse">
-                                    <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest sticky top-0 border-b border-glassBorder">
-                                        <tr><th class="p-3">Temporal</th><th class="p-3">Origin</th><th class="p-3">Payload</th><th class="p-3 text-right">Act</th></tr>
-                                    </thead>
-                                    <tbody id="inbox-table" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
-                                </table>
+
+                        <!-- Right Pane: Chat History -->
+                        <div class="w-2/3 flex flex-col bg-slateBase relative relative">
+                            <!-- Background Pattern -->
+                            <div class="absolute inset-0 cyber-grid-bg opacity-[0.05] pointer-events-none z-0"></div>
+                            
+                            <!-- Chat Header -->
+                            <div class="p-4 border-b border-glassBorder bg-slateSurface shrink-0 flex justify-between items-center z-10">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-indigo-500/20 border border-indigo-500 flex items-center justify-center text-indigo-400"><i class="fas fa-school"></i></div>
+                                    <div>
+                                        <h4 id="comm-active-school-name" class="text-white font-bold text-sm font-mono">Select a School</h4>
+                                        <p id="comm-active-school-id" class="text-indigo-400/70 text-[10px] font-mono tracking-widest">AWAITING CONNECTION</p>
+                                    </div>
+                                </div>
+                                <button onclick="window.clearCommHistory()" class="text-coolGray hover:text-rose-400 transition" title="Clear History"><i class="fas fa-trash-alt"></i></button>
+                            </div>
+
+                            <!-- Chat Messages Area -->
+                            <div id="comm-chat-history" class="flex-1 overflow-y-auto p-6 space-y-4 z-10 flex flex-col">
+                                <div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center">
+                                    <i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i>
+                                    <br>End-to-End Encrypted Comms
+                                </div>
+                            </div>
+
+                            <!-- Message Input Area -->
+                            <div class="p-4 bg-slateSurface border-t border-glassBorder shrink-0 z-10">
+                                <div class="flex gap-2">
+                                    <button onclick="document.getElementById('comm-attachment').click()" class="p-3 text-coolGray hover:text-indigo-400 transition rounded-xl hover:bg-slateBase"><i class="fas fa-paperclip"></i></button>
+                                    <input type="file" id="comm-attachment" class="hidden" accept="image/*,.pdf">
+                                    <input type="text" id="comm-message-input" placeholder="Type transmission..." class="input-premium flex-1 px-4 py-3 rounded-xl text-white font-mono text-sm" onkeypress="if(event.key === 'Enter') window.sendCommMessage()">
+                                    <button onclick="window.sendCommMessage()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-mono font-bold transition shadow-[0_0_15px_rgba(99,102,241,0.3)]"><i class="fas fa-paper-plane"></i></button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1120,11 +1236,14 @@
                 <div id="tab-recycle-bin" class="tab-content hidden-el space-y-8">
                     <div class="glass-card p-6 rounded-2xl border border-teal-400/30 shadow-[0_0_20px_rgba(45,212,191,0.1)] relative">
                         <div class="absolute top-0 left-0 w-1 h-full bg-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.8)]"></div>
-                        <h3 class="text-xl font-display font-bold text-white mb-6"><i class="fas fa-trash-restore text-teal-400 drop-shadow-[0_0_5px_rgba(45,212,191,0.8)]"></i> Recovery Storage</h3>
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-display font-bold text-white"><i class="fas fa-trash-restore text-teal-400 drop-shadow-[0_0_5px_rgba(45,212,191,0.8)]"></i> Recovery Storage</h3>
+                            <select id="recycleSchoolSelect" onchange="window.loadRecycleBin()" class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono"><option value="ALL">-- GLOBAL --</option></select>
+                        </div>
                         <div class="overflow-x-auto rounded-xl border border-glassBorder">
                             <table class="w-full text-left border-collapse">
                                 <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
-                                    <tr><th class="p-4">Deletion Time</th><th class="p-4">Vector</th><th class="p-4">Payload Extract</th><th class="p-4 text-right">Reverse</th></tr>
+                                    <tr><th class="p-4">Deletion Time</th><th class="p-4">Vector</th><th class="p-4">Payload Extract</th><th class="p-4 text-right">Execute</th></tr>
                                 </thead>
                                 <tbody id="recycle-bin-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
                             </table>

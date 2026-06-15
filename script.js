@@ -207,13 +207,52 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
     const b = document.getElementById("doLoginBtn"); 
     const err = document.getElementById("loginErrorMsg");
     if(!e || !p) { err.innerText = "CREDENTIALS REQUIRED."; err.classList.remove('hidden-el'); return; } 
+    
     b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> VERIFYING HASH...`; 
-    try { 
+    
+    // Anti-Brute Force Logic (3-Strike Rule)
+    try {
+        const failRef = db.collection("login_logs").doc(e.replace(/[\.\#\$\[\]]/g, "_"));
+        const failDoc = await failRef.get();
+        let fails = 0;
+        let lockTime = 0;
+        
+        if(failDoc.exists) {
+            fails = failDoc.data().fails || 0;
+            lockTime = failDoc.data().lockTime || 0;
+            if(Date.now() < lockTime) {
+                err.innerText = "ACCOUNT TEMPORARILY LOCKED. PLEASE WAIT.";
+                err.classList.remove('hidden-el');
+                b.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
+                lucide.createIcons();
+                return;
+            }
+        }
+        
         await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         await auth.signInWithEmailAndPassword(e, p); 
+        
+        // Clear fails on success
+        await failRef.set({ fails: 0, lockTime: 0 }, { merge: true });
         window.logAudit("Master Login Success", "System Core"); 
     } catch (error) { 
-        err.innerText = "INVALID MASTER KEY!"; err.classList.remove('hidden-el'); 
+        // Record Failure
+        const failRef = db.collection("login_logs").doc(e.replace(/[\.\#\$\[\]]/g, "_"));
+        const failDoc = await failRef.get();
+        let fails = (failDoc.exists ? (failDoc.data().fails || 0) : 0) + 1;
+        let newLockTime = 0;
+        
+        if(fails >= 3) {
+            newLockTime = Date.now() + 15 * 60 * 1000; // 15 mins lock
+            err.innerText = "MAX ATTEMPTS REACHED. ACCOUNT LOCKED.";
+            window.logAudit(`Brute Force Lockout - User: ${e}`, "Security");
+        } else {
+            err.innerText = `INVALID MASTER KEY! (${3 - fails} attempts left)`; 
+            window.logAudit(`Failed Login - User: ${e}`, "Security");
+        }
+        
+        await failRef.set({ fails: fails, lockTime: newLockTime }, { merge: true });
+        err.classList.remove('hidden-el'); 
         b.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
         lucide.createIcons();
     } 
@@ -896,19 +935,26 @@ window.exportToTallyCSV = async () => {
 // ==========================================
 // 9C. GST INVOICE GENERATOR
 // ==========================================
-// ==========================================
-// 10. PASSWORDS, BACKUPS & SECURITY SHIELD
-// ==========================================
-window.loadPasswordRequests = () => { 
+// =======================================window.loadPasswordRequests = () => { 
     const sid = document.getElementById("pwdReqSchoolSelect").value; let html = ""; let ls = window.fetchedChairmen; 
     if(sid !== "ALL" && sid !== "") { ls = ls.filter(c => c.schoolId === sid); } 
     ls.forEach(dt => { 
         let reqHtml = `<span class="text-coolGray text-[10px] font-mono tracking-widest">NO REQUEST</span>`; 
         let btnHtml = `<button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`; 
         if(dt.suggestedPassword) { reqHtml = `<span class="text-amber-400 font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">${dt.suggestedPassword}</span>`; btnHtml = `<button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.approvePasswordRequest('${dt.id}', '${dt.suggestedPassword}')">APPROVE</button> <button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition ml-1" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`; } 
-        html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name}</span></td><td class="p-4"><div class="flex items-center gap-2"><span class="pwd-mask tracking-widest text-lg text-tealAccent">••••••</span><span class="pwd-text hidden-el text-rose-400 font-mono font-bold text-[10px] tracking-widest">KEY: ${dt.plainPassword || 'N/A'}<br>PIN: ${dt.pin || 'NOT SET'}</span><button class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition border border-glassBorder" onclick="window.togglePwd(this)">DECRYPT</button></div></td><td class="p-4">${reqHtml}</td><td class="p-4 text-right">${btnHtml}</td></tr>`; 
+        html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" data-id="${dt.id}"></td><td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name}</span></td><td class="p-4"><div class="flex items-center gap-2"><span class="pwd-mask tracking-widest text-lg text-tealAccent">•••••••</span><span class="pwd-text hidden-el text-rose-400 font-mono font-bold text-[10px] tracking-widest">KEY: ${dt.plainPassword || 'N/A'}<br>PIN: ${dt.pin || 'NOT SET'}</span><button class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition border border-glassBorder" onclick="window.togglePwd(this)">DECRYPT</button></div></td><td class="p-4">${reqHtml}</td><td class="p-4 text-right flex gap-1 justify-end">${btnHtml} <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition ml-1" onclick="window.deletePasswordRequest('${dt.id}')"><i class="fas fa-trash"></i></button></td></tr>`; 
     }); 
-    document.getElementById("password-req-table").innerHTML = html || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO NODES FOUND</td></tr>"; 
+    document.getElementById("password-req-table").innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO TARGETS FOUND</td></tr>"; 
+}
+window.deletePasswordRequest = async (uid) => {
+    window.customConfirm("DELETE KEY FROM SYSTEM?", async () => {
+        try {
+            await db.collection("users").doc(uid).update({ plainPassword: firebase.firestore.FieldValue.delete(), suggestedPassword: firebase.firestore.FieldValue.delete() });
+            window.showToast("KEY ERASED!");
+            loadChairmen();
+        } catch(e) {}
+    });
+};html || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO NODES FOUND</td></tr>"; 
 }
 window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
 window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch(e) {} }); };
@@ -979,6 +1025,9 @@ window.loadFeatureTogglesForSchool = async () => {
             document.getElementById("toggle-qr-fee").checked = enabledModules.includes("QR Fee Module");
             document.getElementById("toggle-admit-card").checked = enabledModules.includes("Admit Card Module");
             document.getElementById("toggle-whatsapp").checked = enabledModules.includes("WhatsApp Module");
+            if(document.getElementById("toggle-ai-assistant")) {
+                document.getElementById("toggle-ai-assistant").checked = enabledModules.includes("Core AI Assistant");
+            }
             
             container.classList.remove("hidden-el");
         }
@@ -995,11 +1044,21 @@ window.saveFeatureToggles = async () => {
     if (document.getElementById("toggle-qr-fee").checked) enabledModules.push("QR Fee Module");
     if (document.getElementById("toggle-admit-card").checked) enabledModules.push("Admit Card Module");
     if (document.getElementById("toggle-whatsapp").checked) enabledModules.push("WhatsApp Module");
+    if (document.getElementById("toggle-ai-assistant") && document.getElementById("toggle-ai-assistant").checked) {
+        enabledModules.push("Core AI Assistant");
+    }
     
     try {
         await db.collection("schools").doc(sid).update({ enabledModules });
         window.showToast("✅ MODULES UPDATED FOR NODE");
         window.logAudit("Updated Module Toggles", sid);
+        
+        // If AI was enabled for Master Core context
+        if (enabledModules.includes("Core AI Assistant") && document.getElementById("ai-chat-widget")) {
+            document.getElementById("ai-chat-widget").classList.remove("hidden-el");
+        } else if (!enabledModules.includes("Core AI Assistant") && document.getElementById("ai-chat-widget")) {
+            document.getElementById("ai-chat-widget").classList.add("hidden-el");
+        }
     } catch(e) {
         window.showToast("ERROR: " + e.message, "#e11d48");
     }
@@ -1235,7 +1294,37 @@ window.loadPendingDeletions = async () => { const tbody = document.getElementByI
 window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const orgDoc = await db.collection(collection).doc(docRefId).get(); if(orgDoc.exists) { await db.collection("recycle_bin").add({ originalCollection: collection, originalId: docRefId, data: orgDoc.data(), deletedAt: firebase.firestore.FieldValue.serverTimestamp() }); if(orgDoc.data().photoUrl || orgDoc.data().logoUrl) { /* optional cloudinary delete */ } await db.collection(collection).doc(docRefId).delete(); } await db.collection("pending_deletions").doc(docId).delete(); window.showToast("DELETED & MOVED TO BIN."); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch(e) {} }); };
 window.rejectDeletion = async (docId) => { try { await db.collection("pending_deletions").doc(docId).delete(); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch(e) {} };
 
-window.loadRecycleBin = async () => { const tbody = document.getElementById("recycle-bin-body"); try { const snap = await db.collection("recycle_bin").orderBy("deletedAt", "desc").limit(30).get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.deletedAt ? new Date(d.deletedAt.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4"><span class="bg-teal-500/10 border border-teal-500/50 text-teal-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.originalCollection}</span></td><td class="p-4 sensitive-data max-w-[200px] truncate text-coolGray">${JSON.stringify(d.data).substring(0,50)}...</td><td class="p-4 text-right"><button class="px-3 py-1 bg-teal-600/20 border border-teal-500 hover:bg-teal-600 text-teal-400 hover:text-slateBase font-bold rounded text-[10px] transition font-mono" onclick="window.restoreItem('${doc.id}', '${d.originalCollection}', '${d.originalId}')"><i class="fas fa-undo"></i> RESTORE</button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>BIN IS EMPTY.</td></tr>"; } catch(e) {} };
+window.loadRecycleBin = async () => { 
+    const tbody = document.getElementById("recycle-bin-body"); 
+    const sid = document.getElementById("recycleSchoolSelect")?.value || "ALL";
+    try { 
+        let query = db.collection("recycle_bin").orderBy("deletedAt", "desc").limit(50);
+        const snap = await query.get(); 
+        let html = ""; 
+        snap.forEach(doc => { 
+            let d = doc.data(); 
+            // Manual filtering since originalSchoolId might not be perfectly indexed
+            if(sid !== "ALL" && d.data?.schoolId !== sid) return;
+            
+            let ts = d.deletedAt ? new Date(d.deletedAt.toMillis()).toLocaleString() : "UNKNOWN"; 
+            html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4"><span class="bg-teal-500/10 border border-teal-500/50 text-teal-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.originalCollection}</span></td><td class="p-4 sensitive-data max-w-[200px] truncate text-coolGray">${JSON.stringify(d.data).substring(0,50)}...</td><td class="p-4 text-right flex gap-1 justify-end"><button class="px-3 py-1 bg-teal-600/20 border border-teal-500 hover:bg-teal-600 text-teal-400 hover:text-slateBase font-bold rounded text-[10px] transition font-mono" onclick="window.restoreItem('${doc.id}', '${d.originalCollection}', '${d.originalId}')"><i class="fas fa-undo"></i> RESTORE</button> <button class="px-3 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white font-bold rounded text-[10px] transition font-mono" onclick="window.permanentlyDeleteBinItem('${doc.id}')"><i class="fas fa-trash"></i> DELETE</button></td></tr>`; 
+        }); 
+        tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>BIN IS EMPTY.</td></tr>"; 
+    } catch(e) {} 
+};
+
+window.permanentlyDeleteBinItem = async (binId) => {
+    window.customConfirm("PERMANENTLY DELETE THIS ITEM FROM STORAGE?", async () => {
+        try {
+            await db.collection("recycle_bin").doc(binId).delete();
+            window.showToast("PERMANENTLY DELETED!", "#10b981");
+            window.loadRecycleBin();
+            window.logAudit("Permanently Deleted Item", binId);
+        } catch(e) {
+            window.showToast("ERROR: " + e.message, "#e11d48");
+        }
+    });
+};
 window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const binDoc = await db.collection("recycle_bin").doc(binId).get(); if(binDoc.exists) { await db.collection(collection).doc(docId).set(binDoc.data().data); await db.collection("recycle_bin").doc(binId).delete(); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch(e) {} }); };
 
 // ==========================================
@@ -1434,3 +1523,414 @@ window.generateGSTInvoice = async (schoolId) => {
         window.showToast("INVOICE ERROR: " + err.message, "#e11d48");
     }
 };
+// ==========================================
+// MASSIVE UPGRADES - NEW LOGIC
+// ==========================================
+
+// 1. Landing Page Navigation Modals
+window.toggleHamburger = () => {
+    const modal = document.getElementById('hamburger-modal');
+    if (modal.classList.contains('hidden-el')) {
+        modal.classList.remove('hidden-el');
+        setTimeout(() => modal.classList.replace('opacity-0', 'opacity-100'), 10);
+        document.getElementById('hamburger-modal-box').classList.replace('scale-95', 'scale-100');
+    } else {
+        modal.classList.replace('opacity-100', 'opacity-0');
+        document.getElementById('hamburger-modal-box').classList.replace('scale-100', 'scale-95');
+        setTimeout(() => modal.classList.add('hidden-el'), 300);
+    }
+};
+
+window.showRegistrationModal = () => {
+    document.getElementById('registration-modal').classList.remove('hidden-el');
+};
+
+window.showForgotPasswordModal = () => {
+    document.getElementById('forgot-password-modal').classList.remove('hidden-el');
+};
+
+window.updateStateDropdown = () => {
+    const country = document.getElementById('reg-country').value;
+    const state = document.getElementById('reg-state');
+    if (country === 'India') {
+        state.disabled = false;
+    } else {
+        state.disabled = true;
+        state.value = '';
+    }
+};
+
+window.downloadAuthorityTemplate = () => {
+    // Generate dummy template using jsPDF
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFont('helvetica', 'bold');
+    doc.text('OFFICIAL AUTHORITY LETTER', 105, 20, null, null, 'center');
+    doc.setFont('helvetica', 'normal');
+    doc.text('I hereby authorize CoreEduTech to allocate a deployment node for my institution.', 20, 40);
+    doc.text('Date: ________________', 20, 60);
+    doc.text('Signature: ________________', 20, 80);
+    doc.save('Authority_Letter_Template.pdf');
+};
+
+// 2. Registration Logic
+window.submitSchoolRegistration = async () => {
+    const sName = document.getElementById('reg-school-name').value.trim();
+    const pName = document.getElementById('reg-principal-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const pwd = document.getElementById('reg-password').value.trim();
+    const phone = document.getElementById('reg-phone').value.trim();
+    const country = document.getElementById('reg-country').value;
+    const state = document.getElementById('reg-state').value;
+    const dist = document.getElementById('reg-district').value.trim();
+    const pin = document.getElementById('reg-pincode').value.trim();
+    const addr = document.getElementById('reg-address').value.trim();
+    const logoInput = document.getElementById('reg-logo').files[0];
+    const authInput = document.getElementById('reg-authority-letter').files[0];
+
+    if (!sName || !pName || !email || !pwd || !phone || !country || !state || !dist || !pin || !addr || !logoInput || !authInput) {
+        window.showToast('ALL FIELDS AND UPLOADS ARE MANDATORY', '#e11d48');
+        return;
+    }
+
+    const btn = document.getElementById('submitRegBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> UPLOADING ASSETS...';
+    btn.disabled = true;
+
+    try {
+        // Mock upload using base64 for simplicity in frontend (since Cloudinary needs backend signature ideally or unsigned setup)
+        // We will just read as DataURL to save in Firebase for pending approval viewing
+        const readAsDataURL = (file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+        });
+
+        const logoData = await readAsDataURL(logoInput);
+        const authData = await readAsDataURL(authInput);
+
+        const payload = {
+            schoolName: sName,
+            principalName: pName,
+            email: email,
+            password: pwd,
+            phone: phone,
+            country, state, district: dist, pincode: pin, address: addr,
+            logoUrl: logoData,
+            authorityLetterUrl: authData,
+            timestamp: Date.now(),
+            status: 'pending'
+        };
+
+        await db.collection("pending_registrations").add(payload);
+        
+        window.showToast('REGISTRATION SUBMITTED FOR APPROVAL', '#10b981');
+        window.closeCustomModal('registration-modal');
+    } catch(err) {
+        window.showToast('ERROR: ' + err.message, '#e11d48');
+    } finally {
+        btn.innerHTML = 'SUBMIT DEPLOYMENT REQUEST';
+        btn.disabled = false;
+    }
+};
+
+// 3. Forgot Password Logic
+window.submitForgotPassword = async () => {
+    const uid = document.getElementById('forgot-id').value.trim();
+    const phone = document.getElementById('forgot-phone').value.trim();
+    if (!uid && !phone) {
+        window.showToast('PROVIDE AT LEAST ONE IDENTIFIER', '#e11d48');
+        return;
+    }
+
+    const btn = document.getElementById('submitForgotBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PROCESSING...';
+    btn.disabled = true;
+
+    try {
+        const idKey = (uid || phone).replace(/[\.\#\$\[\]]/g, "_");
+        await db.collection("password_reset_requests").doc(idKey).set({
+            requestedBy: uid || phone,
+            phone: phone || "N/A",
+            timestamp: Date.now(),
+            status: 'pending'
+        }, { merge: true }); // Anti-spam merge
+
+        window.showToast('RESET REQUEST LOGGED IN MASTER SERVER', '#10b981');
+        window.closeCustomModal('forgot-password-modal');
+    } catch(err) {
+        window.showToast('ERROR: ' + err.message, '#e11d48');
+    } finally {
+        btn.innerHTML = 'SEND RESET REQUEST';
+        btn.disabled = false;
+    }
+};
+
+// 4. Pending Approvals Tab Logic
+window.loadPendingRegistrations = () => {
+    const tbody = document.getElementById("pending-approvals-body");
+    if (!tbody) return;
+    
+    db.collection("pending_registrations").onSnapshot(snapshot => {
+        tbody.innerHTML = '';
+        if (snapshot.empty) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-coolGray">NO PENDING REQUESTS</td></tr>';
+            return;
+        }
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const tr = document.createElement("tr");
+            tr.innerHTML = 
+                <td class="p-4"><img src="\" class="w-10 h-10 rounded-full border border-glassBorder object-cover"></td>
+                <td class="p-4 font-bold text-white">\<br><span class="text-[10px] text-emerald-400 font-mono">\</span></td>
+                <td class="p-4 text-xs text-gray-300">\<br><span class="text-[10px] text-gray-500">\</span></td>
+                <td class="p-4 text-xs text-gray-300">\, \</td>
+                <td class="p-4"><a href="\" download="Authority_\.pdf" class="text-indigo-400 hover:text-indigo-300 underline"><i class="fas fa-download"></i> View</a></td>
+                <td class="p-4 text-right flex gap-2 justify-end">
+                    <button onclick="window.approveRegistration('\')" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded border border-emerald-500 transition"><i class="fas fa-check"></i></button>
+                    <button onclick="window.rejectRegistration('\')" class="px-3 py-1.5 bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded border border-rose-500 transition"><i class="fas fa-times"></i></button>
+                </td>
+            ;
+            tbody.appendChild(tr);
+        });
+    });
+};
+
+window.approveRegistration = async (docId) => {
+    if(!confirm("APPROVE THIS NODE DEPLOYMENT?")) return;
+    try {
+        const docRef = db.collection("pending_registrations").doc(docId);
+        const docSnap = await docRef.get();
+        if(!docSnap.exists) return;
+        
+        const data = docSnap.data();
+        
+        // 1. Create SecondaryAuth user
+        let userRecord;
+        try {
+            userRecord = await secondaryAuth.createUserWithEmailAndPassword(data.email, data.password);
+        } catch(err) {
+            window.showToast("AUTH CREATION FAILED: " + err.message, "#e11d48");
+            return;
+        }
+
+        // 2. Add to users collection
+        await db.collection("users").doc(userRecord.user.uid).set({
+            email: data.email,
+            role: "chairman",
+            status: "active",
+            name: data.principalName
+        });
+
+        // 3. Add to schools collection
+        const sRef = await db.collection("schools").add({
+            name: data.schoolName,
+            address: data.address,
+            phone: data.phone,
+            chairmanUid: userRecord.user.uid,
+            principalName: data.principalName,
+            district: data.district,
+            state: data.state,
+            pincode: data.pincode,
+            logoUrl: data.logoUrl,
+            status: "active",
+            createdAt: Date.now()
+        });
+
+        // 4. Link user to school
+        await db.collection("users").doc(userRecord.user.uid).update({ schoolId: sRef.id });
+
+        // 5. Delete pending request
+        await docRef.delete();
+        window.showToast("NODE PROVISIONED SUCCESSFULLY", "#10b981");
+        window.logAudit("Provisioned Node", data.schoolName);
+        
+    } catch(err) {
+        window.showToast("ERROR: " + err.message, "#e11d48");
+    }
+};
+
+window.rejectRegistration = async (docId) => {
+    if(!confirm("REJECT AND DELETE THIS DEPLOYMENT REQUEST?")) return;
+    try {
+        await db.collection("pending_registrations").doc(docId).delete();
+        window.showToast("REQUEST TERMINATED", "#10b981");
+    } catch(err) {
+        window.showToast("ERROR: " + err.message, "#e11d48");
+    }
+};
+
+// 5. Comm Hub (WhatsApp UI) Logic
+let currentCommSchoolId = null;
+
+window.loadCommHubSchools = () => {
+    const list = document.getElementById("comm-school-list");
+    if (!list) return;
+
+    db.collection("schools").onSnapshot(snapshot => {
+        list.innerHTML = '';
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const div = document.createElement("div");
+            div.className = "school-list-item p-3 border-b border-glassBorder flex items-center gap-3";
+            div.onclick = () => window.openCommChat(doc.id, data.name);
+            div.innerHTML = 
+                <div class="w-8 h-8 rounded-full bg-slateBase border border-glassBorder overflow-hidden shrink-0">
+                    <img src="\" class="w-full h-full object-cover">
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h4 class="text-white text-xs font-bold truncate">\</h4>
+                    <p class="text-[9px] text-coolGray truncate">Tap to open comm channel</p>
+                </div>
+            ;
+            list.appendChild(div);
+        });
+    });
+};
+
+window.openCommChat = (schoolId, schoolName) => {
+    currentCommSchoolId = schoolId;
+    document.getElementById("comm-active-school-name").innerText = schoolName;
+    document.getElementById("comm-active-school-id").innerText = "ID: " + schoolId;
+    
+    // Highlight active
+    document.querySelectorAll(".school-list-item").forEach(el => el.classList.remove("active"));
+    event.currentTarget.classList.add("active");
+
+    const historyBox = document.getElementById("comm-chat-history");
+    
+    // Listen for messages between Master and this School
+    db.collection("communications")
+      .where("schoolId", "==", schoolId)
+      .orderBy("timestamp", "asc")
+      .onSnapshot(snapshot => {
+          historyBox.innerHTML = '';
+          if (snapshot.empty) {
+              historyBox.innerHTML = '<div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center"><i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i><br>End-to-End Encrypted Comms<br>No messages yet.</div>';
+              return;
+          }
+          
+          snapshot.forEach(doc => {
+              const msg = doc.data();
+              const isMaster = msg.sender === 'master';
+              const wrap = document.createElement("div");
+              wrap.className = lex w-full \;
+              
+              const timeStr = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              
+              let fileHTML = '';
+              if (msg.attachmentUrl) {
+                  fileHTML = <a href="\" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>;
+              }
+
+              wrap.innerHTML = 
+                  <div class="chat-bubble \">
+                      \
+                      <span>\</span>
+                      <span class="timestamp">\</span>
+                  </div>
+              ;
+              historyBox.appendChild(wrap);
+          });
+          
+          // Scroll to bottom
+          historyBox.scrollTop = historyBox.scrollHeight;
+      });
+};
+
+window.sendCommMessage = async () => {
+    if (!currentCommSchoolId) {
+        window.showToast("SELECT A NODE FIRST", "#e11d48");
+        return;
+    }
+    const input = document.getElementById("comm-message-input");
+    const text = input.value.trim();
+    const fileInput = document.getElementById("comm-attachment");
+    
+    if (!text && !fileInput.files.length) return;
+    
+    let attachmentUrl = null;
+    if (fileInput.files.length > 0) {
+        // Mock upload
+        const readAsDataURL = (file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+        });
+        attachmentUrl = await readAsDataURL(fileInput.files[0]);
+    }
+
+    try {
+        await db.collection("communications").add({
+            schoolId: currentCommSchoolId,
+            sender: 'master',
+            text: text,
+            attachmentUrl: attachmentUrl,
+            timestamp: Date.now()
+        });
+        input.value = '';
+        fileInput.value = '';
+    } catch(err) {
+        window.showToast("TRANSMISSION FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.clearCommHistory = async () => {
+    if (!currentCommSchoolId) return;
+    if (!confirm("WIPE COMM HISTORY FOR THIS NODE?")) return;
+    
+    try {
+        const batch = db.batch();
+        const docs = await db.collection("communications").where("schoolId", "==", currentCommSchoolId).get();
+        docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        window.showToast("HISTORY WIPED", "#10b981");
+    } catch(err) {
+        window.showToast("ERROR: " + err.message, "#e11d48");
+    }
+};
+
+// 6. Updated Bulk Delete functions
+window.bulkDeletePasswordReqs = async () => {
+    const table = document.getElementById("password-req-table");
+    const checkboxes = table.querySelectorAll(".row-checkbox:checked");
+    if (checkboxes.length === 0) {
+        window.showToast("NO TARGETS SELECTED", "#e11d48");
+        return;
+    }
+    if (!confirm(DELETE \ TARGETS?)) return;
+    
+    try {
+        const batch = db.batch();
+        checkboxes.forEach(cb => {
+            const docRef = db.collection("password_requests").doc(cb.dataset.id);
+            batch.delete(docRef);
+        });
+        await batch.commit();
+        window.showToast("BULK PURGE COMPLETE", "#10b981");
+    } catch (err) {
+        window.showToast("ERROR: " + err.message, "#e11d48");
+    }
+};
+
+window.toggleSelectAllPwdReq = (source) => {
+    const table = document.getElementById("password-req-table");
+    const checkboxes = table.querySelectorAll(".row-checkbox");
+    checkboxes.forEach(cb => cb.checked = source.checked);
+};
+
+// Also hook up load functions into the tab switching logic:
+const originalSwitchTab = window.switchTab;
+if (originalSwitchTab) {
+    // If we want to intercept
+} else {
+    // We attach an observer or rely on clicks
+    document.querySelectorAll('.menu-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const t = btn.getAttribute('data-target');
+            if (t === 'tab-pending-approvals') window.loadPendingRegistrations();
+            if (t === 'tab-broadcast') window.loadCommHubSchools();
+        });
+    });
+}
