@@ -143,3 +143,38 @@ body.force-desktop {
     letter-spacing: 4px; 
     text-shadow: 0 0 8px currentColor; 
 }
+
+/* Light Theme Overrides */
+body.light-theme {
+    background-color: #f8fafc;
+    color: #0f172a;
+}
+body.light-theme .glass-card, 
+body.light-theme .bg-slateSurface, 
+body.light-theme .bg-slateSurface\/50, 
+body.light-theme .bg-slateSurface\/80 {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    color: #1e293b !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+body.light-theme .text-white { color: #0f172a !important; }
+body.light-theme .text-coolGray { color: #64748b !important; }
+body.light-theme .text-coolLight { color: #334155 !important; }
+body.light-theme .input-premium {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+body.light-theme .input-premium:focus {
+    background: #ffffff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+body.light-theme .cyber-grid-bg {
+    background-image: 
+        linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}

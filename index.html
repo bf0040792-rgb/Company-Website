@@ -11,6 +11,8 @@
     
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -500,6 +502,10 @@
                 <label class="hidden md:flex items-center gap-2 cursor-pointer bg-slateSurface px-3 py-1.5 rounded-lg border border-glassBorder hover:border-blue-500 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
                     <input type="checkbox" id="deviceModeToggle" class="input-checkbox w-4 h-4 rounded">
                     <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i class="fas fa-desktop text-blue-400"></i> Force PC</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer bg-slateSurface px-3 py-1.5 rounded-lg border border-glassBorder hover:border-amber-400 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+                    <input type="checkbox" id="themeToggle" class="input-checkbox w-4 h-4 rounded">
+                    <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i class="fas fa-sun text-amber-400"></i> Theme</span>
                 </label>
                 
                 <div class="w-8 h-8 rounded-full bg-tealAccent flex items-center justify-center text-slateBase font-bold shadow-[0_0_10px_rgba(0,240,255,0.5)] border border-white/20">R</div>
@@ -1283,6 +1289,28 @@
                 </table>
             </div>
         </div>
+    </div>
+
+    <!-- AI Assistant Floating Widget -->
+    <div id="ai-chat-widget" class="fixed bottom-6 right-6 z-[10000] flex flex-col items-end hidden-el">
+        <!-- Chat Window -->
+        <div id="ai-chat-window" class="glass-card mb-4 w-80 h-96 rounded-2xl border border-tealAccent/50 shadow-[0_0_30px_rgba(0,240,255,0.2)] flex flex-col overflow-hidden hidden-el">
+            <div class="bg-slateSurface/80 border-b border-glassBorder p-3 flex justify-between items-center shrink-0">
+                <span class="font-display font-bold text-tealAccent text-sm flex items-center gap-2"><i class="fas fa-robot"></i> Core AI</span>
+                <button onclick="window.toggleAIChat()" class="text-coolGray hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="ai-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col text-xs font-mono">
+                <div class="text-left"><span class="bg-slateSurface px-3 py-2 rounded-lg text-white inline-block max-w-[85%] border border-tealAccent/20">Hello, Commander. I am synced with the Master Core database. How can I assist you?</span></div>
+            </div>
+            <div class="p-3 bg-slateSurface/50 border-t border-glassBorder flex gap-2 shrink-0">
+                <input type="text" id="ai-chat-input" placeholder="Ask about revenue, schools..." class="input-premium flex-1 px-3 py-2 rounded-lg text-white font-mono text-xs" onkeypress="if(event.key === 'Enter') window.sendAIMessage()">
+                <button onclick="window.sendAIMessage()" class="px-3 py-2 bg-tealAccent/20 border border-tealAccent hover:bg-tealAccent text-tealAccent hover:text-slateBase rounded-lg transition"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+        <!-- Floating Button -->
+        <button onclick="window.toggleAIChat()" class="w-14 h-14 rounded-full bg-slateSurface border-2 border-tealAccent text-tealAccent hover:bg-tealAccent hover:text-slateBase shadow-[0_0_20px_rgba(0,240,255,0.4)] flex items-center justify-center text-2xl transition-all transform hover:scale-110">
+            <i class="fas fa-brain"></i>
+        </button>
     </div>
 
     <script src="script.js"></script>

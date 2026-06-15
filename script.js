@@ -1,4 +1,25 @@
 // ==========================================
+// 🛡️ GEO-FENCING LAYER
+// ==========================================
+const allowedMasterIPs = ['127.0.0.1', '192.168.1.1', '::1'];
+
+async function verifyGeoFence() {
+    try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        if (!allowedMasterIPs.includes(data.ip)) {
+            console.warn(`Unauthorized Access Attempt from IP: ${data.ip}`);
+            window.location.href = "403.html";
+        } else {
+            console.log(`✅ Geo-Fence Passed: ${data.ip}`);
+        }
+    } catch(e) {
+        console.error("Geo-fencing verification failed:", e);
+    }
+}
+verifyGeoFence();
+
+// ==========================================
 // 1. FIREBASE & SYSTEM INITIALIZATION
 // ==========================================
 const firebaseConfig = {
@@ -18,6 +39,21 @@ appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
 const auth = firebase.auth(app);
 const db = firebase.firestore(app);
 const storage = firebase.storage(app);
+
+// Initialize Theme
+if(localStorage.getItem('master_theme') === 'light') {
+    document.body.classList.add('light-theme');
+    document.getElementById('themeToggle').checked = true;
+}
+document.getElementById('themeToggle').addEventListener('change', (e) => {
+    if(e.target.checked) {
+        document.body.classList.add('light-theme');
+        localStorage.setItem('master_theme', 'light');
+    } else {
+        document.body.classList.remove('light-theme');
+        localStorage.setItem('master_theme', 'dark');
+    }
+});
 
 db.enablePersistence({synchronizeTabs: true}).catch(function(err) { console.log("Cache Error: ", err); });
 
@@ -368,6 +404,7 @@ window.filterChairmenList = () => {
                 <button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.impersonateUser('${dt.id}', '${dt.schoolId}', '${dt.email}', '${dt.plainPassword}')"><i class="fas fa-user-secret"></i></button>
                 <button class="px-2 py-1 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded text-[10px] transition" onclick="window.openEditChairman('${dt.id}')"><i class="fas fa-edit"></i></button>
                 <button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.openLicenseModal('${dt.schoolId}')"><i class="fas fa-calendar-check"></i></button>
+                <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.generateGSTInvoice('${dt.schoolId}', '${dt.schoolName.replace(/'/g, "\\'")}', '${dt.email}', '${dt.subscriptionTier || 'Starter'}')"><i class="fas fa-file-invoice"></i></button>
                 ${bb} ${shadowBtn}
                 <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteChairman('${dt.id}', '${dt.schoolId}')"><i class="fas fa-trash"></i></button>
             </td>
@@ -504,7 +541,7 @@ window.impersonateUser = async (uid, schoolId, email, pass) => {
     setTimeout(() => { 
         const safeEmail = encodeURIComponent(email); const safePass = encodeURIComponent(pass);
         const chairmanPortalLink = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/"; 
-        window.open(`${chairmanPortalLink}?impersonate=true&email=${safeEmail}&pass=${safePass}`, '_blank'); 
+        window.open(`${chairmanPortalLink}?impersonate=true&email=${safeEmail}&pass=${safePass}&isGhost=true`, '_blank'); 
     }, 1500);
 };
 
