@@ -1543,31 +1543,58 @@ window.toggleHamburger = () => {
 
 window.showRegistrationModal = () => {
     document.getElementById('registration-modal').classList.remove('hidden-el');
+    if (globalCountries.length === 0) window.loadCountriesAPI();
 };
 
 window.showForgotPasswordModal = () => {
     document.getElementById('forgot-password-modal').classList.remove('hidden-el');
 };
 
+window.showSchoolLoginModal = () => {
+    document.getElementById('school-login-modal').classList.remove('hidden-el');
+};
+
+let globalCountries = [];
+window.loadCountriesAPI = async () => {
+    try {
+        const res = await fetch("https://countriesnow.space/api/v0.1/countries/states");
+        const data = await res.json();
+        globalCountries = data.data;
+        const cSelect = document.getElementById("reg-country");
+        cSelect.innerHTML = '<option value="">Select Country</option>';
+        globalCountries.forEach(c => {
+            cSelect.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+        });
+    } catch(e) {
+        console.error("API Error", e);
+    }
+};
+
 window.updateStateDropdown = () => {
-    const country = document.getElementById('reg-country').value;
-    const state = document.getElementById('reg-state');
-    if (country === 'India') {
-        state.disabled = false;
+    const countryName = document.getElementById('reg-country').value;
+    const stateSelect = document.getElementById('reg-state');
+    stateSelect.innerHTML = '<option value="">Select State/Province</option>';
+    
+    if (countryName) {
+        stateSelect.disabled = false;
+        const countryData = globalCountries.find(c => c.name === countryName);
+        if (countryData && countryData.states && countryData.states.length > 0) {
+            countryData.states.forEach(s => {
+                stateSelect.innerHTML += `<option value="${s.name}">${s.name}</option>`;
+            });
+        }
     } else {
-        state.disabled = true;
-        state.value = '';
+        stateSelect.disabled = true;
     }
 };
 
 window.downloadAuthorityTemplate = () => {
-    // Generate dummy template using jsPDF
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     doc.setFont('helvetica', 'bold');
     doc.text('OFFICIAL AUTHORITY LETTER', 105, 20, null, null, 'center');
     doc.setFont('helvetica', 'normal');
-    doc.text('I hereby authorize CoreEduTech to allocate a deployment node for my institution.', 20, 40);
+    doc.text('I hereby authorize CoreEduTech to allocate a deployment node for my instit', 20, 40);
     doc.text('Date: ________________', 20, 60);
     doc.text('Signature: ________________', 20, 80);
     doc.save('Authority_Letter_Template.pdf');
@@ -1637,8 +1664,14 @@ window.submitSchoolRegistration = async () => {
 window.submitForgotPassword = async () => {
     const uid = document.getElementById('forgot-id').value.trim();
     const phone = document.getElementById('forgot-phone').value.trim();
+    const newPwd = document.getElementById('forgot-new-password').value.trim();
+    
     if (!uid && !phone) {
         window.showToast('PROVIDE AT LEAST ONE IDENTIFIER', '#e11d48');
+        return;
+    }
+    if (!newPwd) {
+        window.showToast('PROVIDE A NEW PASSWORD', '#e11d48');
         return;
     }
 
@@ -1648,9 +1681,10 @@ window.submitForgotPassword = async () => {
 
     try {
         const idKey = (uid || phone).replace(/[\.\#\$\[\]]/g, "_");
-        await db.collection("password_reset_requests").doc(idKey).set({
+        await db.collection("password_requests").doc(idKey).set({
             requestedBy: uid || phone,
             phone: phone || "N/A",
+            suggestedPassword: newPwd,
             timestamp: Date.now(),
             status: 'pending'
         }, { merge: true }); // Anti-spam merge
@@ -1661,6 +1695,40 @@ window.submitForgotPassword = async () => {
         window.showToast('ERROR: ' + err.message, '#e11d48');
     } finally {
         btn.innerHTML = 'SEND RESET REQUEST';
+        btn.disabled = false;
+    }
+};
+
+// 3.5 School Login Logic
+window.submitSchoolLogin = async () => {
+    const email = document.getElementById('schoolLoginId').value.trim();
+    const pwd = document.getElementById('schoolLoginPwd').value.trim();
+    if (!email || !pwd) return window.showToast("ALL FIELDS REQUIRED", "#e11d48");
+    
+    const btn = document.getElementById('doSchoolLoginBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AUTHENTICATING...';
+    btn.disabled = true;
+    
+    try {
+        // Authenticate via Secondary Auth
+        const cred = await secondaryAuth.signInWithEmailAndPassword(email, pwd);
+        const docSnap = await db.collection("users").doc(cred.user.uid).get();
+        if (docSnap.exists && docSnap.data().role === "chairman") {
+            window.showToast("CHAIRMAN NODE VERIFIED. REDIRECTING...", "#10b981");
+            setTimeout(() => {
+                // If you have a real Chairman Portal, redirect here.
+                // e.g. window.location.href = "school-dashboard.html";
+                alert("Redirecting to Chairman Dashboard... (Add the URL to your code!)");
+                window.closeCustomModal('school-login-modal');
+            }, 1000);
+        } else {
+            window.showToast("ACCESS DENIED: NOT A CHAIRMAN NODE", "#e11d48");
+            secondaryAuth.signOut();
+        }
+    } catch(err) {
+        window.showToast("INVALID CREDENTIALS", "#e11d48");
+    } finally {
+        btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> AUTHENTICATE';
         btn.disabled = false;
     }
 };
@@ -1937,7 +2005,7 @@ if (originalSwitchTab) {
 // 15. CORE AI ASSISTANT LOGIC
 // ==========================================
 window.toggleAIChat = () => {
-    const box = document.getElementById("ai-chat-box");
+    const box = document.getElementById("ai-chat-window");
     if (box.classList.contains("hidden-el")) {
         box.classList.remove("hidden-el");
     } else {
@@ -1946,11 +2014,11 @@ window.toggleAIChat = () => {
 };
 
 window.sendAIMessage = async () => {
-    const input = document.getElementById("ai-input");
+    const input = document.getElementById("ai-chat-input");
     const text = input.value.trim();
     if (!text) return;
     
-    const messagesDiv = document.getElementById("ai-messages");
+    const messagesDiv = document.getElementById("ai-chat-messages");
     
     // Append User Message
     const userMsg = document.createElement("div");
@@ -1969,20 +2037,17 @@ window.sendAIMessage = async () => {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
     try {
-        // Fetch to Google Gemini API (Mocked Endpoint, using a placeholder fetch or just a mock response for now)
-        // Note: Replace the API Key and endpoint when connecting properly to Vertex/Gemini
-        
+        // Fetch to Google Gemini API (Mocked Endpoint)
         setTimeout(() => {
             aiMsg.innerHTML = `<span class="inline-block bg-slateBase border border-glassBorder text-coolGray px-3 py-2 rounded-xl text-xs font-mono"><i class="fas fa-robot text-tealAccent"></i> The system architecture is fully stable. Geo-Fencing limits active connections outside of the root admin coordinates. How else may I assist your deployment?</span>`;
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }, 1500);
-        
     } catch (e) {
         aiMsg.innerHTML = `<span class="inline-block bg-rose-600/20 border border-rose-500/50 text-rose-400 px-3 py-2 rounded-xl text-xs font-mono">CONNECTION DROPPED</span>`;
     }
 };
 
-document.getElementById("ai-input")?.addEventListener("keypress", (e) => {
+document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
     if (e.key === "Enter") window.sendAIMessage();
 });
 
