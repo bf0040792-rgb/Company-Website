@@ -26,7 +26,7 @@
                         mono: ['JetBrains Mono', 'monospace']
                     },
                     colors: { 
-                        slateBase: '#050b14', /* Deep Space Cyber Dark */
+                        slateBase: '#0a1220', /* Deep Space Cyber Dark - slightly brighter */
                         slateSurface: '#0a1428', /* Cyber Panel Background */
                         tealAccent: '#00F0FF', /* Neon Cyan */
                         tealHover: '#00c3ff', 
@@ -426,7 +426,7 @@
 
         <footer class="py-12 border-t border-glassBorder bg-slateBase text-center relative z-20">
             <div class="flex items-center justify-center gap-2 mb-6 opacity-50">
-                <i data-lucide="hexagon" class="w-6 h-6 text-tealAccent"></i> <span class="font-display font-bold text-lg text-white">CoreEdu Master</span>
+                <i data-lucide="hexagon" class="w-6 h-6 text-tealAccent"></i> <span class="font-display font-bold text-lg text-white">COREEDU.TECH</span>
             </div>
             <p id="secret-trigger" class="text-coolGray text-sm cursor-default select-none transition hover:text-tealAccent font-mono" ondblclick="showLoginModal()">© 2026 CoreEdu Tech Inc. All rights reserved. System Operational.</p>
         </footer>
@@ -439,19 +439,19 @@
             <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-tealAccent to-transparent"></div>
             <div class="flex justify-between items-start mb-8">
                 <div>
-                    <h2 class="text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2"><i data-lucide="cpu" class="text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> ROOT LOGIN</h2>
-                    <p class="text-tealAccent/70 text-xs font-mono mt-1 tracking-widest">MASTER CORE AUTHORITY</p>
+                    <h2 class="text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2"><i data-lucide="cpu" class="text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i> LOGIN</h2>
+                    <p class="text-tealAccent/70 text-xs font-mono mt-1 tracking-widest">COREEDU.TECH</p>
                 </div>
                 <button onclick="hideLoginModal()" class="text-coolGray hover:text-tealAccent transition p-2 bg-slateSurface rounded-lg border border-glassBorder"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
             <div class="space-y-5">
                 <div>
-                    <label class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Admin ID</label>
-                    <input type="email" id="loginId" placeholder="root@coreedu.tech" class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono">
+                    <label class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Username / Email ID</label>
+                    <input type="email" id="loginId" placeholder="Enter your email" class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono">
                 </div>
                 <div>
-                    <label class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Master Key</label>
-                    <input type="password" id="loginPassword" placeholder="••••••••••••" class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono tracking-widest">
+                    <label class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password" class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono tracking-widest">
                 </div>
                 <button id="doLoginBtn" class="w-full py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(0,240,255,0.3)] mt-4 flex justify-center items-center gap-2">
                     <i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE
@@ -578,14 +578,14 @@
     </div>
 
     <!-- School Login Modal -->
-    <div id="school-login-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[160] hidden-el flex justify-center items-center px-4">
-        <div class="glass-card p-8 rounded-3xl w-full max-w-sm relative shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-emerald-500/30">
+    <div id="school-login-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[160] hidden-el flex justify-center items-center px-4" style="margin:0;padding:16px;box-sizing:border-box;">
+        <div class="glass-card p-8 rounded-3xl w-full max-w-sm relative shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-emerald-500/30" style="margin:0 auto;">
             <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
             <button onclick="window.closeCustomModal('school-login-modal')" class="absolute top-4 right-4 text-coolGray hover:text-emerald-400 transition"><i class="fas fa-times"></i></button>
             <div class="text-center mb-8">
                 <i class="fas fa-school text-4xl text-emerald-400 mb-4 drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]"></i>
-                <h2 class="text-2xl font-display font-bold text-white tracking-widest">CHAIRMAN LOGIN</h2>
-                <p class="text-emerald-400/70 text-xs font-mono mt-1">NODE ACCESS PORTAL</p>
+                <h2 class="text-2xl font-display font-bold text-white tracking-widest">LOGIN</h2>
+                <p class="text-emerald-400/70 text-xs font-mono mt-1">PRINCIPAL LOGIN</p>
             </div>
             <div class="space-y-4">
                 <div>

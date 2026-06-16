@@ -1761,7 +1761,7 @@ window.submitForgotPassword = async () => {
     const uid = document.getElementById('forgot-id').value.trim();
     const phone = document.getElementById('forgot-phone').value.trim();
     const newPwd = document.getElementById('forgot-new-password').value.trim();
-    
+
     if (!uid && !phone) {
         window.showToast('PROVIDE AT LEAST ONE IDENTIFIER', '#e11d48');
         return;
@@ -1776,17 +1776,18 @@ window.submitForgotPassword = async () => {
     btn.disabled = true;
 
     try {
-        const idKey = (uid || phone).replace(/[\.\#\$\[\]]/g, "_");
-        await db.collection("password_requests").doc(idKey).set({
-            requestedBy: uid || phone,
-            phone: phone || "N/A",
-            suggestedPassword: newPwd,
-            timestamp: Date.now(),
-            status: 'pending'
-        }, { merge: true }); // Anti-spam merge
-
-        window.showToast('RESET REQUEST LOGGED IN MASTER SERVER', '#10b981');
-        window.closeCustomModal('forgot-password-modal');
+        const resp = await fetch("https://school-backend-zlgy.onrender.com/api/forgot-password", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: uid, phone: phone, newPassword: newPwd })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            window.showToast('RESET REQUEST SUBMITTED. WAIT FOR ADMIN APPROVAL.', '#10b981');
+            window.closeCustomModal('forgot-password-modal');
+        } else {
+            window.showToast(data.error || 'REQUEST FAILED', '#e11d48');
+        }
     } catch(err) {
         window.showToast('ERROR: ' + err.message, '#e11d48');
     } finally {
