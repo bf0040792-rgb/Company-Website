@@ -118,6 +118,91 @@ input:checked + .slider:before {
 /* Utility Classes */
 .hidden-el { display: none !important; }
 
+/* Cross-Browser Modal Fix */
+.fixed {
+    position: fixed !important;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+/* Login Modal Centering Fix for all browsers */
+#login-modal,
+#hamburger-modal,
+#registration-modal,
+#forgot-password-modal,
+#school-login-modal,
+#pin-wrapper {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    -webkit-overflow-scrolling: touch;
+}
+#login-modal.hidden-el,
+#hamburger-modal.hidden-el,
+#registration-modal.hidden-el,
+#forgot-password-modal.hidden-el,
+#school-login-modal.hidden-el,
+#pin-wrapper.hidden-el {
+    display: none !important;
+}
+
+/* Modal box prevent side shift */
+#login-modal-box,
+#hamburger-modal-box,
+#registration-modal > div,
+#forgot-password-modal > div,
+#school-login-modal > div {
+    margin: 0 auto !important;
+    position: relative !important;
+    left: 0 !important;
+    right: 0 !important;
+}
+
+/* Mobile responsiveness fixes */
+@media (max-width: 768px) {
+    #login-modal,
+    #hamburger-modal,
+    #registration-modal,
+    #forgot-password-modal,
+    #school-login-modal {
+        padding: 16px !important;
+        align-items: center !important;
+    }
+
+    #login-modal-box,
+    #hamburger-modal-box {
+        width: 100% !important;
+        max-width: 400px !important;
+        margin: 0 auto !important;
+    }
+
+    /* Sidebar collapses on mobile */
+    #dashboard-wrapper aside {
+        position: fixed;
+        left: -280px;
+        top: 64px;
+        bottom: 0;
+        z-index: 50;
+        transition: left 0.3s ease;
+    }
+    #dashboard-wrapper aside.open {
+        left: 0;
+    }
+
+    /* Hero text sizing for mobile */
+    #home h2 {
+        font-size: 2.5rem !important;
+        line-height: 1.2 !important;
+    }
+}
+
 /* Privacy Shield Blur Effect (Super Admin Feature) */
 body.privacy-mode .sensitive-data { 
     filter: blur(6px) opacity(0.5) grayscale(100%); 

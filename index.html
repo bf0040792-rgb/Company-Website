@@ -433,9 +433,9 @@
     </div>
 
     <!-- Login Modal -->
-    <div id="login-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[120] hidden-el flex justify-center items-center px-4 transition-opacity duration-300 opacity-0">
+    <div id="login-modal" class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[120] hidden-el flex justify-center items-center px-4 transition-opacity duration-300 opacity-0" style="margin:0;padding:16px;box-sizing:border-box;">
         <div class="absolute inset-0 cyber-grid-bg opacity-10 pointer-events-none"></div>
-        <div class="glass-card p-10 rounded-3xl w-full max-w-md relative overflow-hidden transform scale-95 transition-transform duration-300 shadow-[0_0_40px_rgba(0,240,255,0.2)] border border-tealAccent/30" id="login-modal-box">
+        <div class="glass-card p-10 rounded-3xl w-full max-w-md relative overflow-hidden transform scale-95 transition-transform duration-300 shadow-[0_0_40px_rgba(0,240,255,0.2)] border border-tealAccent/30" id="login-modal-box" style="margin:0 auto;">
             <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-tealAccent to-transparent"></div>
             <div class="flex justify-between items-start mb-8">
                 <div>
@@ -535,13 +535,15 @@
                     </div>
                     <div>
                         <label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">State/Province *</label>
-                        <select id="reg-state" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" disabled required>
+                        <select id="reg-state" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" disabled required onchange="window.updateDistrictDropdown()">
                             <option value="">Select State</option>
                         </select>
                     </div>
                     <div>
                         <label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">City/District *</label>
-                        <input type="text" id="reg-district" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" placeholder="e.g. London" required>
+                        <select id="reg-district" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" disabled required>
+                            <option value="">Select District/City</option>
+                        </select>
                     </div>
                     <div><label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">Pincode *</label><input type="text" id="reg-pincode" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
                     <div class="md:col-span-2"><label class="text-[10px] font-mono text-gray-400 uppercase block mb-1">Full Address *</label><textarea id="reg-address" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm h-16" required></textarea></div>

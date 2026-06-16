@@ -283,7 +283,7 @@ auth.onAuthStateChanged(async (user) => {
                     document.getElementById("enter-pin-box").classList.add("hidden-el");
                 }
 
-                document.getElementById("adminEmail").innerText = "ROOT: " + user.email; 
+                document.getElementById("adminEmail").innerText = user.email; 
                 document.getElementById("role-footer").innerText = "SYSTEM STATUS: ROOT AUTHORIZED | SECURE CONNECTION ESTABLISHED"; 
                 document.getElementById("role-footer").style.background = "#00F0FF"; // Neon Cyan
                 document.getElementById("role-footer").style.color = "#050b14"; // Dark text
@@ -1139,7 +1139,7 @@ document.getElementById("csvExportBtn").addEventListener("click", async () => {
     } catch(e) {} 
 });
 
-document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for(const d in sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`);} catch(e) {} }); });
+document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for(const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`);} catch(e) {} }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1214,12 +1214,13 @@ window.addBlacklistEntry = async () => {
 };
 
 window.removeBlacklistEntry = async (id) => {
-    if(!confirm("Remove from Global Blacklist?")) return;
-    try {
-        await db.collection("global_blacklist").doc(id).delete();
-        window.showToast("ENTRY REMOVED", "#10b981");
-        window.loadGlobalBlacklist();
-    } catch(e) { window.showToast("ERROR: "+e.message, "#e11d48"); }
+    window.customConfirm("Remove from Global Blacklist?", async () => {
+        try {
+            await db.collection("global_blacklist").doc(id).delete();
+            window.showToast("ENTRY REMOVED", "#10b981");
+            window.loadGlobalBlacklist();
+        } catch(e) { window.showToast("ERROR: "+e.message, "#e11d48"); }
+    });
 };
 
 // ==========================================
@@ -1573,8 +1574,11 @@ window.loadCountriesAPI = async () => {
 window.updateStateDropdown = () => {
     const countryName = document.getElementById('reg-country').value;
     const stateSelect = document.getElementById('reg-state');
+    const districtSelect = document.getElementById('reg-district');
     stateSelect.innerHTML = '<option value="">Select State/Province</option>';
-    
+    districtSelect.innerHTML = '<option value="">Select District/City</option>';
+    districtSelect.disabled = true;
+
     if (countryName) {
         stateSelect.disabled = false;
         const countryData = globalCountries.find(c => c.name === countryName);
@@ -1588,15 +1592,107 @@ window.updateStateDropdown = () => {
     }
 };
 
+window.updateDistrictDropdown = async () => {
+    const countryName = document.getElementById('reg-country').value;
+    const stateName = document.getElementById('reg-state').value;
+    const districtSelect = document.getElementById('reg-district');
+    districtSelect.innerHTML = '<option value="">Loading cities...</option>';
+
+    if (!countryName || !stateName) {
+        districtSelect.innerHTML = '<option value="">Select District/City</option>';
+        districtSelect.disabled = true;
+        return;
+    }
+
+    districtSelect.disabled = false;
+
+    try {
+        const res = await fetch("https://countriesnow.space/api/v0.1/countries/state/cities", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ country: countryName, state: stateName })
+        });
+        const data = await res.json();
+
+        districtSelect.innerHTML = '<option value="">Select District/City</option>';
+        if (data && !data.error && data.data && data.data.length > 0) {
+            data.data.forEach(city => {
+                districtSelect.innerHTML += `<option value="${city}">${city}</option>`;
+            });
+        } else {
+            districtSelect.innerHTML = '<option value="">No cities found - type manually</option>';
+            const manualInput = document.createElement('input');
+            manualInput.type = 'text';
+            manualInput.id = 'reg-district-manual';
+            manualInput.className = 'input-premium w-full px-3 py-2 rounded-lg text-white text-sm mt-2';
+            manualInput.placeholder = 'Type district/city name';
+            districtSelect.parentElement.appendChild(manualInput);
+        }
+    } catch(e) {
+        districtSelect.innerHTML = '<option value="">Error loading - type below</option>';
+    }
+};
+
 window.downloadAuthorityTemplate = () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
+
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 10;
+
     doc.setFont('helvetica', 'bold');
-    doc.text('OFFICIAL AUTHORITY LETTER', 105, 20, null, null, 'center');
+    doc.setFontSize(14);
+    doc.text('OFFICIAL AUTHORITY LETTER TEMPLATE', pageWidth / 2, y, { align: 'center' });
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.text('(To be printed on School Letterhead)', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.line(20, y, pageWidth - 20, y);
+    y += 15;
+
     doc.setFont('helvetica', 'normal');
-    doc.text('I hereby authorize CoreEduTech to allocate a deployment node for my instit', 20, 40);
-    doc.text('Date: ________________', 20, 60);
-    doc.text('Signature: ________________', 20, 80);
+    doc.setFontSize(11);
+    doc.text('Date: __________________________', 20, y);
+    y += 15;
+
+    doc.text('To,', 20, y); y += 7;
+    doc.text('The Onboarding Team,', 20, y); y += 7;
+    doc.text('CoreEdu Tech Platform.', 20, y); y += 15;
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Subject: Authorization for Institutional Registration on CoreEdu Tech.', 20, y);
+    y += 15;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    const para1 = 'This is to certify that Mr./Ms./Dr. ___________________________, holding the position of ___________________________ (Principal / Chairman / Director), is officially authorized to register, deploy, and manage our institution, ___________________________ (School Name), on the CoreEdu Tech Global Master Core SaaS Platform.';
+    const splitPara1 = doc.splitTextToSize(para1, pageWidth - 40);
+    doc.text(splitPara1, 20, y);
+    y += splitPara1.length * 7 + 10;
+
+    const para2 = 'The management confirms that the provided email ID, phone number, and institutional details during registration are authentic and under our official custody.';
+    const splitPara2 = doc.splitTextToSize(para2, pageWidth - 40);
+    doc.text(splitPara2, 20, y);
+    y += splitPara2.length * 7 + 20;
+
+    doc.text('Authorized Signatory Name: ___________________________', 20, y); y += 10;
+    doc.text('Designation: ___________________________', 20, y); y += 10;
+    doc.text('Contact Number: ___________________________', 20, y); y += 25;
+
+    doc.line(20, y, pageWidth - 20, y);
+    y += 15;
+
+    doc.setFontSize(10);
+    doc.text('[ Place Official School Seal / Stamp Here ]', 25, y);
+    doc.text('[ Signature of Authority ]', pageWidth - 75, y);
+    y += 10;
+    doc.line(20, y, pageWidth - 20, y);
+
     doc.save('Authority_Letter_Template.pdf');
 };
 
@@ -1609,7 +1705,7 @@ window.submitSchoolRegistration = async () => {
     const phone = document.getElementById('reg-phone').value.trim();
     const country = document.getElementById('reg-country').value;
     const state = document.getElementById('reg-state').value;
-    const dist = document.getElementById('reg-district').value.trim();
+    const dist = document.getElementById('reg-district').value || (document.getElementById('reg-district-manual') ? document.getElementById('reg-district-manual').value.trim() : '');
     const pin = document.getElementById('reg-pincode').value.trim();
     const addr = document.getElementById('reg-address').value.trim();
     const logoInput = document.getElementById('reg-logo').files[0];
@@ -1704,27 +1800,56 @@ window.submitSchoolLogin = async () => {
     const email = document.getElementById('schoolLoginId').value.trim();
     const pwd = document.getElementById('schoolLoginPwd').value.trim();
     if (!email || !pwd) return window.showToast("ALL FIELDS REQUIRED", "#e11d48");
-    
+
     const btn = document.getElementById('doSchoolLoginBtn');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AUTHENTICATING...';
     btn.disabled = true;
-    
+
     try {
-        // Authenticate via Secondary Auth
         const cred = await secondaryAuth.signInWithEmailAndPassword(email, pwd);
         const docSnap = await db.collection("users").doc(cred.user.uid).get();
         if (docSnap.exists && docSnap.data().role === "chairman") {
+            const userData = docSnap.data();
+
+            // Log IP and device info for company portal tracking
+            try {
+                let ipAddress = "Unknown";
+                let localIp = "Unknown";
+                try {
+                    const ipRes = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipRes.json();
+                    ipAddress = ipData.ip;
+                } catch(e) {}
+
+                await db.collection("login_logs").add({
+                    userId: cred.user.uid,
+                    uid: cred.user.uid,
+                    email: email,
+                    name: userData.name || 'Chairman',
+                    role: "chairman",
+                    schoolId: userData.schoolId || "",
+                    schoolName: userData.schoolName || "",
+                    ip: ipAddress,
+                    localIp: localIp,
+                    device: navigator.userAgent,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch(logErr) {
+                console.log("Login log error:", logErr);
+            }
+
             window.showToast("CHAIRMAN NODE VERIFIED. REDIRECTING...", "#10b981");
             setTimeout(() => {
-                // If you have a real Chairman Portal, redirect here.
-                // e.g. window.location.href = "school-dashboard.html";
-                alert("Redirecting to Chairman Dashboard... (Add the URL to your code!)");
+                const safeEmail = encodeURIComponent(email);
+                const safePass = encodeURIComponent(pwd);
+                const chairmanPortalLink = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/";
+                window.open(`${chairmanPortalLink}?email=${safeEmail}&pass=${safePass}`, '_blank');
                 window.closeCustomModal('school-login-modal');
             }, 1000);
         } else {
             window.showToast("ACCESS DENIED: NOT A CHAIRMAN NODE", "#e11d48");
-            secondaryAuth.signOut();
         }
+        await secondaryAuth.signOut();
     } catch(err) {
         window.showToast("INVALID CREDENTIALS", "#e11d48");
     } finally {
@@ -1765,7 +1890,7 @@ window.loadPendingRegistrations = () => {
 };
 
 window.approveRegistration = async (docId) => {
-    if(!confirm("APPROVE THIS NODE DEPLOYMENT?")) return;
+    window.customConfirm("APPROVE THIS NODE DEPLOYMENT?", async () => {
     try {
         const docRef = db.collection("pending_registrations").doc(docId);
         const docSnap = await docRef.get();
@@ -1787,18 +1912,21 @@ window.approveRegistration = async (docId) => {
             email: data.email,
             role: "chairman",
             status: "active",
-            name: data.principalName
+            name: data.principalName,
+            schoolName: data.schoolName,
+            plainPassword: data.password
         });
 
         // 3. Add to schools collection
         const sRef = await db.collection("schools").add({
-            name: data.schoolName,
+            schoolName: data.schoolName,
             address: data.address,
             phone: data.phone,
             chairmanUid: userRecord.user.uid,
             principalName: data.principalName,
             district: data.district,
             state: data.state,
+            country: data.country,
             pincode: data.pincode,
             logoUrl: data.logoUrl,
             status: "active",
@@ -1816,16 +1944,18 @@ window.approveRegistration = async (docId) => {
     } catch(err) {
         window.showToast("ERROR: " + err.message, "#e11d48");
     }
+    });
 };
 
 window.rejectRegistration = async (docId) => {
-    if(!confirm("REJECT AND DELETE THIS DEPLOYMENT REQUEST?")) return;
-    try {
-        await db.collection("pending_registrations").doc(docId).delete();
-        window.showToast("REQUEST TERMINATED", "#10b981");
-    } catch(err) {
-        window.showToast("ERROR: " + err.message, "#e11d48");
-    }
+    window.customConfirm("REJECT AND DELETE THIS DEPLOYMENT REQUEST?", async () => {
+        try {
+            await db.collection("pending_registrations").doc(docId).delete();
+            window.showToast("REQUEST TERMINATED", "#10b981");
+        } catch(err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
 };
 
 // 5. Comm Hub (WhatsApp UI) Logic
@@ -1839,15 +1969,16 @@ window.loadCommHubSchools = () => {
         list.innerHTML = '';
         snapshot.forEach(doc => {
             const data = doc.data();
+            const schoolDisplayName = data.schoolName || data.name || 'Unnamed Node';
             const div = document.createElement("div");
             div.className = "school-list-item p-3 border-b border-glassBorder flex items-center gap-3";
-            div.onclick = () => window.openCommChat(doc.id, data.name);
+            div.onclick = () => window.openCommChat(doc.id, schoolDisplayName);
             div.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-slateBase border border-glassBorder overflow-hidden shrink-0">
                     <img src="${data.logoUrl || 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}" class="w-full h-full object-cover">
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h4 class="text-white text-xs font-bold truncate">${data.name}</h4>
+                    <h4 class="text-white text-xs font-bold truncate">${schoolDisplayName}</h4>
                     <p class="text-[9px] text-coolGray truncate">Tap to open comm channel</p>
                 </div>
             `;
@@ -1945,17 +2076,17 @@ window.sendCommMessage = async () => {
 
 window.clearCommHistory = async () => {
     if (!currentCommSchoolId) return;
-    if (!confirm("WIPE COMM HISTORY FOR THIS NODE?")) return;
-    
-    try {
-        const batch = db.batch();
-        const docs = await db.collection("communications").where("schoolId", "==", currentCommSchoolId).get();
-        docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        window.showToast("HISTORY WIPED", "#10b981");
-    } catch(err) {
-        window.showToast("ERROR: " + err.message, "#e11d48");
-    }
+    window.customConfirm("WIPE COMM HISTORY FOR THIS NODE?", async () => {
+        try {
+            const batch = db.batch();
+            const docs = await db.collection("communications").where("schoolId", "==", currentCommSchoolId).get();
+            docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            window.showToast("HISTORY WIPED", "#10b981");
+        } catch(err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
 };
 
 // 6. Updated Bulk Delete functions
@@ -1966,19 +2097,19 @@ window.bulkDeletePasswordReqs = async () => {
         window.showToast("NO TARGETS SELECTED", "#e11d48");
         return;
     }
-    if (!confirm(`DELETE ${checkboxes.length} TARGETS?`)) return;
-    
-    try {
-        const batch = db.batch();
-        checkboxes.forEach(cb => {
-            const docRef = db.collection("password_requests").doc(cb.dataset.id);
-            batch.delete(docRef);
-        });
-        await batch.commit();
-        window.showToast("BULK PURGE COMPLETE", "#10b981");
-    } catch (err) {
-        window.showToast("ERROR: " + err.message, "#e11d48");
-    }
+    window.customConfirm(`DELETE ${checkboxes.length} TARGETS?`, async () => {
+        try {
+            const batch = db.batch();
+            checkboxes.forEach(cb => {
+                const docRef = db.collection("password_requests").doc(cb.dataset.id);
+                batch.delete(docRef);
+            });
+            await batch.commit();
+            window.showToast("BULK PURGE COMPLETE", "#10b981");
+        } catch (err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
 };
 
 window.toggleSelectAllPwdReq = (source) => {
@@ -2002,56 +2133,11 @@ if (originalSwitchTab) {
 }
 
 // ==========================================
-// 15. CORE AI ASSISTANT LOGIC
+// 15. CORE AI ASSISTANT LOGIC (Consolidated)
 // ==========================================
-window.toggleAIChat = () => {
-    const box = document.getElementById("ai-chat-window");
-    if (box.classList.contains("hidden-el")) {
-        box.classList.remove("hidden-el");
-    } else {
-        box.classList.add("hidden-el");
-    }
-};
-
-window.sendAIMessage = async () => {
-    const input = document.getElementById("ai-chat-input");
-    const text = input.value.trim();
-    if (!text) return;
-    
-    const messagesDiv = document.getElementById("ai-chat-messages");
-    
-    // Append User Message
-    const userMsg = document.createElement("div");
-    userMsg.className = "text-right mb-4";
-    userMsg.innerHTML = `<span class="inline-block bg-teal-600/20 border border-teal-500/50 text-teal-400 px-3 py-2 rounded-xl text-xs font-mono">${text}</span>`;
-    messagesDiv.appendChild(userMsg);
-    
-    input.value = "";
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    
-    // Append AI Loading Message
-    const aiMsg = document.createElement("div");
-    aiMsg.className = "text-left mb-4";
-    aiMsg.innerHTML = `<span class="inline-block bg-slateBase border border-glassBorder text-coolGray px-3 py-2 rounded-xl text-xs font-mono"><i class="fas fa-spinner fa-spin text-tealAccent"></i> ANALYZING...</span>`;
-    messagesDiv.appendChild(aiMsg);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-    try {
-        // Fetch to Google Gemini API (Mocked Endpoint)
-        setTimeout(() => {
-            aiMsg.innerHTML = `<span class="inline-block bg-slateBase border border-glassBorder text-coolGray px-3 py-2 rounded-xl text-xs font-mono"><i class="fas fa-robot text-tealAccent"></i> The system architecture is fully stable. Geo-Fencing limits active connections outside of the root admin coordinates. How else may I assist your deployment?</span>`;
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }, 1500);
-    } catch (e) {
-        aiMsg.innerHTML = `<span class="inline-block bg-rose-600/20 border border-rose-500/50 text-rose-400 px-3 py-2 rounded-xl text-xs font-mono">CONNECTION DROPPED</span>`;
-    }
-};
 
 document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
     if (e.key === "Enter") window.sendAIMessage();
 });
 
-window.loadTickets = () => {
-    // Placeholder for SLA Support Tickets logic
-    console.log("Loading SLA Tickets...");
-};
+// Tickets are loaded via the earlier defined window.loadTickets function
