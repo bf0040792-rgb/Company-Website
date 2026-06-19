@@ -9,7 +9,6 @@ async function verifyGeoFence() {
         const data = await res.json();
         if (!allowedMasterIPs.includes(data.ip)) {
             console.warn(`Unauthorized Access Attempt from IP: ${data.ip} (Geo-Fence currently disabled for testing)`);
-            // window.location.href = "403.html"; // Temporarily disabled
         } else {
             console.log(`✅ Geo-Fence Passed: ${data.ip}`);
         }
@@ -489,7 +488,7 @@ window.saveChairmanEdit = async () => {
 
     btn.innerText = "PROCESSING...";
     try {
-        let finalLogoUrl = ch.logoUrl;
+        let finalLogoUrl = ch.logoUrl || "";
         if(logoFile) {
             const uploaded = await uploadToCloudinary(logoFile);
             if(uploaded) {
@@ -1936,7 +1935,8 @@ window.approveRegistration = async (docId) => {
             status: "active",
             name: data.principalName,
             schoolName: data.schoolName,
-            plainPassword: data.password
+            plainPassword: data.password,
+            logoUrl: data.logoUrl || ""
         });
 
         // 3. Add to schools collection
