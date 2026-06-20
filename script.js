@@ -2023,7 +2023,6 @@ window.openCommChat = (schoolId, schoolName) => {
     // Listen for messages between Master and this School
     db.collection("communications")
       .where("schoolId", "==", schoolId)
-      .orderBy("timestamp", "asc")
       .onSnapshot(snapshot => {
           historyBox.innerHTML = '';
           if (snapshot.empty) {
@@ -2031,13 +2030,24 @@ window.openCommChat = (schoolId, schoolName) => {
               return;
           }
           
+          let messages = [];
           snapshot.forEach(doc => {
-              const msg = doc.data();
+              messages.push({ id: doc.id, ...doc.data() });
+          });
+          
+          messages.sort((a, b) => {
+              if(!a.timestamp) return -1;
+              if(!b.timestamp) return 1;
+              return a.timestamp.toMillis() - b.timestamp.toMillis();
+          });
+          
+          messages.forEach(msg => {
               const isMaster = msg.sender === 'master';
               const wrap = document.createElement("div");
               wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
               
-              const timeStr = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              let tsMillis = msg.timestamp ? msg.timestamp.toMillis() : Date.now();
+              const timeStr = new Date(tsMillis).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
               
               let fileHTML = '';
               if (msg.attachmentUrl) {
