@@ -2038,7 +2038,9 @@ window.openCommChat = (schoolId, schoolName) => {
           messages.sort((a, b) => {
               if(!a.timestamp) return -1;
               if(!b.timestamp) return 1;
-              return a.timestamp.toMillis() - b.timestamp.toMillis();
+              let aTime = typeof a.timestamp.toMillis === 'function' ? a.timestamp.toMillis() : Date.now();
+              let bTime = typeof b.timestamp.toMillis === 'function' ? b.timestamp.toMillis() : Date.now();
+              return aTime - bTime;
           });
           
           messages.forEach(msg => {
@@ -2046,7 +2048,7 @@ window.openCommChat = (schoolId, schoolName) => {
               const wrap = document.createElement("div");
               wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
               
-              let tsMillis = msg.timestamp ? msg.timestamp.toMillis() : Date.now();
+              let tsMillis = (msg.timestamp && typeof msg.timestamp.toMillis === 'function') ? msg.timestamp.toMillis() : Date.now();
               const timeStr = new Date(tsMillis).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
               
               let fileHTML = '';
