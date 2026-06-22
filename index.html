@@ -637,8 +637,10 @@
                 <nav class="flex-1 px-4 py-6 space-y-1 menu-container">
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 px-2">Telemetry</p>
                     <button class="menu-item active w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all bg-tealAccent/10 text-tealAccent border-l-2 border-tealAccent shadow-[inset_2px_0_10px_rgba(0,240,255,0.1)] font-mono text-xs" data-target="tab-dashboard"><i class="fas fa-satellite-dish w-5 text-center"></i> Analytics</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-attendance-summary"><i class="fas fa-clipboard-check text-emerald-400 w-5 text-center"></i> Attendance Overview</button>
                     
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">Entity Control</p>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-notifications"><i class="fas fa-bell text-amber-400 w-5 text-center"></i> Global Notifications</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-pending-approvals"><i class="fas fa-user-plus text-emerald-400 w-5 text-center"></i> Pending Approvals</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-manage"><i class="fas fa-server text-indigo-400 w-5 text-center"></i> Nodes & Chairmen</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-modules"><i class="fas fa-user-astronaut text-blue-400 w-5 text-center"></i> Inspect Subjects</button>
@@ -651,6 +653,7 @@
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-password-req"><i class="fas fa-key text-amber-500 w-5 text-center"></i> Auth Requests</button>
                     
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">Infrastructure</p>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-system-security"><i class="fas fa-shield-alt text-rose-500 w-5 text-center"></i> System Security</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-backup"><i class="fas fa-cloud-download-alt text-blue-500 w-5 text-center"></i> Snapshot & Sync</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-security"><i class="fas fa-shield-virus text-rose-500 w-5 text-center"></i> System Limits</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-device-tracking"><i class="fas fa-crosshairs text-cyan-400 w-5 text-center"></i> Radar Tracking</button>
@@ -702,6 +705,22 @@
                             <div class="absolute top-0 left-0 w-1 h-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
                             <p class="text-rose-400/80 text-[10px] font-mono font-bold uppercase tracking-widest mb-2">Global Staff</p>
                             <h2 class="text-3xl font-mono font-extrabold text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]" id="stat-staff">0</h2>
+                        </div>
+                        <div class="glass-card p-6 rounded-2xl border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.1)] relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-1 h-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
+                            <p class="text-cyan-400/80 text-[10px] font-mono font-bold uppercase tracking-widest mb-2">Licenses (Act/Exp)</p>
+                            <h2 class="text-3xl font-mono font-extrabold text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]" id="stat-licenses">0 / 0</h2>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                        <div class="glass-card p-6 rounded-2xl border border-tealAccent/30 shadow-[0_0_15px_rgba(0,240,255,0.1)]">
+                            <h3 class="text-white font-mono font-bold mb-4 text-sm"><i class="fas fa-chart-bar text-tealAccent"></i> Top Nodes by Population</h3>
+                            <canvas id="studentChart" class="w-full h-64"></canvas>
+                        </div>
+                        <div class="glass-card p-6 rounded-2xl border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+                            <h3 class="text-white font-mono font-bold mb-4 text-sm"><i class="fas fa-chart-line text-amber-500"></i> Global Revenue (6 Months)</h3>
+                            <canvas id="revenueChart" class="w-full h-64"></canvas>
                         </div>
                     </div>
 
@@ -1278,6 +1297,87 @@
                                     <tr><th class="p-4">Deletion Time</th><th class="p-4">Vector</th><th class="p-4">Payload Extract</th><th class="p-4 text-right">Execute</th></tr>
                                 </thead>
                                 <tbody id="recycle-bin-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Attendance Summary Tab -->
+                <div id="tab-attendance-summary" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-display font-bold text-white"><i class="fas fa-clipboard-check text-emerald-400"></i> Attendance Overview</h3>
+                            <input type="date" id="attendanceSummaryDate" class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono">
+                        </div>
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">School Name</th><th class="p-4">Date</th><th class="p-4">Total Students</th><th class="p-4 text-emerald-400">Present</th><th class="p-4 text-rose-400">Absent</th><th class="p-4">Attendance %</th></tr>
+                                </thead>
+                                <tbody id="attendance-summary-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Global Notifications Tab -->
+                <div id="tab-notifications" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.8)]"></div>
+                        <h3 class="text-xl font-display font-bold text-white mb-6"><i class="fas fa-paper-plane text-amber-400"></i> Send Global Notification</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div><label class="text-[10px] font-mono text-amber-400 uppercase block mb-1">Title</label><input type="text" id="notifTitle" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono" placeholder="Enter title..."></div>
+                            <div><label class="text-[10px] font-mono text-amber-400 uppercase block mb-1">Target</label><select id="notifTarget" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"><option value="all">ALL SCHOOLS</option></select></div>
+                            <div class="md:col-span-2"><label class="text-[10px] font-mono text-amber-400 uppercase block mb-1">Type</label>
+                                <select id="notifType" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono">
+                                    <option value="Info">Info (Cyan)</option>
+                                    <option value="Warning">Warning (Amber)</option>
+                                    <option value="Critical">Critical (Red)</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2"><label class="text-[10px] font-mono text-amber-400 uppercase block mb-1">Message</label><textarea id="notifMessage" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono h-20" placeholder="Enter message..."></textarea></div>
+                        </div>
+                        <button onclick="window.sendGlobalNotification()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-mono font-bold transition shadow-[0_0_15px_rgba(245,158,11,0.4)]"><i class="fas fa-broadcast-tower"></i> BROADCAST MESSAGE</button>
+                    </div>
+
+                    <div class="glass-card p-6 rounded-2xl border border-glassBorder">
+                        <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-history text-coolLight"></i> Sent Notifications</h3>
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Date</th><th class="p-4">Target</th><th class="p-4">Type</th><th class="p-4">Title</th><th class="p-4">Message</th><th class="p-4 text-right">Delete</th></tr>
+                                </thead>
+                                <tbody id="notifications-table-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: System Security Tab -->
+                <div id="tab-system-security" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
+                        <h3 class="text-xl font-display font-bold text-white mb-6"><i class="fas fa-shield-alt text-rose-500"></i> Backend Security Logs</h3>
+                        
+                        <div class="flex flex-wrap gap-4 items-end mb-6 bg-slateSurface/50 p-4 rounded-xl border border-rose-500/20">
+                            <div class="flex-1 min-w-[120px]"><label class="text-[10px] font-mono text-rose-400/70 uppercase block mb-1">Role Filter</label><select id="secLogRole" onchange="window.loadSecurityLogs()" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"><option value="ALL">-- ALL --</option><option value="chairman">Chairman</option><option value="staff">Staff</option></select></div>
+                            <div class="flex-1 min-w-[150px]"><label class="text-[10px] font-mono text-rose-400/70 uppercase block mb-1">School Filter</label><select id="secLogSchool" onchange="window.loadSecurityLogs()" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"><option value="ALL">-- ALL --</option></select></div>
+                            <div class="flex-1 min-w-[120px]"><label class="text-[10px] font-mono text-rose-400/70 uppercase block mb-1">Date</label><input type="date" id="secLogDate" onchange="window.loadSecurityLogs()" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs font-mono"></div>
+                            <button onclick="window.exportSecurityLogsPDF()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-2 shadow-[0_0_10px_rgba(244,63,94,0.4)]"><i class="fas fa-file-pdf"></i> EXPORT PDF</button>
+                        </div>
+                        
+                        <div id="suspicious-activity-container" class="mb-6 space-y-2">
+                            <!-- Suspicious alerts injected here -->
+                        </div>
+
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-tealAccent/70 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder">
+                                    <tr><th class="p-4">Timestamp</th><th class="p-4">User Name</th><th class="p-4">Role</th><th class="p-4">School</th><th class="p-4">IP Address</th><th class="p-4">Device</th><th class="p-4">Action</th></tr>
+                                </thead>
+                                <tbody id="security-logs-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
                             </table>
                         </div>
                     </div>

@@ -2175,3 +2175,373 @@ document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
 });
 
 // Tickets are loaded via the earlier defined window.loadTickets function
+
+// ==========================================
+// 16. NEW FEATURES (ANALYTICS, ATTENDANCE, NOTIFICATIONS, SECURITY)
+// ==========================================
+
+window.loadGlobalAnalyticsDashboard = async () => {
+    try {
+        const schoolsSnap = await db.collection("schools").get();
+        let active = 0, expired = 0;
+        schoolsSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.licenseStatus === 'Active' || data.licenseStatus === 'active') active++;
+            else expired++;
+        });
+        const statLicenses = document.getElementById("stat-licenses");
+        if(statLicenses) statLicenses.innerText = `${active} / ${expired}`;
+
+        const studentsSnap = await db.collection("students").get();
+        let studentCounts = {};
+        studentsSnap.forEach(doc => {
+            const data = doc.data();
+            if(data.schoolId) {
+                studentCounts[data.schoolId] = (studentCounts[data.schoolId] || 0) + 1;
+            }
+        });
+        
+        let chartLabels = [];
+        let chartData = [];
+        let sortedSchools = Object.keys(studentCounts).sort((a,b) => studentCounts[b] - studentCounts[a]).slice(0, 10);
+        
+        for (let sid of sortedSchools) {
+            let sDoc = await db.collection("schools").doc(sid).get();
+            let sName = sDoc.exists ? sDoc.data().schoolName : sid;
+            chartLabels.push(sName);
+            chartData.push(studentCounts[sid]);
+        }
+        
+        const ctxStudent = document.getElementById('studentChart');
+        if(ctxStudent) {
+            if(window.studentChartInstance) window.studentChartInstance.destroy();
+            window.studentChartInstance = new Chart(ctxStudent, {
+                type: 'bar',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Students',
+                        data: chartData,
+                        backgroundColor: '#00F0FF',
+                        borderColor: '#00F0FF',
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        const txSnap = await db.collection("transactions").where("type", "==", "Fee").get();
+        let monthlyRev = {};
+        let now = new Date();
+        for(let i=5; i>=0; i--) {
+            let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            let mStr = d.toLocaleString('default', { month: 'short' }) + " " + d.getFullYear();
+            monthlyRev[mStr] = 0;
+        }
+        
+        txSnap.forEach(doc => {
+            let data = doc.data();
+            let date = data.date ? new Date(data.date) : (data.timestamp ? new Date(data.timestamp) : null);
+            if(date) {
+                let mStr = date.toLocaleString('default', { month: 'short' }) + " " + date.getFullYear();
+                if(monthlyRev[mStr] !== undefined) {
+                    monthlyRev[mStr] += parseFloat(data.amount || 0);
+                }
+            }
+        });
+        
+        const ctxRev = document.getElementById('revenueChart');
+        if(ctxRev) {
+            if(window.revenueChartInstance) window.revenueChartInstance.destroy();
+            window.revenueChartInstance = new Chart(ctxRev, {
+                type: 'line',
+                data: {
+                    labels: Object.keys(monthlyRev),
+                    datasets: [{
+                        label: 'Revenue (₹)',
+                        data: Object.values(monthlyRev),
+                        borderColor: '#F59E0B',
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+    } catch (e) {
+        console.error("Dashboard Load Error: ", e);
+    }
+};
+
+window.loadAttendanceSummary = async (targetDate) => {
+    let dateStr = targetDate;
+    if(!dateStr) {
+        const today = new Date();
+        dateStr = today.toISOString().split('T')[0];
+        document.getElementById('attendanceSummaryDate').value = dateStr;
+    }
+    
+    document.getElementById('attendanceSummaryDate').onchange = (e) => {
+        window.loadAttendanceSummary(e.target.value);
+    };
+
+    const tbody = document.getElementById("attendance-summary-body");
+    if(!tbody) return;
+    tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>Loading...</td></tr>";
+
+    try {
+        const attSnap = await db.collection("attendance").where("date", "==", dateStr).get();
+        let schoolAtt = {};
+        
+        attSnap.forEach(doc => {
+            let data = doc.data();
+            if(!schoolAtt[data.schoolId]) schoolAtt[data.schoolId] = { present: 0, absent: 0, total: 0 };
+            
+            if(data.records && Array.isArray(data.records)) {
+                data.records.forEach(r => {
+                    schoolAtt[data.schoolId].total++;
+                    if(r.status === 'Present') schoolAtt[data.schoolId].present++;
+                    else if(r.status === 'Absent' || r.status === 'Late') schoolAtt[data.schoolId].absent++;
+                });
+            }
+        });
+
+        tbody.innerHTML = "";
+        if(Object.keys(schoolAtt).length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>No attendance records found for this date.</td></tr>";
+            return;
+        }
+
+        for(let sid of Object.keys(schoolAtt)) {
+            let sDoc = await db.collection("schools").doc(sid).get();
+            let sName = sDoc.exists ? sDoc.data().schoolName : sid;
+            let att = schoolAtt[sid];
+            let pct = att.total > 0 ? ((att.present / att.total) * 100).toFixed(1) : 0;
+            let isLow = pct < 70;
+            
+            tbody.innerHTML += `
+                <tr class="${isLow ? 'bg-rose-500/10' : ''}">
+                    <td class="p-4 font-bold text-white">${sName}</td>
+                    <td class="p-4">${dateStr}</td>
+                    <td class="p-4 text-center font-bold text-tealAccent">${att.total}</td>
+                    <td class="p-4 text-center text-emerald-400 font-bold">${att.present}</td>
+                    <td class="p-4 text-center text-rose-400 font-bold">${att.absent}</td>
+                    <td class="p-4 text-center font-bold ${isLow ? 'text-rose-500' : 'text-emerald-400'}">${pct}%</td>
+                </tr>
+            `;
+        }
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan='6' class='text-center p-4 text-rose-500'>Error loading attendance</td></tr>`;
+        console.error(e);
+    }
+};
+
+window.sendGlobalNotification = async () => {
+    const title = document.getElementById("notifTitle").value;
+    const type = document.getElementById("notifType").value;
+    const target = document.getElementById("notifTarget").value;
+    const message = document.getElementById("notifMessage").value;
+    
+    if(!title || !message) {
+        if(window.showToast) window.showToast("Please fill all fields", "#f43f5e");
+        else alert("Please fill all fields");
+        return;
+    }
+    
+    try {
+        await db.collection("notifications").add({
+            title, type, target, message,
+            sentAt: firebase.firestore.FieldValue.serverTimestamp(),
+            sentBy: "master",
+            isRead: false
+        });
+        
+        document.getElementById("notifTitle").value = "";
+        document.getElementById("notifMessage").value = "";
+        
+        if(window.showToast) window.showToast("Notification Sent", "#10b981");
+        else alert("Notification Sent");
+        
+        window.loadGlobalNotifications();
+    } catch(e) {
+        console.error(e);
+        if(window.showToast) window.showToast("Error sending notification", "#f43f5e");
+    }
+};
+
+window.loadGlobalNotifications = async () => {
+    const tbody = document.getElementById("notifications-table-body");
+    if(!tbody) return;
+    
+    try {
+        const snap = await db.collection("notifications").where("sentBy", "==", "master").orderBy("sentAt", "desc").limit(50).get();
+        tbody.innerHTML = "";
+        
+        if(snap.empty) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>No notifications sent yet.</td></tr>";
+            return;
+        }
+        
+        snap.forEach(doc => {
+            const data = doc.data();
+            let dateStr = data.sentAt ? new Date(data.sentAt.toDate()).toLocaleString() : "Just now";
+            
+            let colorClass = "text-tealAccent";
+            if(data.type === "Warning") colorClass = "text-amber-400";
+            else if(data.type === "Critical") colorClass = "text-rose-500";
+            
+            tbody.innerHTML += `
+                <tr class="hover:bg-slateSurface/50 transition">
+                    <td class="p-4">${dateStr}</td>
+                    <td class="p-4 font-bold text-white">${data.target === 'all' ? 'ALL SCHOOLS' : data.target}</td>
+                    <td class="p-4 font-bold ${colorClass}">${data.type}</td>
+                    <td class="p-4 font-bold text-white">${data.title}</td>
+                    <td class="p-4 max-w-xs truncate" title="${data.message}">${data.message}</td>
+                    <td class="p-4 text-right">
+                        <button onclick="deleteNotification('${doc.id}')" class="text-rose-500 hover:text-rose-400 transition transform hover:scale-110"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch(e) {
+        console.error(e);
+    }
+};
+
+window.deleteNotification = async (id) => {
+    if(confirm("Delete this notification?")) {
+        try {
+            await db.collection("notifications").doc(id).delete();
+            window.loadGlobalNotifications();
+            if(window.showToast) window.showToast("Notification deleted", "#10b981");
+        } catch (e) {
+            console.error(e);
+            if(window.showToast) window.showToast("Error deleting", "#f43f5e");
+        }
+    }
+};
+
+window.loadSecurityLogs = async () => {
+    const tbody = document.getElementById("security-logs-body");
+    const alertsBox = document.getElementById("suspicious-activity-container");
+    if(!tbody || !alertsBox) return;
+    
+    const roleFilter = document.getElementById("secLogRole").value;
+    const schoolFilter = document.getElementById("secLogSchool").value;
+    const dateFilter = document.getElementById("secLogDate").value;
+    
+    try {
+        let query = db.collection("login_logs");
+        const snap = await query.orderBy("timestamp", "desc").limit(100).get();
+        
+        tbody.innerHTML = "";
+        alertsBox.innerHTML = "";
+        let logs = [];
+        
+        snap.forEach(doc => {
+            let data = Object.assign({ id: doc.id }, doc.data());
+            logs.push(data);
+        });
+        
+        let filteredLogs = logs.filter(l => {
+            let dateMatch = true;
+            if(dateFilter) {
+                let dStr = l.timestamp ? new Date(l.timestamp).toISOString().split('T')[0] : "";
+                if(dStr !== dateFilter) dateMatch = false;
+            }
+            let rMatch = roleFilter === "ALL" || l.role === roleFilter;
+            let sMatch = schoolFilter === "ALL" || l.schoolId === schoolFilter;
+            return dateMatch && rMatch && sMatch;
+        });
+        
+        let ipMap = {};
+        let suspiciousAlerts = [];
+        
+        filteredLogs.forEach(l => {
+            let ts = l.timestamp ? new Date(l.timestamp) : null;
+            let isOutofHours = false;
+            if(ts) {
+                let hours = ts.getHours();
+                if(hours < 6 || hours > 22) { // outside 6 AM - 10 PM
+                    isOutofHours = true;
+                    suspiciousAlerts.push(`Out of hours login attempt by ${l.userName || 'Unknown'} at ${ts.toLocaleTimeString()}`);
+                }
+            }
+            
+            if(l.ipAddress) {
+                if(!ipMap[l.ipAddress]) ipMap[l.ipAddress] = new Set();
+                if(l.schoolId) ipMap[l.ipAddress].add(l.schoolId);
+            }
+            
+            let isSuspicious = isOutofHours || (l.action === 'Login Failed');
+            
+            tbody.innerHTML += `
+                <tr class="${isSuspicious ? 'bg-rose-500/10 text-rose-300' : 'hover:bg-slateSurface/50 transition'}">
+                    <td class="p-4">${ts ? ts.toLocaleString() : '-'}</td>
+                    <td class="p-4 font-bold">${l.userName || 'Unknown'}</td>
+                    <td class="p-4 uppercase tracking-widest">${l.role || '-'}</td>
+                    <td class="p-4">${l.schoolId || '-'}</td>
+                    <td class="p-4 font-mono text-cyan-400">${l.ipAddress || 'Unknown'}</td>
+                    <td class="p-4">${l.device || 'Unknown'}</td>
+                    <td class="p-4 font-bold ${l.action === 'Login Failed' ? 'text-rose-500' : 'text-tealAccent'}">${l.action || 'Login'}</td>
+                </tr>
+            `;
+        });
+        
+        for(let ip in ipMap) {
+            if(ipMap[ip].size >= 3) {
+                suspiciousAlerts.push(`Same IP (${ip}) attempting login across ${ipMap[ip].size} different schools.`);
+            }
+        }
+        
+        if(suspiciousAlerts.length > 0) {
+            let alertsHtml = suspiciousAlerts.map(a => `<div class="bg-rose-500/20 border border-rose-500 text-rose-400 p-3 font-mono rounded-lg shadow-[0_0_10px_rgba(244,63,94,0.2)]"><i class="fas fa-exclamation-triangle mr-2"></i> SUSPICIOUS ACTIVITY: ${a}</div>`).join('');
+            alertsBox.innerHTML = alertsHtml;
+        } else {
+            alertsBox.innerHTML = `<div class="bg-emerald-500/10 border border-emerald-500 text-emerald-400 p-3 font-mono rounded-lg"><i class="fas fa-shield-check mr-2"></i> System Secure. No suspicious activity detected.</div>`;
+        }
+        
+        if(filteredLogs.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='7' class='text-center p-4 text-coolGray'>No logs found.</td></tr>";
+        }
+        
+    } catch(e) {
+        console.error(e);
+        tbody.innerHTML = "<tr><td colspan='7' class='text-center p-4 text-rose-500'>Error loading logs</td></tr>";
+    }
+};
+
+window.exportSecurityLogsPDF = () => {
+    if(typeof jspdf !== 'undefined' && jspdf.jsPDF) {
+        const doc = new jspdf.jsPDF();
+        doc.text("System Security Logs - CoreEdu Tech Master Core", 10, 10);
+        doc.autoTable({
+            html: '#security-logs-body',
+            startY: 20,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 }
+        });
+        doc.save("CoreEdu_Security_Logs.pdf");
+    } else {
+        if(window.showToast) window.showToast("PDF generation library not found.", "#f43f5e");
+        else alert("PDF generation library not found.");
+    }
+};
+
+// Hook the new tabs
+document.querySelectorAll('.menu-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-target');
+        if (t === 'tab-dashboard') window.loadGlobalAnalyticsDashboard();
+        if (t === 'tab-attendance-summary') window.loadAttendanceSummary();
+        if (t === 'tab-notifications') window.loadGlobalNotifications();
+        if (t === 'tab-system-security') window.loadSecurityLogs();
+    });
+});
+
+// Load dashboard analytics by default after a short delay
+setTimeout(() => {
+    if(window.loadGlobalAnalyticsDashboard) window.loadGlobalAnalyticsDashboard();
+}, 2000);
