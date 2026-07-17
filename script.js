@@ -2559,6 +2559,7 @@ document.getElementById('studio-upload')?.addEventListener('change', function(e)
     Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = (event) => {
+            const newIndex = studioImages.length;
             studioImages.push({
                 id: Date.now() + Math.random().toString(36).substr(2, 9),
                 originalBase64: event.target.result,
@@ -2568,6 +2569,7 @@ document.getElementById('studio-upload')?.addEventListener('change', function(e)
                 isLoading: false
             });
             renderStudioGrid();
+            processSingleBG(newIndex);
         };
         reader.readAsDataURL(file);
     });
@@ -2637,6 +2639,43 @@ function removeStudioImage(index) {
     studioImages.splice(index, 1);
     renderStudioGrid();
 }
+
+window.syncBulkNames = function() {
+    const text = document.getElementById('studio-bulk-names').value;
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
+    
+    studioImages.forEach((img, i) => {
+        if(lines[i]) {
+            // Strip starting numbers like "1. ", "2-", etc.
+            const cleanName = lines[i].replace(/^[0-9]+[\.\-\)\s]+/, '').trim();
+            img.nameText = cleanName;
+        } else {
+            img.nameText = "";
+        }
+    });
+    renderStudioGrid();
+};
+
+window.saveStudioPreset = function() {
+    const color = document.getElementById('studio-bg-color').value;
+    localStorage.setItem('studio_preset_bg', color);
+    if(window.showToast) window.showToast("Preset Saved!", "#10b981");
+};
+
+// Load preset on load
+setTimeout(() => {
+    const savedColor = localStorage.getItem('studio_preset_bg');
+    if (savedColor) {
+        const colorPicker = document.getElementById('studio-bg-color');
+        if (colorPicker) {
+            colorPicker.value = savedColor;
+            // Also apply it to any existing wrappers
+            document.querySelectorAll('.studio-img-wrapper').forEach(el => {
+                el.style.backgroundColor = savedColor;
+            });
+        }
+    }
+}, 1000);
 
 async function processSingleBG(index) {
     if(studioImages[index].isProcessed || studioImages[index].isLoading) return;
@@ -2731,62 +2770,65 @@ window.generateA4PDF = function() {
     let colIndex = 0;
     
     studioImages.forEach((img, idx) => {
-        // Wrap to next line if needed
-        if (colIndex >= cols) {
-            colIndex = 0;
-            currentX = marginX;
-            currentY += photoHeight + gapY;
-        }
-        
-        // Check for page overflow
-        if (currentY + photoHeight > 297 - marginY) {
-            pdf.addPage();
-            currentX = marginX;
-            currentY = marginY;
-            colIndex = 0;
-        }
-        
-        // 1. Draw Background Color Rectangle
-        pdf.setFillColor(r, g, b);
-        pdf.rect(currentX, currentY, photoWidth, photoHeight, 'F');
-        
-        // 2. Draw Image
-        const imgData = img.processedBase64 || img.originalBase64;
-        try {
-            let format = 'JPEG';
-            if(imgData.includes('image/png')) format = 'PNG';
+        // Generate 5 copies for each photo
+        for (let copy = 0; copy < 5; copy++) {
+            // Wrap to next line if needed
+            if (colIndex >= cols) {
+                colIndex = 0;
+                currentX = marginX;
+                currentY += photoHeight + gapY;
+            }
             
-            pdf.addImage(imgData, format, currentX, currentY, photoWidth, photoHeight);
-        } catch(e) {
-            console.error("Failed to add image to PDF", e);
+            // Check for page overflow
+            if (currentY + photoHeight > 297 - marginY) {
+                pdf.addPage();
+                currentX = marginX;
+                currentY = marginY;
+                colIndex = 0;
+            }
+            
+            // 1. Draw Background Color Rectangle
+            pdf.setFillColor(r, g, b);
+            pdf.rect(currentX, currentY, photoWidth, photoHeight, 'F');
+            
+            // 2. Draw Image
+            const imgData = img.processedBase64 || img.originalBase64;
+            try {
+                let format = 'JPEG';
+                if(imgData.includes('image/png')) format = 'PNG';
+                
+                pdf.addImage(imgData, format, currentX, currentY, photoWidth, photoHeight);
+            } catch(e) {
+                console.error("Failed to add image to PDF", e);
+            }
+            
+            // 3. Draw Nameplate conditionally (ONLY on first copy)
+            const text = img.nameText ? img.nameText.trim() : "";
+            
+            if (copy === 0 && text !== "") {
+                const nameplateHeight = 7;
+                const nameplateY = currentY + photoHeight - nameplateHeight;
+                pdf.setFillColor(255, 255, 255); // white
+                pdf.setDrawColor(0, 0, 0); // black border
+                pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
+                
+                // 4. Draw Text
+                const uppercaseText = text.toUpperCase();
+                pdf.setTextColor(0, 0, 0); // black text
+                pdf.setFont("helvetica", "bold");
+                pdf.setFontSize(8);
+                
+                const textWidth = pdf.getTextWidth(uppercaseText);
+                const textX = currentX + (photoWidth - textWidth) / 2;
+                const textY = nameplateY + (nameplateHeight / 2) + 1.5;
+                
+                pdf.text(uppercaseText, textX, textY);
+            }
+            
+            // Move to next column
+            currentX += photoWidth + gapX;
+            colIndex++;
         }
-        
-        // 3. Draw Nameplate conditionally
-        const text = img.nameText ? img.nameText.trim() : "";
-        
-        if (text !== "") {
-            const nameplateHeight = 7;
-            const nameplateY = currentY + photoHeight - nameplateHeight;
-            pdf.setFillColor(255, 255, 255); // white
-            pdf.setDrawColor(0, 0, 0); // black border
-            pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
-            
-            // 4. Draw Text
-            const uppercaseText = text.toUpperCase();
-            pdf.setTextColor(0, 0, 0); // black text
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(8);
-            
-            const textWidth = pdf.getTextWidth(uppercaseText);
-            const textX = currentX + (photoWidth - textWidth) / 2;
-            const textY = nameplateY + (nameplateHeight / 2) + 1.5;
-            
-            pdf.text(uppercaseText, textX, textY);
-        }
-        
-        // Move to next column
-        currentX += photoWidth + gapX;
-        colIndex++;
     });
     
     pdf.save("Batch_Studio_Photos.pdf");
