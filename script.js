@@ -2598,15 +2598,19 @@ function renderStudioGrid() {
         let loaderHtml = img.isLoading ? 
             `<div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-10">
                 <i class="fas fa-circle-notch fa-spin text-white text-2xl mb-2"></i>
-                <span class="text-white text-[10px] font-mono">Processing...</span>
+                <span class="text-white text-[10px] font-mono mt-2">Processing...</span>
             </div>` : '';
 
+        // Conditional display for nameplate
+        const hasName = img.nameText && img.nameText.trim() !== "";
+        const nameplateClass = hasName ? "studio-nameplate" : "studio-nameplate hidden-el";
+        
         card.innerHTML = `
             <div class="studio-img-wrapper" style="background-color: ${bgColor};">
                 ${loaderHtml}
-                <img src="${imgSrc}" alt="Studio Photo">
-                <div class="studio-nameplate">
-                    <span id="nameplate-text-${index}">${img.nameText || 'NAME/RANK'}</span>
+                <img src="${imgSrc}" alt="Studio Photo" style="background-color: transparent;">
+                <div class="${nameplateClass}" id="nameplate-container-${index}">
+                    <span id="nameplate-text-${index}">${hasName ? img.nameText.toUpperCase() : ''}</span>
                 </div>
             </div>
             <input type="text" class="input-premium w-full mt-2 px-2 py-1 text-xs text-center font-mono rounded" placeholder="Enter Name..." value="${img.nameText}" oninput="updateStudioName(${index}, this.value)">
@@ -2618,9 +2622,14 @@ function renderStudioGrid() {
 
 function updateStudioName(index, value) {
     studioImages[index].nameText = value;
-    const nameplate = document.getElementById(`nameplate-text-${index}`);
-    if (nameplate) {
-        nameplate.innerText = value.trim() === "" ? "NAME/RANK" : value;
+    const nameplateContainer = document.getElementById(`nameplate-container-${index}`);
+    const nameplateText = document.getElementById(`nameplate-text-${index}`);
+    
+    if (value.trim() === "") {
+        if(nameplateContainer) nameplateContainer.classList.add('hidden-el');
+    } else {
+        if(nameplateContainer) nameplateContainer.classList.remove('hidden-el');
+        if(nameplateText) nameplateText.innerText = value.toUpperCase();
     }
 }
 
@@ -2636,8 +2645,9 @@ async function processSingleBG(index) {
     renderStudioGrid();
     
     try {
-        // Point this to your actual backend domain if it's hosted elsewhere
-        const API_ENDPOINT = "https://school-backend.onrender.com/api/remove-bg"; 
+        // Change to your actual backend domain, e.g., http://localhost:10000/api/remove-bg for local testing
+        // or https://your-backend-app.onrender.com/api/remove-bg for production.
+        const API_ENDPOINT = "http://localhost:10000/api/remove-bg"; 
         
         const response = await fetch(API_ENDPOINT, {
             method: 'POST',
@@ -2751,25 +2761,28 @@ window.generateA4PDF = function() {
             console.error("Failed to add image to PDF", e);
         }
         
-        // 3. Draw Nameplate (White Rectangle at bottom, e.g., 7mm height)
-        const nameplateHeight = 7;
-        const nameplateY = currentY + photoHeight - nameplateHeight;
-        pdf.setFillColor(255, 255, 255); // white
-        pdf.setDrawColor(0, 0, 0); // black border
-        pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
+        // 3. Draw Nameplate conditionally
+        const text = img.nameText ? img.nameText.trim() : "";
         
-        // 4. Draw Text
-        let text = img.nameText.trim() === "" ? 'NAME/RANK' : img.nameText;
-        text = text.toUpperCase();
-        pdf.setTextColor(0, 0, 0); // black text
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(8);
-        
-        const textWidth = pdf.getTextWidth(text);
-        const textX = currentX + (photoWidth - textWidth) / 2;
-        const textY = nameplateY + (nameplateHeight / 2) + 1.5;
-        
-        pdf.text(text, textX, textY);
+        if (text !== "") {
+            const nameplateHeight = 7;
+            const nameplateY = currentY + photoHeight - nameplateHeight;
+            pdf.setFillColor(255, 255, 255); // white
+            pdf.setDrawColor(0, 0, 0); // black border
+            pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
+            
+            // 4. Draw Text
+            const uppercaseText = text.toUpperCase();
+            pdf.setTextColor(0, 0, 0); // black text
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(8);
+            
+            const textWidth = pdf.getTextWidth(uppercaseText);
+            const textX = currentX + (photoWidth - textWidth) / 2;
+            const textY = nameplateY + (nameplateHeight / 2) + 1.5;
+            
+            pdf.text(uppercaseText, textX, textY);
+        }
         
         // Move to next column
         currentX += photoWidth + gapX;
