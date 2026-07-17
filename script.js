@@ -2559,17 +2559,46 @@ document.getElementById('studio-upload')?.addEventListener('change', function(e)
     Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = (event) => {
-            const newIndex = studioImages.length;
-            studioImages.push({
-                id: Date.now() + Math.random().toString(36).substr(2, 9),
-                originalBase64: event.target.result,
-                processedBase64: null,
-                nameText: "",
-                isProcessed: false,
-                isLoading: false
-            });
-            renderStudioGrid();
-            processSingleBG(newIndex);
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 800;
+                const MAX_HEIGHT = 800;
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Compress to JPEG to fix 413 Payload Too Large on API
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                
+                const newIndex = studioImages.length;
+                studioImages.push({
+                    id: Date.now() + Math.random().toString(36).substr(2, 9),
+                    originalBase64: compressedBase64,
+                    processedBase64: null,
+                    nameText: "",
+                    isProcessed: false,
+                    isLoading: false
+                });
+                renderStudioGrid();
+                processSingleBG(newIndex);
+            };
+            img.src = event.target.result;
         };
         reader.readAsDataURL(file);
     });
@@ -2770,65 +2799,62 @@ window.generateA4PDF = function() {
     let colIndex = 0;
     
     studioImages.forEach((img, idx) => {
-        // Generate 30 copies for each photo to fill a full A4 page
-        for (let copy = 0; copy < 30; copy++) {
-            // Wrap to next line if needed
-            if (colIndex >= cols) {
-                colIndex = 0;
-                currentX = marginX;
-                currentY += photoHeight + gapY;
-            }
-            
-            // Check for page overflow
-            if (currentY + photoHeight > 297 - marginY) {
-                pdf.addPage();
-                currentX = marginX;
-                currentY = marginY;
-                colIndex = 0;
-            }
-            
-            // 1. Draw Background Color Rectangle
-            pdf.setFillColor(r, g, b);
-            pdf.rect(currentX, currentY, photoWidth, photoHeight, 'F');
-            
-            // 2. Draw Image
-            const imgData = img.processedBase64 || img.originalBase64;
-            try {
-                let format = 'JPEG';
-                if(imgData.includes('image/png')) format = 'PNG';
-                
-                pdf.addImage(imgData, format, currentX, currentY, photoWidth, photoHeight);
-            } catch(e) {
-                console.error("Failed to add image to PDF", e);
-            }
-            
-            // 3. Draw Nameplate conditionally (ONLY on first copy)
-            const text = img.nameText ? img.nameText.trim() : "";
-            
-            if (copy === 0 && text !== "") {
-                const nameplateHeight = 7;
-                const nameplateY = currentY + photoHeight - nameplateHeight;
-                pdf.setFillColor(255, 255, 255); // white
-                pdf.setDrawColor(0, 0, 0); // black border
-                pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
-                
-                // 4. Draw Text
-                const uppercaseText = text.toUpperCase();
-                pdf.setTextColor(0, 0, 0); // black text
-                pdf.setFont("helvetica", "bold");
-                pdf.setFontSize(8);
-                
-                const textWidth = pdf.getTextWidth(uppercaseText);
-                const textX = currentX + (photoWidth - textWidth) / 2;
-                const textY = nameplateY + (nameplateHeight / 2) + 1.5;
-                
-                pdf.text(uppercaseText, textX, textY);
-            }
-            
-            // Move to next column
-            currentX += photoWidth + gapX;
-            colIndex++;
+        // Wrap to next line if needed
+        if (colIndex >= cols) {
+            colIndex = 0;
+            currentX = marginX;
+            currentY += photoHeight + gapY;
         }
+        
+        // Check for page overflow
+        if (currentY + photoHeight > 297 - marginY) {
+            pdf.addPage();
+            currentX = marginX;
+            currentY = marginY;
+            colIndex = 0;
+        }
+        
+        // 1. Draw Background Color Rectangle
+        pdf.setFillColor(r, g, b);
+        pdf.rect(currentX, currentY, photoWidth, photoHeight, 'F');
+        
+        // 2. Draw Image
+        const imgData = img.processedBase64 || img.originalBase64;
+        try {
+            let format = 'JPEG';
+            if(imgData.includes('image/png')) format = 'PNG';
+            
+            pdf.addImage(imgData, format, currentX, currentY, photoWidth, photoHeight);
+        } catch(e) {
+            console.error("Failed to add image to PDF", e);
+        }
+        
+        // 3. Draw Nameplate conditionally
+        const text = img.nameText ? img.nameText.trim() : "";
+        
+        if (text !== "") {
+            const nameplateHeight = 7;
+            const nameplateY = currentY + photoHeight - nameplateHeight;
+            pdf.setFillColor(255, 255, 255); // white
+            pdf.setDrawColor(0, 0, 0); // black border
+            pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
+            
+            // 4. Draw Text
+            const uppercaseText = text.toUpperCase();
+            pdf.setTextColor(0, 0, 0); // black text
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(8);
+            
+            const textWidth = pdf.getTextWidth(uppercaseText);
+            const textX = currentX + (photoWidth - textWidth) / 2;
+            const textY = nameplateY + (nameplateHeight / 2) + 1.5;
+            
+            pdf.text(uppercaseText, textX, textY);
+        }
+        
+        // Move to next column
+        currentX += photoWidth + gapX;
+        colIndex++;
     });
     
     pdf.save("Batch_Studio_Photos.pdf");
