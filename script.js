@@ -2562,29 +2562,42 @@ document.getElementById('studio-upload')?.addEventListener('change', function(e)
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 800;
-                const MAX_HEIGHT = 800;
-                let width = img.width;
-                let height = img.height;
+                // Standard passport ratio is 35:45 (or 7:9)
+                const TARGET_WIDTH = 350;
+                const TARGET_HEIGHT = 450;
+                canvas.width = TARGET_WIDTH;
+                canvas.height = TARGET_HEIGHT;
                 
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-                canvas.width = width;
-                canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
                 
-                // Compress to JPEG to fix 413 Payload Too Large on API
-                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                // Calculate cover cropping (fill the canvas, center crop)
+                const imgRatio = img.width / img.height;
+                const targetRatio = TARGET_WIDTH / TARGET_HEIGHT;
+                let sWidth = img.width;
+                let sHeight = img.height;
+                let sx = 0;
+                let sy = 0;
+                
+                if (imgRatio > targetRatio) {
+                    // Image is wider than passport format, crop sides
+                    sWidth = img.height * targetRatio;
+                    sx = (img.width - sWidth) / 2;
+                } else {
+                    // Image is taller than passport format, crop top/bottom
+                    // Usually we want to keep the top (head) so we shift sy slightly higher rather than absolute center
+                    sHeight = img.width / targetRatio;
+                    sy = (img.height - sHeight) * 0.2; 
+                }
+                
+                // Fill background with white just in case of transparent uploads
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+                
+                // Draw cropped image
+                ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+                
+                // Compress to JPEG for high-speed API payload
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.9);
                 
                 const newIndex = studioImages.length;
                 studioImages.push({
@@ -2713,8 +2726,6 @@ async function processSingleBG(index) {
     renderStudioGrid();
     
     try {
-        // Change to your actual backend domain, e.g., http://localhost:10000/api/remove-bg for local testing
-        // or https://your-backend-app.onrender.com/api/remove-bg for production.
         const API_ENDPOINT = "https://school-backend-zlgy.onrender.com/api/remove-bg"; 
         
         const response = await fetch(API_ENDPOINT, {
@@ -2725,6 +2736,10 @@ async function processSingleBG(index) {
             body: JSON.stringify({ imageUrl: studioImages[index].originalBase64 })
         });
         
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
         if (data.success && data.base64) {
@@ -2732,11 +2747,11 @@ async function processSingleBG(index) {
             studioImages[index].isProcessed = true;
         } else {
             console.error("BG Removal failed for index", index, data.error);
-            if(window.showToast) window.showToast("BG Removal Failed!", "#e11d48");
+            if(window.showToast) window.showToast(`BG Fail: ${data.error || "Unknown Error"}`, "#e11d48");
         }
     } catch (error) {
         console.error("BG Removal API error for index", index, error);
-        if(window.showToast) window.showToast("API Connection Error!", "#e11d48");
+        if(window.showToast) window.showToast(`API ERR: ${error.message}`, "#e11d48");
     } finally {
         studioImages[index].isLoading = false;
         renderStudioGrid();
