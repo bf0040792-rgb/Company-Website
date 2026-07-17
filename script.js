@@ -2545,3 +2545,236 @@ document.querySelectorAll('.menu-item').forEach(btn => {
 setTimeout(() => {
     if(window.loadGlobalAnalyticsDashboard) window.loadGlobalAnalyticsDashboard();
 }, 2000);
+
+// ==========================================
+// 🛡️ MS STUDIO (BATCH PHOTO PROCESSOR) 🛡️
+// ==========================================
+
+let studioImages = [];
+
+document.getElementById('studio-upload')?.addEventListener('change', function(e) {
+    const files = e.target.files;
+    if (!files.length) return;
+    
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            studioImages.push({
+                id: Date.now() + Math.random().toString(36).substr(2, 9),
+                originalBase64: event.target.result,
+                processedBase64: null,
+                nameText: "",
+                isProcessed: false,
+                isLoading: false
+            });
+            renderStudioGrid();
+        };
+        reader.readAsDataURL(file);
+    });
+    // Reset input
+    this.value = '';
+});
+
+document.getElementById('studio-bg-color')?.addEventListener('input', function(e) {
+    const color = e.target.value;
+    document.querySelectorAll('.studio-img-wrapper').forEach(el => {
+        el.style.backgroundColor = color;
+    });
+});
+
+function renderStudioGrid() {
+    const grid = document.getElementById('studio-grid');
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    const bgColor = document.getElementById('studio-bg-color').value || '#FF0000';
+    
+    studioImages.forEach((img, index) => {
+        const imgSrc = img.processedBase64 || img.originalBase64;
+        
+        const card = document.createElement('div');
+        card.className = 'studio-card';
+        
+        let loaderHtml = img.isLoading ? 
+            `<div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-10">
+                <i class="fas fa-circle-notch fa-spin text-white text-2xl mb-2"></i>
+                <span class="text-white text-[10px] font-mono">Processing...</span>
+            </div>` : '';
+
+        card.innerHTML = `
+            <div class="studio-img-wrapper" style="background-color: ${bgColor};">
+                ${loaderHtml}
+                <img src="${imgSrc}" alt="Studio Photo">
+                <div class="studio-nameplate">
+                    <span id="nameplate-text-${index}">${img.nameText || 'NAME/RANK'}</span>
+                </div>
+            </div>
+            <input type="text" class="input-premium w-full mt-2 px-2 py-1 text-xs text-center font-mono rounded" placeholder="Enter Name..." value="${img.nameText}" oninput="updateStudioName(${index}, this.value)">
+            <button onclick="removeStudioImage(${index})" class="mt-2 text-rose-500 text-[10px] hover:text-rose-400 font-mono"><i class="fas fa-trash"></i> Remove</button>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function updateStudioName(index, value) {
+    studioImages[index].nameText = value;
+    const nameplate = document.getElementById(`nameplate-text-${index}`);
+    if (nameplate) {
+        nameplate.innerText = value.trim() === "" ? "NAME/RANK" : value;
+    }
+}
+
+function removeStudioImage(index) {
+    studioImages.splice(index, 1);
+    renderStudioGrid();
+}
+
+async function processSingleBG(index) {
+    if(studioImages[index].isProcessed || studioImages[index].isLoading) return;
+    
+    studioImages[index].isLoading = true;
+    renderStudioGrid();
+    
+    try {
+        // Point this to your actual backend domain if it's hosted elsewhere
+        const API_ENDPOINT = "https://school-backend.onrender.com/api/remove-bg"; 
+        
+        const response = await fetch(API_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ imageUrl: studioImages[index].originalBase64 })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.base64) {
+            studioImages[index].processedBase64 = data.base64;
+            studioImages[index].isProcessed = true;
+        } else {
+            console.error("BG Removal failed for index", index, data.error);
+            if(window.showToast) window.showToast("BG Removal Failed!", "#e11d48");
+        }
+    } catch (error) {
+        console.error("BG Removal API error for index", index, error);
+        if(window.showToast) window.showToast("API Connection Error!", "#e11d48");
+    } finally {
+        studioImages[index].isLoading = false;
+        renderStudioGrid();
+    }
+}
+
+window.processAllBG = async function() {
+    if(studioImages.length === 0) {
+        if(window.showToast) window.showToast("No images to process!", "#e11d48");
+        return;
+    }
+    
+    if(window.showToast) window.showToast("Starting Batch Background Removal...", "#a855f7");
+    
+    for (let i = 0; i < studioImages.length; i++) {
+        await processSingleBG(i);
+    }
+    
+    if(window.showToast) window.showToast("Batch Processing Complete!", "#10b981");
+}
+
+window.generateA4PDF = function() {
+    if (!studioImages.length) {
+        if(window.showToast) window.showToast("No images to export!", "#e11d48");
+        return;
+    }
+    
+    if(window.showToast) window.showToast("Generating A4 Grid PDF...", "#10b981");
+    
+    // A4 Dimensions in mm: 210 x 297
+    const pdf = new window.jspdf.jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+    });
+    
+    const bgColorHex = document.getElementById('studio-bg-color').value || '#FF0000';
+    // Convert hex to rgb
+    const r = parseInt(bgColorHex.slice(1, 3), 16) || 255;
+    const g = parseInt(bgColorHex.slice(3, 5), 16) || 0;
+    const b = parseInt(bgColorHex.slice(5, 7), 16) || 0;
+    
+    const photoWidth = 35;
+    const photoHeight = 45;
+    const cols = 5;
+    
+    // Calculate margins and gaps
+    const totalWidth = 210;
+    const marginX = 10;
+    const marginY = 10;
+    // Available width = 210 - (2 * 10) = 190.
+    // 5 photos = 5 * 35 = 175.
+    // Remaining = 190 - 175 = 15.
+    // 4 gaps = 15 / 4 = 3.75 mm gap.
+    const gapX = 3.75;
+    const gapY = 5; // vertical gap
+    
+    let currentX = marginX;
+    let currentY = marginY;
+    let colIndex = 0;
+    
+    studioImages.forEach((img, idx) => {
+        // Wrap to next line if needed
+        if (colIndex >= cols) {
+            colIndex = 0;
+            currentX = marginX;
+            currentY += photoHeight + gapY;
+        }
+        
+        // Check for page overflow
+        if (currentY + photoHeight > 297 - marginY) {
+            pdf.addPage();
+            currentX = marginX;
+            currentY = marginY;
+            colIndex = 0;
+        }
+        
+        // 1. Draw Background Color Rectangle
+        pdf.setFillColor(r, g, b);
+        pdf.rect(currentX, currentY, photoWidth, photoHeight, 'F');
+        
+        // 2. Draw Image
+        const imgData = img.processedBase64 || img.originalBase64;
+        try {
+            let format = 'JPEG';
+            if(imgData.includes('image/png')) format = 'PNG';
+            
+            pdf.addImage(imgData, format, currentX, currentY, photoWidth, photoHeight);
+        } catch(e) {
+            console.error("Failed to add image to PDF", e);
+        }
+        
+        // 3. Draw Nameplate (White Rectangle at bottom, e.g., 7mm height)
+        const nameplateHeight = 7;
+        const nameplateY = currentY + photoHeight - nameplateHeight;
+        pdf.setFillColor(255, 255, 255); // white
+        pdf.setDrawColor(0, 0, 0); // black border
+        pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
+        
+        // 4. Draw Text
+        let text = img.nameText.trim() === "" ? 'NAME/RANK' : img.nameText;
+        text = text.toUpperCase();
+        pdf.setTextColor(0, 0, 0); // black text
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+        
+        const textWidth = pdf.getTextWidth(text);
+        const textX = currentX + (photoWidth - textWidth) / 2;
+        const textY = nameplateY + (nameplateHeight / 2) + 1.5;
+        
+        pdf.text(text, textX, textY);
+        
+        // Move to next column
+        currentX += photoWidth + gapX;
+        colIndex++;
+    });
+    
+    pdf.save("Batch_Studio_Photos.pdf");
+}

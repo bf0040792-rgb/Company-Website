@@ -647,6 +647,7 @@
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-aadhaar-search"><i class="fas fa-fingerprint text-amber-400 w-5 text-center"></i> Identity Search</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-staff"><i class="fas fa-users-cog text-emerald-400 w-5 text-center"></i> Global Staff</button>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-feature-toggles"><i class="fas fa-toggle-on text-pink-400 w-5 text-center"></i> Feature Toggles</button>
+                    <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-ms-studio"><i class="fas fa-camera-retro text-purple-400 w-5 text-center"></i> MS Studio</button>
                     
                     <p class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">Finance & Auth</p>
                     <button class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs" data-target="tab-school-payment"><i class="fas fa-coins text-emerald-500 w-5 text-center"></i> Billing Ledger</button>
@@ -874,6 +875,30 @@
                                 </label>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div id="tab-ms-studio" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)]"></div>
+                        <h3 class="text-lg font-display font-bold text-white mb-4"><i class="fas fa-camera-retro text-purple-400 drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]"></i> MS Studio (Batch Photo Processor)</h3>
+                        <div class="flex flex-wrap gap-4 items-end mb-6">
+                            <div class="flex-1 min-w-[200px]">
+                                <label class="text-[10px] font-mono text-purple-400/70 uppercase block mb-1">Upload Photos</label>
+                                <input type="file" id="studio-upload" multiple accept="image/*" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-mono text-purple-400/70 uppercase block mb-1">BG Color</label>
+                                <input type="color" id="studio-bg-color" value="#FF0000" class="w-12 h-[38px] rounded-lg cursor-pointer bg-slateBase border border-purple-500/30 p-1">
+                            </div>
+                            <button onclick="processAllBG()" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-2 shadow-[0_0_10px_rgba(168,85,247,0.4)]">
+                                <i class="fas fa-magic"></i> Remove BG (All)
+                            </button>
+                            <button onclick="generateA4PDF()" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-2 shadow-[0_0_10px_rgba(16,185,129,0.4)]">
+                                <i class="fas fa-file-pdf"></i> Download A4 PDF
+                            </button>
+                        </div>
+                        <div id="studio-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-6"></div>
                     </div>
                 </div>
 
