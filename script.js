@@ -2686,7 +2686,7 @@ async function processSingleBG(index) {
     try {
         // Change to your actual backend domain, e.g., http://localhost:10000/api/remove-bg for local testing
         // or https://your-backend-app.onrender.com/api/remove-bg for production.
-        const API_ENDPOINT = "http://localhost:10000/api/remove-bg"; 
+        const API_ENDPOINT = "https://school-backend-zlgy.onrender.com/api/remove-bg"; 
         
         const response = await fetch(API_ENDPOINT, {
             method: 'POST',
@@ -2770,8 +2770,8 @@ window.generateA4PDF = function() {
     let colIndex = 0;
     
     studioImages.forEach((img, idx) => {
-        // Generate 5 copies for each photo
-        for (let copy = 0; copy < 5; copy++) {
+        // Generate 30 copies for each photo to fill a full A4 page
+        for (let copy = 0; copy < 30; copy++) {
             // Wrap to next line if needed
             if (colIndex >= cols) {
                 colIndex = 0;
