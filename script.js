@@ -2664,20 +2664,23 @@ function renderStudioGrid() {
     });
 }
 
-function updateStudioName(index, value) {
-    studioImages[index].nameText = value;
-    const nameplateContainer = document.getElementById(`nameplate-container-${index}`);
-    const nameplateText = document.getElementById(`nameplate-text-${index}`);
-    
-    if (value.trim() === "") {
-        if(nameplateContainer) nameplateContainer.classList.add('hidden-el');
-    } else {
-        if(nameplateContainer) nameplateContainer.classList.remove('hidden-el');
-        if(nameplateText) nameplateText.innerText = value.toUpperCase();
+window.updateStudioName = function(index, value) {
+    if (studioImages[index]) {
+        studioImages[index].nameText = value;
+        // Update live DOM
+        const nameplateContainer = document.getElementById(`nameplate-container-${index}`);
+        const nameplateText = document.getElementById(`nameplate-text-${index}`);
+        
+        if (value.trim() === '') {
+            if(nameplateContainer) nameplateContainer.classList.add('hidden-el');
+        } else {
+            if(nameplateContainer) nameplateContainer.classList.remove('hidden-el');
+            if(nameplateText) nameplateText.innerText = value.toUpperCase();
+        }
     }
 }
 
-function removeStudioImage(index) {
+window.removeStudioImage = function(index) {
     studioImages.splice(index, 1);
     renderStudioGrid();
 }
@@ -2703,6 +2706,21 @@ window.saveStudioPreset = function() {
     localStorage.setItem('studio_preset_bg', color);
     if(window.showToast) window.showToast("Preset Saved!", "#10b981");
 };
+
+window.loadStudioPreset = function() {
+    const saved = localStorage.getItem('studio_preset_bg');
+    if (saved) {
+        const colorInput = document.getElementById('studio-bg-color');
+        if(colorInput) {
+            colorInput.value = saved;
+        }
+    }
+};
+
+// Call load preset on script execute
+setTimeout(() => {
+    window.loadStudioPreset();
+}, 500);
 
 // Load preset on load
 setTimeout(() => {
@@ -2858,9 +2876,18 @@ window.generateA4PDF = function() {
             const uppercaseText = text.toUpperCase();
             pdf.setTextColor(0, 0, 0); // black text
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(8);
             
-            const textWidth = pdf.getTextWidth(uppercaseText);
+            let fontSize = 8;
+            pdf.setFontSize(fontSize);
+            let textWidth = pdf.getTextWidth(uppercaseText);
+            
+            // Auto-adjust font size if name is too long
+            while (textWidth > photoWidth - 2 && fontSize > 3) {
+                fontSize -= 0.5;
+                pdf.setFontSize(fontSize);
+                textWidth = pdf.getTextWidth(uppercaseText);
+            }
+            
             const textX = currentX + (photoWidth - textWidth) / 2;
             const textY = nameplateY + (nameplateHeight / 2) + 1.5;
             
