@@ -32,73 +32,12 @@ const firebaseConfig = {
 };
 
 const app = firebase.initializeApp(firebaseConfig);
-// TEMPORARILY DISABLED: Firebase App Check/reCAPTCHA while testing Supabase messaging on the GitHub domain.
-// const appCheck = firebase.appCheck();
-// appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
+const appCheck = firebase.appCheck();
+appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
 
 const auth = firebase.auth(app);
 const db = firebase.firestore(app);
 const storage = firebase.storage(app);
-
-const SUPABASE_URL = "https://lxhamuwhsohdrhjwhlfi.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ySbDycWqKv_ApSIho-ZlHQ_U_u5b5lq";
-
-let firebaseAuthInitialized = false;
-const firebaseAuthReady = new Promise(resolve => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-        firebaseAuthInitialized = true;
-        unsubscribe();
-        resolve(user);
-    });
-});
-
-const getFirebaseAccessToken = async (forceRefresh = false) => {
-    const user = auth.currentUser || (!firebaseAuthInitialized ? await firebaseAuthReady : null);
-    if (!user || user !== auth.currentUser) {
-        throw new Error("Firebase authentication is required.");
-    }
-
-    const token = await user.getIdToken(forceRefresh);
-    if (!token) throw new Error("Unable to obtain Firebase ID token.");
-    return token;
-};
-
-const getSupabaseAccessToken = async () => {
-    if (!auth.currentUser && firebaseAuthInitialized) return null;
-    try {
-        return await getFirebaseAccessToken();
-    } catch (error) {
-        if (!auth.currentUser) return null;
-        throw error;
-    }
-};
-
-const firebaseAuthenticatedFetch = async (input, init = {}) => {
-    const token = await getFirebaseAccessToken();
-    const headers = new Headers(input instanceof Request ? input.headers : undefined);
-    new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
-    headers.set("Authorization", `Bearer ${token}`);
-    return fetch(input, { ...init, headers });
-};
-
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    accessToken: getSupabaseAccessToken,
-    auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-    },
-    global: {
-        fetch: firebaseAuthenticatedFetch,
-        headers: { "X-Client-Info": "coreedu-company-firebase-bridge" }
-    }
-});
-window.supabaseClient = supabaseClient;
-
-window.syncSupabaseSessionWithFirebase = async (user = auth.currentUser) => {
-    if (!user || user !== auth.currentUser) return null;
-    return getFirebaseAccessToken(true);
-};
 
 // Initialize Theme
 if (localStorage.getItem('master_theme') === 'light') {
@@ -328,7 +267,6 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         try {
-            await window.syncSupabaseSessionWithFirebase(user);
             const ud = await db.collection("users").doc(user.uid).get();
             if (!ud.exists || ud.data().role === "developer") {
                 if (!ud.exists) await db.collection("users").doc(user.uid).set({ email: user.email, role: "developer", name: "Super Admin", status: "active" });
@@ -801,11 +739,11 @@ window.showStaffDetail = (sId) => {
 window.sendDirectMessage = (rid, sid, typ) => {
     document.getElementById("msg-prompt-input").value = ""; openCustomModal("msg-prompt-modal");
     document.getElementById("msg-prompt-confirm").onclick = async () => {
-        const body = document.getElementById("msg-prompt-input").value.trim(); if (!body) return;
-        await getFirebaseAccessToken(true);
-        const { error } = await supabaseClient.from("direct_messages").insert({ sender_id: superAdminUid, sender_name: "Super Admin", sender_role: "developer", school_id: sid, receiver_id: rid, receiver_type: typ, title: "SYSTEM DIRECTIVE", body, is_read: false });
-        if (error) return window.showToast("TRANSMISSION FAILED: " + error.message, "#e11d48");
-        window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
+        const m = document.getElementById("msg-prompt-input").value; if (!m) return;
+        try {
+            await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+            window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
+        } catch (e) { }
     };
 };
 
@@ -902,7 +840,7 @@ async function checkAndSendBillingAlerts() {
                 if (dD >= 30) {
                     if (!dt.paymentAlertSentAt) {
                         const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
-                        cS.forEach(async (cD) => { await supabaseClient.from("direct_messages").insert({ sender_id: superAdminUid, sender_name: "Super Admin", sender_role: "developer", school_id: d.id, receiver_id: cD.id, receiver_type: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, is_read: false }); });
+                        cS.forEach(async (cD) => { await db.collection("direct_messages").doc().set({ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); });
                         await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: nw });
                     } else {
                         const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60);
@@ -1466,9 +1404,9 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // ==========================================
 // 12. BROADCAST, INBOX & EMERGENCY TICKER
 // ==========================================
-window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const { data: m, error } = await supabaseClient.from("direct_messages").select("*").eq("receiver_type", "developer").order("created_at", { ascending: false }); if (error) throw error; let ht = ""; (m || []).forEach(msg => { let ts = msg.created_at ? new Date(msg.created_at).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.sender_role || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.sender_name || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title || ''}</strong><br><span class="text-[10px] text-coolLight">${msg.body || ''}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.sender_id}', '${msg.school_id}', '${msg.sender_role}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { console.error(e); } };
-window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { const { error } = await supabaseClient.from("direct_messages").delete().eq("id", mid); if (error) return window.showToast(error.message, "#e11d48"); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
-window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const body = document.getElementById("reply-prompt-input").value.trim(); if (!body) return; try { await getFirebaseAccessToken(true); const { error } = await supabaseClient.from("direct_messages").insert({ sender_id: superAdminUid, sender_role: "developer", sender_name: "Super Admin", school_id: sid, receiver_id: rid, receiver_type: yp, title: "SYSTEM DIRECTIVE", body, is_read: false }); if (error) throw error; window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { window.showToast(e.message, "#e11d48"); } }; };
+window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await db.collection("direct_messages").where("receiverType", "==", "developer").get(); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d.data() })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { } };
+window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await db.collection("direct_messages").doc(mid).delete(); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
+window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { } }; };
 
 // Removed Broadcast Event Listeners for UI Redesign
 
@@ -2175,7 +2113,6 @@ let currentCommSchoolId = null;
 let commSchools = [];
 let stopCommSchoolListener = null;
 let stopCommMessageListener = null;
-let commMessageChannel = null;
 
 function renderCommSchools(searchTerm = "") {
     const list = document.getElementById("comm-school-list");
@@ -2202,12 +2139,18 @@ function renderCommSchools(searchTerm = "") {
     if (!filteredSchools.length) list.innerHTML = '<div class="p-5 text-center text-coolGray text-xs font-mono">NO MATCHING SCHOOLS</div>';
 }
 
-window.loadCommHubSchools = async () => {
+window.loadCommHubSchools = () => {
     const list = document.getElementById("comm-school-list");
     if (!list) return;
-    const { data, error } = await supabaseClient.from("schools").select("id, school_name, logo_url").order("school_name");
-    if (!error) {
-        commSchools = (data || []).map(s => ({ id: s.id, name: s.school_name || 'Unnamed Node', logoUrl: s.logo_url || '' }));
+    if (!stopCommSchoolListener) {
+        stopCommSchoolListener = db.collection("schools").onSnapshot(snapshot => {
+            commSchools = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, name: data.schoolName || data.name || 'Unnamed Node', logoUrl: data.logoUrl || '' };
+            }).sort((a, b) => a.name.localeCompare(b.name));
+            renderCommSchools(document.getElementById("comm-search")?.value || "");
+        });
+    } else {
         renderCommSchools(document.getElementById("comm-search")?.value || "");
     }
     const search = document.getElementById("comm-search");
@@ -2217,7 +2160,7 @@ window.loadCommHubSchools = async () => {
     }
 };
 
-window.openCommChat = async (schoolId, schoolName, selectedItem = null) => {
+window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
     currentCommSchoolId = schoolId;
     document.getElementById("comm-active-school-name").innerText = schoolName;
     document.getElementById("comm-active-school-id").innerText = "ID: " + schoolId;
@@ -2225,43 +2168,49 @@ window.openCommChat = async (schoolId, schoolName, selectedItem = null) => {
 
     const historyBox = document.getElementById("comm-chat-history");
     if (!historyBox) return;
-    if (commMessageChannel) await supabaseClient.removeChannel(commMessageChannel);
-    const renderMessages = async () => {
-        const { data: messages, error } = await supabaseClient.from("school_communications").select("*").eq("school_id", schoolId).order("created_at", { ascending: true });
-        if (error) throw error;
-        historyBox.innerHTML = '';
-        if (!messages?.length) {
-            historyBox.innerHTML = '<div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center"><i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i><br>End-to-End Encrypted Comms<br>No messages yet.</div>';
-            return;
-        }
-        messages.forEach(msg => {
-            const isMaster = msg.sender_role === 'developer';
-            const wrap = document.createElement("div");
-            wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
-
-            const tsMillis = msg.created_at ? new Date(msg.created_at).getTime() : 0;
-            const timeStr = tsMillis ? new Date(tsMillis).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'SENDING';
-
-            let fileHTML = '';
-            if (msg.attachment_url) {
-                fileHTML = `<a href="${msg.attachment_url}" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>`;
+    if (stopCommMessageListener) stopCommMessageListener();
+    stopCommMessageListener = db.collection("communications")
+        .where("schoolId", "==", schoolId)
+        .onSnapshot(snapshot => {
+            historyBox.innerHTML = '';
+            if (snapshot.empty) {
+                historyBox.innerHTML = '<div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center"><i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i><br>End-to-End Encrypted Comms<br>No messages yet.</div>';
+                return;
             }
 
-            wrap.innerHTML = `
+            let messages = [];
+            snapshot.forEach(doc => {
+                messages.push({ id: doc.id, ...doc.data() });
+            });
+
+            messages.sort((a, b) => timestampToMillis(a.timestamp) - timestampToMillis(b.timestamp));
+
+            messages.forEach(msg => {
+                const isMaster = msg.sender === 'master';
+                const wrap = document.createElement("div");
+                wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
+
+                const tsMillis = timestampToMillis(msg.timestamp);
+                const timeStr = tsMillis ? new Date(tsMillis).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'SENDING';
+
+                let fileHTML = '';
+                if (msg.attachmentUrl) {
+                    fileHTML = `<a href="${msg.attachmentUrl}" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>`;
+                }
+
+                wrap.innerHTML = `
                   <div class="chat-bubble ${isMaster ? 'sent' : 'received'}">
                       ${fileHTML}
-                      <span>${msg.message || ''}</span>
+                      <span>${msg.text}</span>
                       <span class="timestamp">${timeStr}</span>
                   </div>
               `;
-            historyBox.appendChild(wrap);
-        });
+                historyBox.appendChild(wrap);
+            });
 
-        // Scroll to bottom
-        historyBox.scrollTop = historyBox.scrollHeight;
-    };
-    await renderMessages();
-    commMessageChannel = supabaseClient.channel(`school-communications-${schoolId}`).on("postgres_changes", { event: "*", schema: "public", table: "school_communications", filter: `school_id=eq.${schoolId}` }, renderMessages).subscribe();
+            // Scroll to bottom
+            historyBox.scrollTop = historyBox.scrollHeight;
+        });
 };
 
 window.sendCommMessage = async () => {
@@ -2287,17 +2236,13 @@ window.sendCommMessage = async () => {
     }
 
     try {
-        await getFirebaseAccessToken(true);
-        const { error } = await supabaseClient.from("school_communications").insert({
-            school_id: currentCommSchoolId,
-            sender_id: superAdminUid,
-            sender_name: "Super Admin",
-            sender_role: "developer",
-            message: text,
-            attachment_url: attachmentUrl,
-            is_read: false
+        await db.collection("communications").add({
+            schoolId: currentCommSchoolId,
+            sender: 'master',
+            text: text,
+            attachmentUrl: attachmentUrl,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-        if (error) throw error;
         input.value = '';
         fileInput.value = '';
     } catch (err) {
@@ -2309,8 +2254,10 @@ window.clearCommHistory = async () => {
     if (!currentCommSchoolId) return;
     window.customConfirm("WIPE COMM HISTORY FOR THIS NODE?", async () => {
         try {
-            const { error } = await supabaseClient.from("school_communications").delete().eq("school_id", currentCommSchoolId);
-            if (error) throw error;
+            const batch = db.batch();
+            const docs = await db.collection("communications").where("schoolId", "==", currentCommSchoolId).get();
+            docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
             window.showToast("HISTORY WIPED", "#10b981");
         } catch (err) {
             window.showToast("ERROR: " + err.message, "#e11d48");
