@@ -43,10 +43,34 @@ const storage = firebase.storage(app);
 const SUPABASE_URL = "https://lxhamuwhsohdrhjwhlfi.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ySbDycWqKv_ApSIho-ZlHQ_U_u5b5lq";
 
+let firebaseAuthInitialized = false;
+const firebaseAuthReady = new Promise(resolve => {
+    const unsubscribe = auth.onAuthStateChanged(user => {
+        firebaseAuthInitialized = true;
+        unsubscribe();
+        resolve(user);
+    });
+});
+
 const getFirebaseAccessToken = async (forceRefresh = false) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error("Firebase authentication is required.");
-    return user.getIdToken(forceRefresh);
+    const user = auth.currentUser || (!firebaseAuthInitialized ? await firebaseAuthReady : null);
+    if (!user || user !== auth.currentUser) {
+        throw new Error("Firebase authentication is required.");
+    }
+
+    const token = await user.getIdToken(forceRefresh);
+    if (!token) throw new Error("Unable to obtain Firebase ID token.");
+    return token;
+};
+
+const getSupabaseAccessToken = async () => {
+    if (!auth.currentUser && firebaseAuthInitialized) return null;
+    try {
+        return await getFirebaseAccessToken();
+    } catch (error) {
+        if (!auth.currentUser) return null;
+        throw error;
+    }
 };
 
 const firebaseAuthenticatedFetch = async (input, init = {}) => {
@@ -58,7 +82,7 @@ const firebaseAuthenticatedFetch = async (input, init = {}) => {
 };
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    accessToken: () => getFirebaseAccessToken(),
+    accessToken: getSupabaseAccessToken,
     auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -72,7 +96,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLI
 window.supabaseClient = supabaseClient;
 
 window.syncSupabaseSessionWithFirebase = async (user = auth.currentUser) => {
-    if (!user) return null;
+    if (!user || user !== auth.currentUser) return null;
     return getFirebaseAccessToken(true);
 };
 
@@ -778,6 +802,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
     document.getElementById("msg-prompt-input").value = ""; openCustomModal("msg-prompt-modal");
     document.getElementById("msg-prompt-confirm").onclick = async () => {
         const body = document.getElementById("msg-prompt-input").value.trim(); if (!body) return;
+        await getFirebaseAccessToken(true);
         const { error } = await supabaseClient.from("direct_messages").insert({ sender_id: superAdminUid, sender_name: "Super Admin", sender_role: "developer", school_id: sid, receiver_id: rid, receiver_type: typ, title: "SYSTEM DIRECTIVE", body, is_read: false });
         if (error) return window.showToast("TRANSMISSION FAILED: " + error.message, "#e11d48");
         window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
@@ -1443,7 +1468,7 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // ==========================================
 window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const { data: m, error } = await supabaseClient.from("direct_messages").select("*").eq("receiver_type", "developer").order("created_at", { ascending: false }); if (error) throw error; let ht = ""; (m || []).forEach(msg => { let ts = msg.created_at ? new Date(msg.created_at).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.sender_role || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.sender_name || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title || ''}</strong><br><span class="text-[10px] text-coolLight">${msg.body || ''}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.sender_id}', '${msg.school_id}', '${msg.sender_role}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { console.error(e); } };
 window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { const { error } = await supabaseClient.from("direct_messages").delete().eq("id", mid); if (error) return window.showToast(error.message, "#e11d48"); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
-window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const body = document.getElementById("reply-prompt-input").value.trim(); if (!body) return; try { const { error } = await supabaseClient.from("direct_messages").insert({ sender_id: superAdminUid, sender_role: "developer", sender_name: "Super Admin", school_id: sid, receiver_id: rid, receiver_type: yp, title: "SYSTEM DIRECTIVE", body, is_read: false }); if (error) throw error; window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { window.showToast(e.message, "#e11d48"); } }; };
+window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const body = document.getElementById("reply-prompt-input").value.trim(); if (!body) return; try { await getFirebaseAccessToken(true); const { error } = await supabaseClient.from("direct_messages").insert({ sender_id: superAdminUid, sender_role: "developer", sender_name: "Super Admin", school_id: sid, receiver_id: rid, receiver_type: yp, title: "SYSTEM DIRECTIVE", body, is_read: false }); if (error) throw error; window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { window.showToast(e.message, "#e11d48"); } }; };
 
 // Removed Broadcast Event Listeners for UI Redesign
 
@@ -2262,6 +2287,7 @@ window.sendCommMessage = async () => {
     }
 
     try {
+        await getFirebaseAccessToken(true);
         const { error } = await supabaseClient.from("school_communications").insert({
             school_id: currentCommSchoolId,
             sender_id: superAdminUid,
