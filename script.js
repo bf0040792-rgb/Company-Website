@@ -32,8 +32,9 @@ const firebaseConfig = {
 };
 
 const app = firebase.initializeApp(firebaseConfig);
-const appCheck = firebase.appCheck();
-appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
+// TEMPORARILY DISABLED: Firebase App Check/reCAPTCHA while testing Supabase messaging on the GitHub domain.
+// const appCheck = firebase.appCheck();
+// appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
 
 const auth = firebase.auth(app);
 const db = firebase.firestore(app);
