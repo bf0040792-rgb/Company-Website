@@ -1031,38 +1031,131 @@ window.approveSessionUpgrade = (schoolId) => {
     });
 };
 
-const companyFeatureModules = [
-    { id: "toggle-qr-fee", name: "QR Fee Module" },
-    { id: "toggle-admit-card", name: "Admit Card Module" },
-    { id: "toggle-whatsapp", name: "WhatsApp Module" },
-    { id: "toggle-ai-assistant", name: "Core AI Assistant" }
-];
+const companyFeatureRegistry = {
+    school: [
+        { key: "dashboard", label: "Dashboard" },
+        { key: "studentsCerts", label: "Students & Certs" },
+        { key: "studentTransfer", label: "Student Transfer" },
+        { key: "admitCards", label: "Admit Cards" },
+        { key: "staffManager", label: "Staff Manager" },
+        { key: "financeFees", label: "Finance & Fees" },
+        { key: "feeApprovals", label: "Fee Approvals" },
+        { key: "academicVeto", label: "Academic Veto" },
+        { key: "noticesTicker", label: "Notices & Ticker" },
+        { key: "communicationHub", label: "Communication Hub" },
+        { key: "qrFee", label: "QR Fee Module", moduleKey: "qrFee" },
+        { key: "admitCardModule", label: "Admit Card Module", moduleKey: "admitCard" },
+        { key: "whatsapp", label: "WhatsApp Module", moduleKey: "whatsapp" },
+        { key: "transport", label: "Transport Manager", moduleKey: "transport" },
+        { key: "inventory", label: "Inventory & Assets", moduleKey: "inventory" },
+        { key: "dailyAttendance", label: "Daily Attendance", moduleKey: "attendance" },
+        { key: "changePassword", label: "Change Password" },
+        { key: "studentPortalFeatures", label: "Student Portal Features" },
+        { key: "schoolSettings", label: "School Settings" }
+    ],
+    student: [
+        { key: "profile", label: "Profile" },
+        { key: "homework", label: "Homework" },
+        { key: "fee", label: "Fee Payment" },
+        { key: "datesheet", label: "DateSheet" },
+        { key: "attendance", label: "Attendance" },
+        { key: "sms", label: "SMS" },
+        { key: "calendar", label: "Calendar Planning" },
+        { key: "idcard", label: "ID Card" },
+        { key: "syllabus", label: "Syllabus" },
+        { key: "fee-receipt", label: "Fee Receipt" },
+        { key: "admit", label: "Admit Card" },
+        { key: "gatepass", label: "Gate Pass" },
+        { key: "notifications", label: "Notifications" },
+        { key: "birthday", label: "Birthday" },
+        { key: "transport", label: "Transport" },
+        { key: "study-material", label: "Study Material" },
+        { key: "result", label: "Result" },
+        { key: "leave", label: "Leave Request" },
+        { key: "batchmate", label: "Batchmate" },
+        { key: "circular", label: "Circular" },
+        { key: "news", label: "News" },
+        { key: "assignment", label: "Assignment" },
+        { key: "complaint", label: "Complaint" },
+        { key: "online-classes", label: "Online Classes" },
+        { key: "social-media", label: "Social Media" }
+    ]
+};
 
-function setFeatureControlsBusy(isBusy) {
-    companyFeatureModules.forEach(module => {
-        const toggle = document.getElementById(module.id);
-        if (toggle) toggle.disabled = isBusy;
-    });
+const legacyStudentFeatureKeys = {
+    timetable: "datesheet",
+    notice: "notifications",
+    library: "study-material",
+    marks: "result"
+};
+let companyFeatureSettings = { school: {}, modules: {}, student: {} };
+
+function featureToggleId(group, key) {
+    return `company-feature-${group}-${key.replace(/[^a-z0-9]/gi, "-")}`;
 }
 
-function renderFeatureAccessState() {
-    companyFeatureModules.forEach(module => {
-        const toggle = document.getElementById(module.id);
-        const card = document.querySelector(`[data-feature-card="${module.name}"]`);
-        if (!toggle || !card) return;
-        const enabled = toggle.checked;
-        card.classList.toggle("is-restricted", !enabled);
-        const state = card.querySelector(".feature-state");
-        if (state) state.textContent = enabled ? "Enabled" : "Restricted";
+function removeStaticFeatureMarkup() {
+    const schoolContainer = document.getElementById("feature-toggles-container");
+    const staticSchoolGrid = schoolContainer?.nextElementSibling;
+    if (staticSchoolGrid && !staticSchoolGrid.id && staticSchoolGrid.classList.contains("grid")) staticSchoolGrid.remove();
+}
+
+function renderFeatureGroup(group, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = companyFeatureRegistry[group].map(feature => {
+        const enabled = companyFeatureSettings[group]?.[feature.key] !== false;
+        return `<label data-company-feature-card="${group}:${feature.key}" class="flex items-center justify-between gap-3 bg-slateBase/70 border ${enabled ? "border-tealAccent/25" : "border-rose-500/35 opacity-70"} rounded-xl px-4 py-3 transition">
+            <span><strong class="block text-sm text-white font-medium">${feature.label}</strong><small class="feature-state text-[10px] font-mono uppercase ${enabled ? "text-emerald-400" : "text-rose-400"}">${enabled ? "Enabled" : "Restricted"}</small></span>
+            <input id="${featureToggleId(group, feature.key)}" type="checkbox" class="accent-teal-400 h-5 w-5 shrink-0" ${enabled ? "checked" : ""} onchange="window.saveFeatureToggles('${group}', '${feature.key}', this.checked)">
+        </label>`;
+    }).join("");
+    container.classList.remove("hidden-el");
+}
+
+function setFeatureControlsBusy(isBusy) {
+    document.querySelectorAll('[id^="company-feature-"]').forEach(toggle => { toggle.disabled = isBusy; });
+    const schoolSelect = document.getElementById("featureSchoolSelect");
+    if (schoolSelect) schoolSelect.disabled = isBusy;
+}
+
+function normalizeFeatureSettings(data) {
+    const saved = data.featureSettings || {};
+    const hasSchoolPolicy = saved.school && Object.keys(saved.school).length > 0;
+    const legacyEnabled = Array.isArray(data.enabledModules) ? data.enabledModules : [];
+    const legacyNames = { qrFee: "QR Fee Module", admitCard: "Admit Card Module", whatsapp: "WhatsApp Module" };
+    const settings = { ...saved, school: {}, modules: { ...(saved.modules || {}) }, student: {} };
+
+    companyFeatureRegistry.school.forEach(feature => {
+        let enabled = hasSchoolPolicy ? saved.school[feature.key] !== false : true;
+        if (!hasSchoolPolicy && feature.moduleKey && legacyEnabled.length) {
+            enabled = legacyEnabled.includes(feature.moduleKey) || legacyEnabled.includes(legacyNames[feature.moduleKey]);
+        }
+        settings.school[feature.key] = enabled;
+        if (feature.moduleKey) settings.modules[feature.moduleKey] = enabled;
     });
+    companyFeatureRegistry.student.forEach(feature => {
+        settings.student[feature.key] = saved.student?.[feature.key] !== false;
+    });
+    Object.entries(legacyStudentFeatureKeys).forEach(([legacyKey, currentKey]) => {
+        if (saved.student && Object.prototype.hasOwnProperty.call(saved.student, legacyKey)) {
+            settings.student[currentKey] = saved.student[legacyKey] !== false;
+        }
+        settings.student[legacyKey] = settings.student[currentKey];
+    });
+    return settings;
 }
 
 window.loadFeatureTogglesForSchool = async () => {
     const sid = document.getElementById("featureSchoolSelect")?.value;
-    const container = document.getElementById("feature-toggles-container");
-    if (!container) return;
+    const schoolContainer = document.getElementById("feature-toggles-container");
+    const studentContainer = document.getElementById("feature-student-toggles-container");
+    removeStaticFeatureMarkup();
+    if (!schoolContainer || !studentContainer) return;
     if (!sid || sid === "ALL") {
-        container.classList.add("hidden-el");
+        schoolContainer.innerHTML = "";
+        studentContainer.innerHTML = "";
+        schoolContainer.classList.add("hidden-el");
         return;
     }
 
@@ -1070,43 +1163,46 @@ window.loadFeatureTogglesForSchool = async () => {
     try {
         const schoolDoc = await db.collection("schools").doc(sid).get();
         if (!schoolDoc.exists) throw new Error("School record not found");
-        const enabledModules = schoolDoc.data().enabledModules || [];
-        companyFeatureModules.forEach(module => {
-            const toggle = document.getElementById(module.id);
-            if (toggle) toggle.checked = enabledModules.includes(module.name);
-        });
-        renderFeatureAccessState();
-        container.classList.remove("hidden-el");
+        companyFeatureSettings = normalizeFeatureSettings(schoolDoc.data());
+        renderFeatureGroup("school", "feature-toggles-container");
+        renderFeatureGroup("student", "feature-student-toggles-container");
     } catch (e) {
-        container.classList.add("hidden-el");
+        schoolContainer.classList.add("hidden-el");
+        studentContainer.innerHTML = "";
         window.showToast("ERROR LOADING TOGGLES: " + e.message, "#e11d48");
     } finally {
         setFeatureControlsBusy(false);
     }
 };
 
-window.saveFeatureToggles = async () => {
+window.saveFeatureToggles = async (group, key, enabled) => {
     const sid = document.getElementById("featureSchoolSelect")?.value;
-    if (!sid || sid === "ALL") return;
+    if (!sid || sid === "ALL" || !companyFeatureRegistry[group]?.some(feature => feature.key === key)) return;
 
-    const enabledModules = companyFeatureModules
-        .filter(module => document.getElementById(module.id)?.checked)
-        .map(module => module.name);
-    const restrictedModules = companyFeatureModules
-        .map(module => module.name)
-        .filter(moduleName => !enabledModules.includes(moduleName));
-
-    renderFeatureAccessState();
+    companyFeatureSettings[group][key] = enabled;
+    if (group === "school") {
+        const feature = companyFeatureRegistry.school.find(item => item.key === key);
+        if (feature?.moduleKey) companyFeatureSettings.modules[feature.moduleKey] = enabled;
+    }
+    if (group === "student") {
+        Object.entries(legacyStudentFeatureKeys).forEach(([legacyKey, currentKey]) => {
+            if (currentKey === key) companyFeatureSettings.student[legacyKey] = enabled;
+        });
+    }
+    renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
     setFeatureControlsBusy(true);
     try {
-        await db.collection("schools").doc(sid).update({
+        const enabledModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state !== false).map(([moduleKey]) => moduleKey);
+        const restrictedModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state === false).map(([moduleKey]) => moduleKey);
+        await db.collection("schools").doc(sid).set({
+            featureSettings: companyFeatureSettings,
             enabledModules,
             restrictedModules,
             featurePolicyUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             featurePolicyUpdatedBy: superAdminUid || "hq"
-        });
-        window.showToast("MODULE ACCESS POLICY UPDATED", "#10b981");
-        window.logAudit("Updated Module Toggles", sid);
+        }, { merge: true });
+        window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
+        window.logAudit(`Updated ${group} Feature Toggle`, `${sid}:${key}:${enabled ? "ON" : "OFF"}`);
     } catch (e) {
         window.showToast("ERROR: " + e.message, "#e11d48");
         await window.loadFeatureTogglesForSchool();
