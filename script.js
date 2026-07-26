@@ -93,6 +93,7 @@ function hideLoginModal() {
 
 window.closeCustomModal = (id) => { document.getElementById(id).classList.add('hidden-el'); };
 const openCustomModal = (id) => { document.getElementById(id).classList.remove('hidden-el'); };
+window.openCustomFeatureBuilder = () => openCustomModal('custom-feature-modal');
 
 window.showToast = (message, color = "#00F0FF") => {
     const t = document.createElement('div');
@@ -1118,6 +1119,27 @@ function setFeatureControlsBusy(isBusy) {
     const schoolSelect = document.getElementById("featureSchoolSelect");
     if (schoolSelect) schoolSelect.disabled = isBusy;
 }
+
+function applyGranularSubFeatureLocks() {
+    const root = document.getElementById("tab-feature-toggles");
+    if (!root) return;
+    root.querySelectorAll("label").forEach(card => {
+        const toggles = Array.from(card.querySelectorAll("input[type='checkbox']"));
+        if (toggles.length < 2) return;
+        const mainEnabled = toggles[0].checked;
+        card.classList.toggle("opacity-60", !mainEnabled);
+        toggles.slice(1).forEach(toggle => {
+            toggle.disabled = !mainEnabled;
+            if (toggle.parentElement) toggle.parentElement.classList.toggle("opacity-40", !mainEnabled);
+        });
+    });
+}
+
+document.addEventListener("change", (event) => {
+    if (event.target && event.target.closest && event.target.closest("#tab-feature-toggles")) applyGranularSubFeatureLocks();
+});
+
+document.addEventListener("DOMContentLoaded", applyGranularSubFeatureLocks);
 
 function normalizeFeatureSettings(data) {
     const saved = data.featureSettings || {};
