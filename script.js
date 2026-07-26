@@ -1141,8 +1141,14 @@ document.addEventListener("change", (event) => {
 
 document.addEventListener("DOMContentLoaded", applyGranularSubFeatureLocks);
 
+const FEATURE_SETTINGS_COLLECTION = "feature_controls";
+
+function getFeatureSettingsDocRef(schoolId) {
+    return db.collection("schools").doc(schoolId).collection(FEATURE_SETTINGS_COLLECTION).doc("settings");
+}
+
 function normalizeFeatureSettings(data) {
-    const saved = data.featureSettings || {};
+    const saved = data.featureSettings || data || {};
     const hasSchoolPolicy = saved.school && Object.keys(saved.school).length > 0;
     const legacyEnabled = Array.isArray(data.enabledModules) ? data.enabledModules : [];
     const legacyNames = { qrFee: "QR Fee Module", admitCard: "Admit Card Module", whatsapp: "WhatsApp Module" };
@@ -1183,9 +1189,10 @@ window.loadFeatureTogglesForSchool = async () => {
 
     setFeatureControlsBusy(true);
     try {
-        const schoolDoc = await db.collection("schools").doc(sid).get();
-        if (!schoolDoc.exists) throw new Error("School record not found");
-        companyFeatureSettings = normalizeFeatureSettings(schoolDoc.data());
+        const featureDoc = await getFeatureSettingsDocRef(sid).get();
+        const schoolDoc = featureDoc.exists ? null : await db.collection("schools").doc(sid).get();
+        const featureData = featureDoc.exists ? featureDoc.data() : (schoolDoc?.exists ? schoolDoc.data() : {});
+        companyFeatureSettings = normalizeFeatureSettings(featureData);
         renderFeatureGroup("school", "feature-toggles-container");
         renderFeatureGroup("student", "feature-student-toggles-container");
     } catch (e) {
@@ -1216,12 +1223,12 @@ window.saveFeatureToggles = async (group, key, enabled) => {
     try {
         const enabledModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state !== false).map(([moduleKey]) => moduleKey);
         const restrictedModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state === false).map(([moduleKey]) => moduleKey);
-        await db.collection("schools").doc(sid).set({
+        await getFeatureSettingsDocRef(sid).set({
             featureSettings: companyFeatureSettings,
             enabledModules,
             restrictedModules,
-            featurePolicyUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            featurePolicyUpdatedBy: superAdminUid || "hq"
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: superAdminUid || "hq"
         }, { merge: true });
         window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
         window.logAudit(`Updated ${group} Feature Toggle`, `${sid}:${key}:${enabled ? "ON" : "OFF"}`);
@@ -1297,7 +1304,7 @@ window.toggleAdvancedSecurity = async (type) => {
     if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
     try { await db.collection("schools").doc(sid).update(updateObj); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { }
 };
-window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await db.collection("schools").doc(sid).set({ modules: { [flag]: isChecked } }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { } };
+window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { } };
 
 document.getElementById("csvExportBtn").addEventListener("click", async () => {
     window.showToast("COMPILING DIRECTORY...", "#00F0FF");
