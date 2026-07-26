@@ -1035,14 +1035,14 @@ window.approveSessionUpgrade = (schoolId) => {
 const companyFeatureRegistry = {
     school: [
         { key: "dashboard", label: "Dashboard" },
-        { key: "studentsCerts", label: "Students & Certs" },
+        { key: "students", label: "Students & Certs" },
         { key: "studentTransfer", label: "Student Transfer" },
         { key: "admitCards", label: "Admit Cards" },
-        { key: "staffManager", label: "Staff Manager" },
-        { key: "financeFees", label: "Finance & Fees" },
+        { key: "staff", label: "Staff Manager" },
+        { key: "finance", label: "Finance & Fees" },
         { key: "feeApprovals", label: "Fee Approvals" },
-        { key: "academicVeto", label: "Academic Veto" },
-        { key: "noticesTicker", label: "Notices & Ticker" },
+        { key: "academics", label: "Academic Veto" },
+        { key: "notices", label: "Notices & Ticker" },
         { key: "communicationHub", label: "Communication Hub" },
         { key: "qrFee", label: "QR Fee Module", moduleKey: "qrFee" },
         { key: "admitCardModule", label: "Admit Card Module", moduleKey: "admitCard" },
@@ -1050,9 +1050,8 @@ const companyFeatureRegistry = {
         { key: "transport", label: "Transport Manager", moduleKey: "transport" },
         { key: "inventory", label: "Inventory & Assets", moduleKey: "inventory" },
         { key: "dailyAttendance", label: "Daily Attendance", moduleKey: "attendance" },
-        { key: "changePassword", label: "Change Password" },
-        { key: "studentPortalFeatures", label: "Student Portal Features" },
-        { key: "schoolSettings", label: "School Settings" }
+        { key: "settings", label: "Account & School Settings" },
+        { key: "studentPortalFeatures", label: "Student Portal Features" }
     ],
     student: [
         { key: "profile", label: "Profile" },
@@ -1152,10 +1151,24 @@ function normalizeFeatureSettings(data) {
     const hasSchoolPolicy = saved.school && Object.keys(saved.school).length > 0;
     const legacyEnabled = Array.isArray(data.enabledModules) ? data.enabledModules : [];
     const legacyNames = { qrFee: "QR Fee Module", admitCard: "Admit Card Module", whatsapp: "WhatsApp Module" };
+    const schoolKeyAliases = {
+        studentsCerts: "students",
+        staffManager: "staff",
+        financeFees: "finance",
+        academicVeto: "academics",
+        noticesTicker: "notices",
+        changePassword: "settings",
+        schoolSettings: "settings"
+    };
+    const normalizedSavedSchool = {};
+    Object.entries(saved.school || {}).forEach(([key, value]) => {
+        const normalizedKey = schoolKeyAliases[key] || key;
+        normalizedSavedSchool[normalizedKey] = value;
+    });
     const settings = { ...saved, school: {}, modules: { ...(saved.modules || {}) }, student: {} };
 
     companyFeatureRegistry.school.forEach(feature => {
-        let enabled = hasSchoolPolicy ? saved.school[feature.key] !== false : true;
+        let enabled = hasSchoolPolicy ? normalizedSavedSchool[feature.key] !== false : true;
         if (!hasSchoolPolicy && feature.moduleKey && legacyEnabled.length) {
             enabled = legacyEnabled.includes(feature.moduleKey) || legacyEnabled.includes(legacyNames[feature.moduleKey]);
         }
