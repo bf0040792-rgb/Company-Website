@@ -316,7 +316,7 @@ window.unlockDashboard = () => {
     dashboardWrapper.classList.remove("hidden-el");
     lucide.createIcons();
 
-    const savedTab = sessionStorage.getItem('companyActiveTab');
+    const savedTab = localStorage.getItem('companyActiveTab');
     if (savedTab) {
         const targetMenu = document.querySelector(`.menu-item[data-target="${savedTab}"]`);
         if (targetMenu) targetMenu.click();
@@ -348,7 +348,7 @@ function activateCompanyTab(targetId, menuItem = null) {
     const target = document.getElementById(targetId);
     if (!target) return;
 
-    sessionStorage.setItem('companyActiveTab', targetId);
+    localStorage.setItem('companyActiveTab', targetId);
     document.querySelectorAll('.menu-item').forEach(item => {
         item.classList.remove('active', 'bg-tealAccent/10', 'text-tealAccent', 'border-l-2', 'border-tealAccent', 'shadow-[inset_2px_0_10px_rgba(0,240,255,0.1)]');
         item.classList.add('text-coolLight');
@@ -1106,7 +1106,7 @@ function renderFeatureGroup(group, containerId) {
     container.innerHTML = companyFeatureRegistry[group].map(feature => {
         const enabled = companyFeatureSettings[group]?.[feature.key] !== false;
         return `<label data-company-feature-card="${group}:${feature.key}" class="flex items-center justify-between gap-3 bg-slateBase/70 border ${enabled ? "border-tealAccent/25" : "border-rose-500/35 opacity-70"} rounded-xl px-4 py-3 transition">
-            <span><strong class="block text-sm text-white font-medium">${feature.label}</strong><small class="feature-state text-[10px] font-mono uppercase ${enabled ? "text-emerald-400" : "text-rose-400"}">${enabled ? "Enabled" : "Restricted"}</small></span>
+            <span><strong class="block text-sm text-white font-medium">${feature.label}</strong><small class="feature-state text-[10px] font-mono uppercase ${enabled ? "text-emerald-400" : "text-rose-400"}">${enabled ? "Enabled" : "Locked"}</small></span>
             <input id="${featureToggleId(group, feature.key)}" type="checkbox" class="accent-teal-400 h-5 w-5 shrink-0" ${enabled ? "checked" : ""} onchange="window.saveFeatureToggles('${group}', '${feature.key}', this.checked)">
         </label>`;
     }).join("");
@@ -1187,6 +1187,48 @@ function normalizeFeatureSettings(data) {
     return settings;
 }
 
+function getFirestoreRulesSnippet() {
+    return `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isDeveloper() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer';
+    }
+    function isChairmanOfSchool(schoolId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chairman' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId;
+    }
+
+    match /schools/{schoolId}/feature_controls/settings {
+      allow read: if signedIn();
+      allow create, update: if isDeveloper() || (
+        isChairmanOfSchool(schoolId) &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['featureSettings', 'updatedAt', 'updatedBy']) &&
+        request.resource.data.featureSettings.school == resource.data.featureSettings.school &&
+        request.resource.data.featureSettings.modules == resource.data.featureSettings.modules &&
+        request.resource.data.featureSettings.companyLocked == resource.data.featureSettings.companyLocked
+      );
+      allow delete: if isDeveloper();
+    }
+  }
+}`;
+}
+
+window.copyFeatureRulesSnippet = async () => {
+    const snippet = getFirestoreRulesSnippet();
+    try {
+        await navigator.clipboard.writeText(snippet);
+        window.showToast("FIRESTORE RULES SNIPPET COPIED", "#10b981");
+    } catch (e) {
+        console.warn("Rules snippet copy failed", e);
+        window.showToast("RULES SNIPPET READY IN CONSOLE", "#f59e0b");
+        console.log(snippet);
+    }
+};
+
 window.loadFeatureTogglesForSchool = async () => {
     const sid = document.getElementById("featureSchoolSelect")?.value;
     const schoolContainer = document.getElementById("feature-toggles-container");
@@ -1221,10 +1263,19 @@ window.saveFeatureToggles = async (group, key, enabled) => {
     const sid = document.getElementById("featureSchoolSelect")?.value;
     if (!sid || sid === "ALL" || !companyFeatureRegistry[group]?.some(feature => feature.key === key)) return;
 
+    const previousSettings = JSON.parse(JSON.stringify(companyFeatureSettings));
+    companyFeatureSettings[group] = companyFeatureSettings[group] || {};
+    companyFeatureSettings.companyLocked = companyFeatureSettings.companyLocked || { school: {}, student: {}, modules: {} };
+    companyFeatureSettings.companyLocked[group] = companyFeatureSettings.companyLocked[group] || {};
     companyFeatureSettings[group][key] = enabled;
+    companyFeatureSettings.companyLocked[group][key] = !enabled;
+    renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
     if (group === "school") {
         const feature = companyFeatureRegistry.school.find(item => item.key === key);
-        if (feature?.moduleKey) companyFeatureSettings.modules[feature.moduleKey] = enabled;
+        if (feature?.moduleKey) {
+            companyFeatureSettings.modules[feature.moduleKey] = enabled;
+            companyFeatureSettings.companyLocked.modules[feature.moduleKey] = !enabled;
+        }
     }
     if (group === "student") {
         Object.entries(legacyStudentFeatureKeys).forEach(([legacyKey, currentKey]) => {
@@ -1246,6 +1297,8 @@ window.saveFeatureToggles = async (group, key, enabled) => {
         window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
         window.logAudit(`Updated ${group} Feature Toggle`, `${sid}:${key}:${enabled ? "ON" : "OFF"}`);
     } catch (e) {
+        companyFeatureSettings = previousSettings;
+        renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
         window.showToast("ERROR: " + e.message, "#e11d48");
         await window.loadFeatureTogglesForSchool();
     } finally {
