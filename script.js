@@ -67,6 +67,13 @@ window.fetchedInspectStudents = [];
 window.currentDeviceLogs = [];
 let superAdminUid = "";
 let currentEditChairmanId = null;
+const PUBLIC_MEDIA_DOC = db.collection("system_config").doc("public_media");
+const readFileAsDataURL = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
 
 // UI Control Variables
 const loginModal = document.getElementById('login-modal');
@@ -3460,3 +3467,198 @@ window.generateA4PDF = function () {
 
     pdf.save("Batch_Studio_Photos.pdf");
 }
+
+// ==========================================
+// PUBLIC MEDIA: HERO CAROUSEL + APP DOWNLOAD
+// ==========================================
+let publicHeroSlides = [];
+let publicHeroIndex = 0;
+let publicHeroTimer = null;
+
+function renderPublicHeroCarousel(banners = []) {
+    const carousel = document.getElementById("public-hero-carousel");
+    const track = document.getElementById("public-hero-track");
+    const dots = document.getElementById("public-hero-dots");
+    if (!carousel || !track || !dots) return;
+
+    publicHeroSlides = banners.filter(Boolean);
+    publicHeroIndex = 0;
+    if (!publicHeroSlides.length) {
+        carousel.classList.add("hidden-el");
+        track.innerHTML = "";
+        dots.innerHTML = "";
+        return;
+    }
+
+    carousel.classList.remove("hidden-el");
+    track.innerHTML = publicHeroSlides.map((src, index) => `
+        <div class="public-hero-slide" aria-hidden="${index === 0 ? "false" : "true"}">
+            <img src="${src}" alt="Company hero banner ${index + 1}">
+        </div>
+    `).join("");
+    dots.innerHTML = publicHeroSlides.map((_, index) => `<button type="button" class="public-carousel-dot ${index === 0 ? "active" : ""}" aria-label="Go to banner ${index + 1}" onclick="window.setPublicHeroSlide(${index})"></button>`).join("");
+    updatePublicHeroSlide();
+    startPublicHeroAutoScroll();
+}
+
+function updatePublicHeroSlide() {
+    const track = document.getElementById("public-hero-track");
+    if (!track || !publicHeroSlides.length) return;
+    track.style.transform = `translateX(-${publicHeroIndex * 100}%)`;
+    document.querySelectorAll(".public-hero-slide").forEach((slide, index) => slide.setAttribute("aria-hidden", index === publicHeroIndex ? "false" : "true"));
+    document.querySelectorAll(".public-carousel-dot").forEach((dot, index) => dot.classList.toggle("active", index === publicHeroIndex));
+}
+
+window.setPublicHeroSlide = (index) => {
+    if (!publicHeroSlides.length) return;
+    publicHeroIndex = (index + publicHeroSlides.length) % publicHeroSlides.length;
+    updatePublicHeroSlide();
+    startPublicHeroAutoScroll();
+};
+
+function startPublicHeroAutoScroll() {
+    if (publicHeroTimer) clearInterval(publicHeroTimer);
+    if (publicHeroSlides.length < 2) return;
+    publicHeroTimer = setInterval(() => window.setPublicHeroSlide(publicHeroIndex + 1), 4500);
+}
+
+function renderPublicAppSection(appMedia = {}) {
+    const section = document.getElementById("public-app-section");
+    const logo = document.getElementById("public-app-logo");
+    const logoFallback = document.getElementById("public-app-logo-fallback");
+    const title = document.getElementById("public-app-title");
+    const desc = document.getElementById("public-app-desc");
+    const download = document.getElementById("public-apk-download");
+    const shots = document.getElementById("public-app-screenshots");
+    if (!section || !shots) return;
+
+    const hasContent = appMedia.logoUrl || appMedia.apkUrl || (appMedia.screenshots || []).length;
+    section.classList.toggle("hidden-el", !hasContent);
+    if (!hasContent) return;
+
+    title.textContent = appMedia.title || "CoreEdu Tech Mobile Suite";
+    desc.textContent = appMedia.description || "Download the latest secure release and experience a premium mobile command center for your institution.";
+    if (appMedia.logoUrl) {
+        logo.src = appMedia.logoUrl;
+        logo.classList.remove("hidden-el");
+        logoFallback.classList.add("hidden-el");
+    } else {
+        logo.classList.add("hidden-el");
+        logoFallback.classList.remove("hidden-el");
+    }
+    if (appMedia.apkUrl) {
+        download.href = appMedia.apkUrl;
+        download.download = appMedia.apkName || "latest-version.apk";
+        download.classList.remove("hidden-el");
+    } else {
+        download.classList.add("hidden-el");
+    }
+    shots.innerHTML = (appMedia.screenshots || []).map((src, index) => `<figure class="public-app-shot"><img src="${src}" alt="App screenshot ${index + 1}"></figure>`).join("");
+}
+
+function renderAdminMediaPreviews(data = {}) {
+    const heroPreview = document.getElementById("admin-hero-preview");
+    const appPreview = document.getElementById("admin-app-preview");
+    if (heroPreview) {
+        heroPreview.innerHTML = (data.banners || []).length
+            ? data.banners.map((src, index) => `<img src="${src}" alt="Hero banner ${index + 1}">`).join("")
+            : `<p>No hero banners published yet.</p>`;
+    }
+    if (appPreview) {
+        const media = data.appMedia || {};
+        appPreview.innerHTML = `
+            ${media.logoUrl ? `<img src="${media.logoUrl}" alt="App logo">` : ""}
+            ${(media.screenshots || []).map((src, index) => `<img src="${src}" alt="App media ${index + 1}">`).join("")}
+            ${media.apkName ? `<p><i class="fas fa-file-arrow-down"></i> ${media.apkName}</p>` : `<p>No APK published yet.</p>`}
+        `;
+    }
+}
+
+async function refreshPublicMedia() {
+    try {
+        const snap = await PUBLIC_MEDIA_DOC.get();
+        const data = snap.exists ? snap.data() : {};
+        renderPublicHeroCarousel(data.banners || []);
+        renderPublicAppSection(data.appMedia || {});
+        renderAdminMediaPreviews(data);
+        document.getElementById("app-title-input") && (document.getElementById("app-title-input").value = data.appMedia?.title || "");
+        document.getElementById("app-desc-input") && (document.getElementById("app-desc-input").value = data.appMedia?.description || "");
+    } catch (err) {
+        console.error("Public media load failed", err);
+    }
+}
+
+window.saveHeroBanners = async () => {
+    const input = document.getElementById("hero-banner-upload");
+    const files = Array.from(input?.files || []);
+    if (!files.length) return window.showToast("SELECT HERO BANNER IMAGES", "#e11d48");
+    try {
+        window.showToast("UPLOADING HERO BANNERS...", "#f59e0b");
+        const banners = [];
+        for (const file of files) {
+            const uploadedUrl = await uploadToFirebaseStorage(file, "public/hero-banners");
+            if (uploadedUrl) banners.push(uploadedUrl);
+        }
+        await PUBLIC_MEDIA_DOC.set({ banners, updatedAt: Date.now() }, { merge: true });
+        input.value = "";
+        await refreshPublicMedia();
+        window.showToast("HERO CAROUSEL PUBLISHED", "#10b981");
+    } catch (err) {
+        window.showToast("BANNER UPLOAD FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.saveAppMedia = async () => {
+    const logoFile = document.getElementById("app-logo-upload")?.files[0];
+    const shotFiles = Array.from(document.getElementById("app-screenshots-upload")?.files || []);
+    const apkFile = document.getElementById("apk-file-upload")?.files[0];
+    const title = document.getElementById("app-title-input")?.value.trim() || "CoreEdu Tech Mobile Suite";
+    const description = document.getElementById("app-desc-input")?.value.trim() || "Download the latest secure release and experience a premium mobile command center for your institution.";
+    if (!logoFile && !shotFiles.length && !apkFile) return window.showToast("UPLOAD LOGO, SCREENSHOTS OR APK", "#e11d48");
+    try {
+        window.showToast("UPLOADING APP MEDIA...", "#f59e0b");
+        const currentSnap = await PUBLIC_MEDIA_DOC.get();
+        const current = currentSnap.exists ? currentSnap.data().appMedia || {} : {};
+        const appMedia = { ...current, title, description };
+        if (logoFile) appMedia.logoUrl = await uploadToFirebaseStorage(logoFile, "public/app-logo");
+        if (shotFiles.length) {
+            const screenshots = [];
+            for (const file of shotFiles) {
+                const uploadedUrl = await uploadToFirebaseStorage(file, "public/app-screenshots");
+                if (uploadedUrl) screenshots.push(uploadedUrl);
+            }
+            appMedia.screenshots = screenshots;
+        }
+        if (apkFile) {
+            appMedia.apkUrl = await uploadToFirebaseStorage(apkFile, "public/apk");
+            appMedia.apkName = apkFile.name;
+        }
+        await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+        ["app-logo-upload", "app-screenshots-upload", "apk-file-upload"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+        await refreshPublicMedia();
+        window.showToast("APP DOWNLOAD SECTION PUBLISHED", "#10b981");
+    } catch (err) {
+        window.showToast("APP MEDIA UPLOAD FAILED: " + err.message, "#e11d48");
+    }
+};
+
+function initPublicMediaAdminToggles() {
+    document.querySelectorAll(".public-media-toggle").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const panel = btn.dataset.mediaPanel;
+            document.querySelectorAll(".public-media-toggle").forEach(item => item.classList.toggle("active", item === btn));
+            document.querySelectorAll(".public-media-panel").forEach(item => {
+                const isActive = item.id === `media-panel-${panel}`;
+                item.classList.toggle("active", isActive);
+                item.classList.toggle("hidden-el", !isActive);
+            });
+        });
+    });
+}
+
+document.getElementById("heroPrevBtn")?.addEventListener("click", () => window.setPublicHeroSlide(publicHeroIndex - 1));
+document.getElementById("heroNextBtn")?.addEventListener("click", () => window.setPublicHeroSlide(publicHeroIndex + 1));
+document.addEventListener("DOMContentLoaded", () => {
+    initPublicMediaAdminToggles();
+    refreshPublicMedia();
+});

@@ -128,6 +128,13 @@
                         FEATURES</button>
                 </div>
 
+                <div id="public-hero-carousel" class="public-hero-carousel hidden-el" aria-label="Uploaded hero banner carousel">
+                    <div id="public-hero-track" class="public-hero-track"></div>
+                    <button type="button" id="heroPrevBtn" class="public-carousel-arrow public-carousel-arrow-left" aria-label="Previous banner"><i class="fas fa-chevron-left"></i></button>
+                    <button type="button" id="heroNextBtn" class="public-carousel-arrow public-carousel-arrow-right" aria-label="Next banner"><i class="fas fa-chevron-right"></i></button>
+                    <div id="public-hero-dots" class="public-carousel-dots"></div>
+                </div>
+
                 <!-- Trust Indicators -->
                 <div class="grid grid-cols-3 gap-8 max-w-2xl mx-auto pt-8 border-t border-tealAccent/20">
                     <div class="text-center">
@@ -154,6 +161,24 @@
                 </div>
             </div>
         </header>
+
+        <section id="public-app-section" class="public-app-section hidden-el">
+            <div class="public-app-shell">
+                <div class="public-app-copy">
+                    <span class="public-app-kicker">Official Mobile Application</span>
+                    <div class="public-app-logo-wrap">
+                        <img id="public-app-logo" alt="App logo" class="public-app-logo hidden-el">
+                        <div id="public-app-logo-fallback" class="public-app-logo-fallback"><i class="fas fa-mobile-screen-button"></i></div>
+                    </div>
+                    <h2 id="public-app-title">CoreEdu Tech Mobile Suite</h2>
+                    <p id="public-app-desc">Download the latest secure release and experience a premium mobile command center for your institution.</p>
+                    <a id="public-apk-download" href="#" download class="public-apk-download hidden-el"><i class="fas fa-download"></i> Download Latest Version</a>
+                </div>
+                <div class="public-app-gallery">
+                    <div id="public-app-screenshots" class="public-app-screenshots"></div>
+                </div>
+            </div>
+        </section>
 
         <section id="features" class="py-24 bg-slateSurface/50 px-6 border-y border-glassBorder relative">
             <div class="max-w-7xl mx-auto">
@@ -997,6 +1022,10 @@
                         class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
                         data-target="tab-ms-studio"><i class="fas fa-camera-retro text-purple-400 w-5 text-center"></i>
                         MS Studio</button>
+                    <button
+                        class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
+                        data-target="tab-public-media"><i class="fas fa-photo-film text-cyan-400 w-5 text-center"></i>
+                        Public Media</button>
 
                     <p
                         class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">
@@ -2789,6 +2818,49 @@
                                     class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"></tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+
+                <div id="tab-public-media" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 rounded-2xl border border-cyan-500/30 public-media-admin">
+                        <div class="public-media-admin-header">
+                            <div>
+                                <span class="hub-kicker text-cyan-400">Public website media control</span>
+                                <h3 class="text-2xl font-display font-bold text-white mt-2">Hero Banner & App Download Manager</h3>
+                                <p class="text-coolLight text-sm mt-2">Banner aur APK media tools accordion/toggle mein hain. Ek active hoga to doosra hide rahega.</p>
+                            </div>
+                        </div>
+                        <div class="public-media-togglebar">
+                            <button type="button" class="public-media-toggle active" data-media-panel="banner"><i class="fas fa-images"></i> Hero Banner Upload</button>
+                            <button type="button" class="public-media-toggle" data-media-panel="apk"><i class="fas fa-mobile-screen-button"></i> APK / Media Upload</button>
+                        </div>
+                        <section id="media-panel-banner" class="public-media-panel active">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div class="space-y-4">
+                                    <label class="text-[10px] font-mono text-cyan-400/70 uppercase block">Upload Hero Banner Images</label>
+                                    <input type="file" id="hero-banner-upload" multiple accept="image/*" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs">
+                                    <button type="button" onclick="window.saveHeroBanners()" class="w-full py-3 bg-cyan-500/20 border border-cyan-400 hover:bg-cyan-400 text-cyan-300 hover:text-slateBase rounded-xl font-mono font-bold transition"><i class="fas fa-cloud-arrow-up"></i> Publish Hero Banners</button>
+                                    <p class="text-xs text-coolLight">Uploaded banners public hero carousel mein automatic smooth auto-scroll ke saath show honge.</p>
+                                </div>
+                                <div id="admin-hero-preview" class="admin-media-preview"></div>
+                            </div>
+                        </section>
+                        <section id="media-panel-apk" class="public-media-panel hidden-el">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div class="space-y-4">
+                                    <label class="text-[10px] font-mono text-emerald-400/70 uppercase block">App Logo</label>
+                                    <input type="file" id="app-logo-upload" accept="image/*" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs">
+                                    <label class="text-[10px] font-mono text-emerald-400/70 uppercase block">App Screenshots / Promo Images</label>
+                                    <input type="file" id="app-screenshots-upload" multiple accept="image/*" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs">
+                                    <label class="text-[10px] font-mono text-emerald-400/70 uppercase block">APK File</label>
+                                    <input type="file" id="apk-file-upload" accept=".apk,application/vnd.android.package-archive" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs">
+                                    <input type="text" id="app-title-input" placeholder="App title" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs">
+                                    <textarea id="app-desc-input" rows="3" placeholder="Short app description" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono text-xs resize-none"></textarea>
+                                    <button type="button" onclick="window.saveAppMedia()" class="w-full py-3 bg-emerald-500/20 border border-emerald-400 hover:bg-emerald-400 text-emerald-300 hover:text-slateBase rounded-xl font-mono font-bold transition"><i class="fas fa-rocket"></i> Publish App Download Section</button>
+                                </div>
+                                <div id="admin-app-preview" class="admin-media-preview"></div>
+                            </div>
+                        </section>
                     </div>
                 </div>
 
