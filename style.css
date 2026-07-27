@@ -1,7 +1,7 @@
 /* Google Fonts Imported in HTML */
 body {
-    background-color: #0a1220;
-    /* Deep Space Cyber Dark - slightly brighter */
+    background-color: #add8e6;
+    /* Light blue background */
     color: #f9fafb;
     overflow-x: hidden;
 }
@@ -1364,7 +1364,7 @@ body.light-theme .feature-access-copy span {
 .admin-media-preview {
     min-height: 260px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 1rem;
     padding: 1rem;
     border-radius: 1.3rem;
@@ -1373,17 +1373,115 @@ body.light-theme .feature-access-copy span {
     align-content: start;
 }
 
-.admin-media-preview img {
-    width: 100%;
-    height: 150px;
-    object-fit: cover;
+.admin-media-item {
+    position: relative;
+    min-height: 160px;
+    overflow: hidden;
     border-radius: 1rem;
     border: 1px solid rgba(148, 163, 184, .22);
+    background: rgba(15, 23, 42, .82);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, .24);
 }
 
+.admin-media-item img,
+.admin-media-preview>img {
+    width: 100%;
+    height: 170px;
+    object-fit: cover;
+    display: block;
+}
+
+.admin-media-item__overlay {
+    position: absolute;
+    inset: auto .65rem .65rem .65rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    padding: .55rem;
+    border-radius: .8rem;
+    background: rgba(5, 11, 20, .82);
+    border: 1px solid rgba(0, 240, 255, .2);
+    backdrop-filter: blur(12px);
+}
+
+.admin-media-item__overlay span,
+.admin-media-file-label {
+    color: #cbd5e1;
+    font: 800 .62rem 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+
+.admin-media-delete-btn,
+.admin-media-download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: .48rem .65rem;
+    border-radius: .65rem;
+    font: 900 .62rem 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    transition: all .2s ease;
+}
+
+.admin-media-delete-btn {
+    border: 1px solid rgba(244, 63, 94, .55);
+    background: rgba(244, 63, 94, .14);
+    color: #fb7185;
+}
+
+.admin-media-delete-btn:hover {
+    background: #fb7185;
+    color: #fff;
+    box-shadow: 0 0 18px rgba(244, 63, 94, .45);
+}
+
+.admin-media-download-btn {
+    border: 1px solid rgba(52, 211, 153, .55);
+    background: rgba(52, 211, 153, .12);
+    color: #6ee7b7;
+}
+
+.admin-media-download-btn:hover {
+    background: #34d399;
+    color: #06111f;
+    box-shadow: 0 0 18px rgba(52, 211, 153, .4);
+}
+
+.admin-media-file-card {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(52, 211, 153, .25);
+    background: linear-gradient(135deg, rgba(16, 185, 129, .12), rgba(0, 240, 255, .08));
+}
+
+.admin-media-file-card strong {
+    display: block;
+    margin-top: .35rem;
+    color: #f8fafc;
+    font: 900 .84rem 'JetBrains Mono', monospace;
+    word-break: break-word;
+}
+
+.admin-media-file-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: .55rem;
+}
+
+.admin-media-empty,
 .admin-media-preview p {
     color: #94a3b8;
     font: 700 .78rem 'JetBrains Mono', monospace;
+    align-self: center;
 }
 
 @media (max-width: 900px) {
@@ -1436,6 +1534,21 @@ body.light-theme .feature-access-copy span {
 
     .public-media-togglebar {
         grid-template-columns: 1fr;
+    }
+
+    .admin-media-file-card,
+    .admin-media-item__overlay {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .admin-media-file-actions {
+        justify-content: stretch;
+    }
+
+    .admin-media-delete-btn,
+    .admin-media-download-btn {
+        width: 100%;
     }
 
     .common-hub-header {

@@ -3556,20 +3556,45 @@ function renderPublicAppSection(appMedia = {}) {
     shots.innerHTML = (appMedia.screenshots || []).map((src, index) => `<figure class="public-app-shot"><img src="${src}" alt="App screenshot ${index + 1}"></figure>`).join("");
 }
 
+function buildMediaCard(src, label, actionsHtml = "") {
+    return `
+        <div class="admin-media-item">
+            <img src="${src}" alt="${label}">
+            <div class="admin-media-item__overlay">
+                <span>${label}</span>
+                ${actionsHtml}
+            </div>
+        </div>
+    `;
+}
+
 function renderAdminMediaPreviews(data = {}) {
     const heroPreview = document.getElementById("admin-hero-preview");
     const appPreview = document.getElementById("admin-app-preview");
     if (heroPreview) {
-        heroPreview.innerHTML = (data.banners || []).length
-            ? data.banners.map((src, index) => `<img src="${src}" alt="Hero banner ${index + 1}">`).join("")
-            : `<p>No hero banners published yet.</p>`;
+        const banners = data.banners || [];
+        heroPreview.innerHTML = banners.length
+            ? banners.map((src, index) => buildMediaCard(src, `Hero banner ${index + 1}`, `<button type="button" class="admin-media-delete-btn" onclick="window.deleteHeroBanner(${index})"><i class="fas fa-trash"></i> Delete</button>`)).join("")
+            : `<p class="admin-media-empty">No hero banners published yet.</p>`;
     }
     if (appPreview) {
         const media = data.appMedia || {};
+        const screenshotCards = (media.screenshots || []).map((src, index) => buildMediaCard(src, `Screenshot ${index + 1}`, `<button type="button" class="admin-media-delete-btn" onclick="window.deleteAppScreenshot(${index})"><i class="fas fa-trash"></i> Delete</button>`)).join("");
         appPreview.innerHTML = `
-            ${media.logoUrl ? `<img src="${media.logoUrl}" alt="App logo">` : ""}
-            ${(media.screenshots || []).map((src, index) => `<img src="${src}" alt="App media ${index + 1}">`).join("")}
-            ${media.apkName ? `<p><i class="fas fa-file-arrow-down"></i> ${media.apkName}</p>` : `<p>No APK published yet.</p>`}
+            ${media.logoUrl ? buildMediaCard(media.logoUrl, "App logo", `<button type="button" class="admin-media-delete-btn" onclick="window.deleteAppLogo()"><i class="fas fa-trash"></i> Delete</button>`) : `<p class="admin-media-empty">No app logo published yet.</p>`}
+            ${screenshotCards || `<p class="admin-media-empty">No app screenshots published yet.</p>`}
+            ${media.apkUrl ? `
+                <div class="admin-media-file-card">
+                    <div>
+                        <span class="admin-media-file-label">APK File</span>
+                        <strong>${media.apkName || "latest-version.apk"}</strong>
+                    </div>
+                    <div class="admin-media-file-actions">
+                        <a href="${media.apkUrl}" target="_blank" rel="noopener" class="admin-media-download-btn"><i class="fas fa-download"></i> Download</a>
+                        <button type="button" class="admin-media-delete-btn" onclick="window.deleteAppApk()"><i class="fas fa-trash"></i> Delete</button>
+                    </div>
+                </div>
+            ` : `<p class="admin-media-empty">No APK published yet.</p>`}
         `;
     }
 }
@@ -3588,13 +3613,34 @@ async function refreshPublicMedia() {
     }
 }
 
+window.deleteHeroBanner = async (index) => {
+    try {
+        const snap = await PUBLIC_MEDIA_DOC.get();
+        const data = snap.exists ? snap.data() : {};
+        const banners = Array.isArray(data.banners) ? [...data.banners] : [];
+        if (index < 0 || index >= banners.length) return;
+        const targetUrl = banners[index];
+        window.customConfirm("DELETE THIS HERO BANNER?", async () => {
+            await deleteFirebaseStorageImage(targetUrl);
+            banners.splice(index, 1);
+            await PUBLIC_MEDIA_DOC.set({ banners, updatedAt: Date.now() }, { merge: true });
+            await refreshPublicMedia();
+            window.showToast("HERO BANNER DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("HERO DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
 window.saveHeroBanners = async () => {
     const input = document.getElementById("hero-banner-upload");
     const files = Array.from(input?.files || []);
     if (!files.length) return window.showToast("SELECT HERO BANNER IMAGES", "#e11d48");
     try {
         window.showToast("UPLOADING HERO BANNERS...", "#f59e0b");
-        const banners = [];
+        const currentSnap = await PUBLIC_MEDIA_DOC.get();
+        const current = currentSnap.exists ? currentSnap.data() : {};
+        const banners = Array.isArray(current.banners) ? [...current.banners] : [];
         for (const file of files) {
             const uploadedUrl = await uploadToFirebaseStorage(file, "public/hero-banners");
             if (uploadedUrl) banners.push(uploadedUrl);
@@ -3608,13 +3654,69 @@ window.saveHeroBanners = async () => {
     }
 };
 
+window.deleteAppLogo = async () => {
+    try {
+        window.customConfirm("DELETE CURRENT APP LOGO?", async () => {
+            const snap = await PUBLIC_MEDIA_DOC.get();
+            const data = snap.exists ? snap.data() : {};
+            const appMedia = { ...(data.appMedia || {}) };
+            await deleteFirebaseStorageImage(appMedia.logoUrl);
+            delete appMedia.logoUrl;
+            await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+            await refreshPublicMedia();
+            window.showToast("APP LOGO DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("LOGO DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.deleteAppScreenshot = async (index) => {
+    try {
+        const snap = await PUBLIC_MEDIA_DOC.get();
+        const data = snap.exists ? snap.data() : {};
+        const appMedia = { ...(data.appMedia || {}) };
+        const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
+        if (index < 0 || index >= screenshots.length) return;
+        const targetUrl = screenshots[index];
+        window.customConfirm("DELETE THIS APP SCREENSHOT?", async () => {
+            await deleteFirebaseStorageImage(targetUrl);
+            screenshots.splice(index, 1);
+            appMedia.screenshots = screenshots;
+            await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+            await refreshPublicMedia();
+            window.showToast("SCREENSHOT DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("SCREENSHOT DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.deleteAppApk = async () => {
+    try {
+        window.customConfirm("DELETE CURRENT APK FILE?", async () => {
+            const snap = await PUBLIC_MEDIA_DOC.get();
+            const data = snap.exists ? snap.data() : {};
+            const appMedia = { ...(data.appMedia || {}) };
+            await deleteFirebaseStorageImage(appMedia.apkUrl);
+            delete appMedia.apkUrl;
+            delete appMedia.apkName;
+            await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+            await refreshPublicMedia();
+            window.showToast("APK DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("APK DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
 window.saveAppMedia = async () => {
     const logoFile = document.getElementById("app-logo-upload")?.files[0];
     const shotFiles = Array.from(document.getElementById("app-screenshots-upload")?.files || []);
     const apkFile = document.getElementById("apk-file-upload")?.files[0];
     const title = document.getElementById("app-title-input")?.value.trim() || "CoreEdu Tech Mobile Suite";
     const description = document.getElementById("app-desc-input")?.value.trim() || "Download the latest secure release and experience a premium mobile command center for your institution.";
-    if (!logoFile && !shotFiles.length && !apkFile) return window.showToast("UPLOAD LOGO, SCREENSHOTS OR APK", "#e11d48");
+    if (!logoFile && !shotFiles.length && !apkFile && !title && !description) return window.showToast("UPLOAD LOGO, SCREENSHOTS OR APK", "#e11d48");
     try {
         window.showToast("UPLOADING APP MEDIA...", "#f59e0b");
         const currentSnap = await PUBLIC_MEDIA_DOC.get();
@@ -3622,7 +3724,7 @@ window.saveAppMedia = async () => {
         const appMedia = { ...current, title, description };
         if (logoFile) appMedia.logoUrl = await uploadToFirebaseStorage(logoFile, "public/app-logo");
         if (shotFiles.length) {
-            const screenshots = [];
+            const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
             for (const file of shotFiles) {
                 const uploadedUrl = await uploadToFirebaseStorage(file, "public/app-screenshots");
                 if (uploadedUrl) screenshots.push(uploadedUrl);
