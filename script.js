@@ -1857,6 +1857,22 @@ window.generateGSTInvoice = async (schoolId) => {
 // ==========================================
 
 // 1. Landing Page Navigation Modals
+window.scrollToPublicSection = (sectionId) => {
+    const target = document.getElementById(sectionId);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+window.openPublicApkDownload = () => {
+    const appSection = document.getElementById("public-app-section");
+    const downloadLink = document.getElementById("public-apk-download");
+    if (downloadLink && !downloadLink.classList.contains("hidden-el") && downloadLink.href && !downloadLink.href.endsWith("#")) {
+        downloadLink.click();
+        return;
+    }
+    if (appSection) appSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (window.showToast) window.showToast("SCHOOL APK ABHI PUBLISH NAHI HUA", "#f59e0b");
+};
+
 window.toggleHamburger = () => {
     const modal = document.getElementById('hamburger-modal');
     if (modal.classList.contains('hidden-el')) {
@@ -1990,15 +2006,15 @@ window.downloadAuthorityTemplate = () => {
 
     doc.text('To,', 20, y); y += 7;
     doc.text('The Onboarding Team,', 20, y); y += 7;
-    doc.text('CoreEdu Tech Platform.', 20, y); y += 15;
+    doc.text('CoreEdu.IN Platform.', 20, y); y += 15;
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Subject: Authorization for Institutional Registration on CoreEdu Tech.', 20, y);
+    doc.text('Subject: Authorization for Institutional Registration on CoreEdu.IN.', 20, y);
     y += 15;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
-    const para1 = 'This is to certify that Mr./Ms./Dr. ___________________________, holding the position of ___________________________ (Principal / Chairman / Director), is officially authorized to register, deploy, and manage our institution, ___________________________ (School Name), on the CoreEdu Tech Global Master Core SaaS Platform.';
+    const para1 = 'This is to certify that Mr./Ms./Dr. ___________________________, holding the position of ___________________________ (Principal / Chairman / Director), is officially authorized to register, deploy, and manage our institution, ___________________________ (School Name), on the CoreEdu.IN Global Master Core SaaS Platform.';
     const splitPara1 = doc.splitTextToSize(para1, pageWidth - 40);
     doc.text(splitPara1, 20, y);
     y += splitPara1.length * 7 + 10;
@@ -3082,7 +3098,7 @@ window.loadSecurityLogs = async () => {
 window.exportSecurityLogsPDF = () => {
     if (typeof jspdf !== 'undefined' && jspdf.jsPDF) {
         const doc = new jspdf.jsPDF();
-        doc.text("System Security Logs - CoreEdu Tech Master Core", 10, 10);
+        doc.text("System Security Logs - CoreEdu.IN Master Core", 10, 10);
         doc.autoTable({
             html: '#security-logs-body',
             startY: 20,
@@ -3536,7 +3552,7 @@ function renderPublicAppSection(appMedia = {}) {
     section.classList.toggle("hidden-el", !hasContent);
     if (!hasContent) return;
 
-    title.textContent = appMedia.title || "CoreEdu Tech Mobile Suite";
+    title.textContent = appMedia.title || "CoreEdu.IN Mobile Suite";
     desc.textContent = appMedia.description || "Download the latest secure release and experience a premium mobile command center for your institution.";
     if (appMedia.logoUrl) {
         logo.src = appMedia.logoUrl;
@@ -3714,7 +3730,7 @@ window.saveAppMedia = async () => {
     const logoFile = document.getElementById("app-logo-upload")?.files[0];
     const shotFiles = Array.from(document.getElementById("app-screenshots-upload")?.files || []);
     const apkFile = document.getElementById("apk-file-upload")?.files[0];
-    const title = document.getElementById("app-title-input")?.value.trim() || "CoreEdu Tech Mobile Suite";
+    const title = document.getElementById("app-title-input")?.value.trim() || "CoreEdu.IN Mobile Suite";
     const description = document.getElementById("app-desc-input")?.value.trim() || "Download the latest secure release and experience a premium mobile command center for your institution.";
     if (!logoFile && !shotFiles.length && !apkFile && !title && !description) return window.showToast("UPLOAD LOGO, SCREENSHOTS OR APK", "#e11d48");
     try {
