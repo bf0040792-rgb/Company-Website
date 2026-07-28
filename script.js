@@ -1865,8 +1865,9 @@ window.scrollToPublicSection = (sectionId) => {
 window.openPublicApkDownload = () => {
     const appSection = document.getElementById("public-app-section");
     const downloadLink = document.getElementById("public-apk-download");
+    const baseUrl = window.location.href.split('#')[0];
     if (downloadLink && !downloadLink.classList.contains("hidden-el") && downloadLink.href && !downloadLink.href.endsWith("#")) {
-        downloadLink.click();
+        window.open(`${baseUrl}#public-app-section`, '_blank', 'noopener');
         return;
     }
     if (appSection) appSection.scrollIntoView({ behavior: "smooth", block: "start" });
