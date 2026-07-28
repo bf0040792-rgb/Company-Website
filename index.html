@@ -79,6 +79,24 @@
                     <h1 class="text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span
                             class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">Tech</span></h1>
                 </div>
+                <div class="hidden lg:flex items-center gap-6 font-mono text-xs font-bold text-coolLight">
+                    <a href="../CHAIRMAN.STAFF.STUDENT/index.html" class="hover:text-indigo-400 transition-colors flex items-center gap-2">
+                        <i class="fas fa-school"></i> School Login
+                    </a>
+                    <button onclick="window.showRegistrationModal()" class="hover:text-emerald-400 transition-colors flex items-center gap-2">
+                        <i class="fas fa-plus-circle"></i> New Registration
+                    </button>
+                    <a href="#download-apk" class="hover:text-cyan-400 transition-colors flex items-center gap-2">
+                        <i class="fas fa-download"></i> Download APK
+                    </a>
+                    <a href="#complaints" class="hover:text-rose-400 transition-colors flex items-center gap-2">
+                        <i class="fas fa-exclamation-circle"></i> Complaints & Feedbacks
+                    </a>
+                    <a href="#details" class="hover:text-amber-400 transition-colors flex items-center gap-2">
+                        <i class="fas fa-info-circle"></i> Details
+                    </a>
+                </div>
+
                 <div class="flex items-center gap-4">
                     <button onclick="window.toggleHamburger()"
                         class="text-tealAccent hover:text-white transition transform hover:scale-110 p-2"><i
@@ -3276,6 +3294,61 @@
             </div>
         </div>
     </div>
+
+    <!-- DETAILS SECTION (SEO Optimized) -->
+    <section id="details" class="pt-24 pb-20 px-6 relative z-10 bg-slateSurface min-h-screen flex flex-col items-center border-t border-glassBorder">
+        <div class="max-w-5xl mx-auto w-full">
+            <h1 class="text-4xl md:text-5xl font-display font-bold text-white mb-6 text-center">Platform Details & Facilities</h1>
+            <p class="text-coolLight text-lg mb-12 text-center max-w-3xl mx-auto">Discover the comprehensive features and capabilities of our advanced school management platform designed for modern educational institutions.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <article class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-tealAccent/50 transition-all">
+                    <h2 class="text-2xl font-bold text-tealAccent mb-4"><i class="fas fa-user-shield mr-2"></i> Role-Based Access</h2>
+                    <p class="text-coolLight leading-relaxed">Our platform provides strict role-based access control ensuring that Chairman, Staff, and Students have secure and isolated access to their respective data and tools.</p>
+                </article>
+                <article class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-emerald-400/50 transition-all">
+                    <h2 class="text-2xl font-bold text-emerald-400 mb-4"><i class="fas fa-chart-line mr-2"></i> Advanced Analytics</h2>
+                    <p class="text-coolLight leading-relaxed">Gain powerful insights with real-time analytics, comprehensive reports, and interactive dashboards to monitor institutional performance and financials.</p>
+                </article>
+                <article class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-indigo-400/50 transition-all">
+                    <h2 class="text-2xl font-bold text-indigo-400 mb-4"><i class="fas fa-mobile-alt mr-2"></i> Mobile Ready</h2>
+                    <p class="text-coolLight leading-relaxed">Access your portal anywhere, anytime. Our fully responsive design and dedicated mobile applications ensure seamless operations on all devices.</p>
+                </article>
+                <article class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-amber-400/50 transition-all">
+                    <h2 class="text-2xl font-bold text-amber-400 mb-4"><i class="fas fa-lock mr-2"></i> Enterprise Security</h2>
+                    <p class="text-coolLight leading-relaxed">Built with state-of-the-art security protocols including Firebase Auth, end-to-end encryption, and automated database backups to protect sensitive data.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- DOWNLOAD APK SECTION -->
+    <section id="download-apk" class="pt-24 pb-20 px-6 relative z-10 bg-slateBase min-h-screen flex flex-col items-center justify-center border-t border-glassBorder">
+        <div class="max-w-4xl mx-auto w-full text-center">
+            <h2 class="text-4xl font-display font-bold text-white mb-4">Download Our Mobile App</h2>
+            <p class="text-coolLight text-lg mb-12 max-w-2xl mx-auto">Get the full experience on your mobile device. Download our official APK below.</p>
+            
+            <div class="glass-card p-10 rounded-3xl border border-cyan-500/30 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col items-center">
+                <!-- App Logo (will be dynamically populated via JS in future) -->
+                <img id="public-app-logo" src="https://via.placeholder.com/120" alt="App Logo" class="w-28 h-28 rounded-2xl shadow-lg mb-6 border-2 border-cyan-500/50">
+                
+                <h3 class="text-2xl font-bold text-white mb-2">School Portal App</h3>
+                <p class="text-cyan-400 font-mono text-sm mb-8">Version 4.1.0 • Android APK</p>
+                
+                <!-- App Screenshots (will be dynamically populated via JS in future) -->
+                <div id="public-app-screenshots" class="flex flex-wrap justify-center gap-4 mb-10 w-full">
+                    <div class="w-32 h-64 bg-slateSurface/50 rounded-lg border border-glassBorder animate-pulse flex items-center justify-center"><i class="fas fa-image text-coolGray text-3xl"></i></div>
+                    <div class="w-32 h-64 bg-slateSurface/50 rounded-lg border border-glassBorder animate-pulse flex items-center justify-center hidden md:flex"><i class="fas fa-image text-coolGray text-3xl"></i></div>
+                    <div class="w-32 h-64 bg-slateSurface/50 rounded-lg border border-glassBorder animate-pulse flex items-center justify-center hidden md:flex"><i class="fas fa-image text-coolGray text-3xl"></i></div>
+                </div>
+
+                <!-- Download Button -->
+                <button id="public-download-btn" class="px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-slateBase font-bold rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all transform hover:scale-105 flex items-center gap-3 font-mono text-lg">
+                    <i class="fas fa-download"></i> DOWNLOAD APK
+                </button>
+            </div>
+        </div>
+    </section>
 
     <!-- AI Assistant Floating Widget -->
     <div id="ai-chat-widget" class="fixed bottom-6 right-6 z-[10000] flex flex-col items-end hidden-el">
