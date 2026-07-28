@@ -73,58 +73,16 @@
         <!-- Navbar -->
         <nav
             class="w-full glass-card fixed top-0 z-50 rounded-none border-x-0 border-t-0 border-b border-tealAccent/30 transition-all bg-slateBase/80 backdrop-blur-md shadow-[0_4px_30px_rgba(0,240,255,0.1)]">
-            <div class="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4">
-                <div class="flex justify-between items-center gap-4">
-                    <a href="#home" class="flex items-center gap-2 shrink-0" aria-label="CoreEdu Tech home">
-                        <i data-lucide="hexagon" class="text-tealAccent w-7 h-7 md:w-8 md:h-8"></i>
-                        <h1 class="text-lg md:text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span
-                                class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">Tech</span></h1>
-                    </a>
-                    <div
-                        class="hidden lg:flex items-center gap-4 xl:gap-6 font-mono text-[11px] xl:text-xs font-bold text-coolLight uppercase tracking-wider">
-                        <a href="../CHAIRMAN.STAFF.STUDENT/index.html" class="public-top-link hover:text-indigo-400">
-                            <i class="fas fa-school"></i> School Login
-                        </a>
-                        <a href="#download-apk" class="public-top-link hover:text-cyan-400">
-                            <i class="fas fa-download"></i> Download APK
-                        </a>
-                        <a href="#details" class="public-top-link hover:text-amber-400">
-                            <i class="fas fa-info-circle"></i> Details
-                        </a>
-                        <button onclick="window.showRegistrationModal()" class="public-top-link hover:text-emerald-400">
-                            <i class="fas fa-plus-circle"></i> New Registration
-                        </button>
-                        <a href="#complaints" class="public-top-link hover:text-rose-400">
-                            <i class="fas fa-comment-dots"></i> Complaints & Feedbacks
-                        </a>
-                    </div>
-
-                    <button onclick="window.toggleHamburger()"
-                        class="text-tealAccent hover:text-white transition transform hover:scale-110 p-2 shrink-0"><i
-                            class="fas fa-bars text-2xl drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i></button>
+            <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="hexagon" class="text-tealAccent w-8 h-8"></i>
+                    <h1 class="text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span
+                            class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">Tech</span></h1>
                 </div>
-
-                <div class="lg:hidden public-mobile-titlebar mt-3 -mx-1 px-1 overflow-x-auto pb-1">
-                    <div
-                        class="flex items-center gap-2 min-w-max font-mono text-[10px] font-bold uppercase tracking-wider">
-                        <a href="../CHAIRMAN.STAFF.STUDENT/index.html"
-                            class="public-mobile-pill text-indigo-300 border-indigo-400/35">
-                            <i class="fas fa-school"></i> School Login
-                        </a>
-                        <a href="#download-apk" class="public-mobile-pill text-cyan-300 border-cyan-400/35">
-                            <i class="fas fa-download"></i> Download APK
-                        </a>
-                        <a href="#details" class="public-mobile-pill text-amber-300 border-amber-400/35">
-                            <i class="fas fa-info-circle"></i> Details
-                        </a>
-                        <button onclick="window.showRegistrationModal()"
-                            class="public-mobile-pill text-emerald-300 border-emerald-400/35">
-                            <i class="fas fa-plus-circle"></i> New Registration
-                        </button>
-                        <a href="#complaints" class="public-mobile-pill text-rose-300 border-rose-400/35">
-                            <i class="fas fa-comment-dots"></i> Complaints & Feedbacks
-                        </a>
-                    </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="window.toggleHamburger()"
+                        class="text-tealAccent hover:text-white transition transform hover:scale-110 p-2"><i
+                            class="fas fa-bars text-2xl drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i></button>
                 </div>
             </div>
         </nav>
@@ -165,9 +123,9 @@
                     <button onclick="showLoginModal()"
                         class="px-10 py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-bold transition shadow-[0_0_25px_rgba(0,240,255,0.5)] w-full sm:w-auto font-mono text-base hover:shadow-[0_0_35px_rgba(0,240,255,0.7)] hover:scale-105">DEPLOY
                         YOUR INSTITUTION</button>
-                    <a href="#features"
+                    <button
                         class="px-10 py-4 bg-slateSurface/50 hover:bg-slateSurface text-tealAccent rounded-xl font-bold transition border border-tealAccent/40 w-full sm:w-auto font-mono backdrop-blur-sm text-base hover:border-tealAccent hover:shadow-[0_0_20px_rgba(0,240,255,0.2)]">EXPLORE
-                        FEATURES</a>
+                        FEATURES</button>
                 </div>
 
                 <div id="public-hero-carousel" class="public-hero-carousel hidden-el"
@@ -595,79 +553,6 @@
                 <div class="mt-12 text-center">
                     <p class="text-coolLight text-sm font-mono">All plans include: Automatic backups • 99.9% uptime SLA
                         • Data encryption • Regular updates</p>
-                </div>
-            </div>
-        </section>
-
-        <section id="complaints" class="py-24 px-6 relative bg-slateSurface/40 border-y border-glassBorder">
-            <div class="max-w-6xl mx-auto">
-                <div class="text-center mb-12">
-                    <h3
-                        class="text-rose-400 font-mono font-bold tracking-widest uppercase text-sm mb-3 drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]">
-                        Complaints & Feedbacks</h3>
-                    <h2 class="text-4xl md:text-5xl font-display font-bold text-white mb-4">Public Support Desk</h2>
-                    <p class="text-coolLight text-lg max-w-3xl mx-auto leading-relaxed">School, parent, staff, ya
-                        visitor apni complaint aur feedback directly company support team ko bhej sakte hain.</p>
-                </div>
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-                    <div
-                        class="glass-card p-8 rounded-2xl border border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.12)]">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <input type="text" placeholder="Your Name"
-                                class="input-premium px-4 py-3 rounded-xl text-white font-mono text-sm">
-                            <input type="tel" placeholder="Mobile Number"
-                                class="input-premium px-4 py-3 rounded-xl text-white font-mono text-sm">
-                            <input type="email" placeholder="Email Address"
-                                class="input-premium px-4 py-3 rounded-xl text-white font-mono text-sm md:col-span-2">
-                            <select
-                                class="input-premium px-4 py-3 rounded-xl text-white font-mono text-sm md:col-span-2">
-                                <option>Complaint</option>
-                                <option>Feedback</option>
-                                <option>School Login Help</option>
-                                <option>APK Download Help</option>
-                            </select>
-                            <textarea rows="5" placeholder="Write your message..."
-                                class="input-premium px-4 py-3 rounded-xl text-white font-mono text-sm md:col-span-2 resize-none"></textarea>
-                        </div>
-                        <button type="button"
-                            class="w-full py-4 bg-rose-500/20 border border-rose-400 hover:bg-rose-400 text-rose-300 hover:text-slateBase rounded-xl font-mono font-bold transition shadow-[0_0_18px_rgba(244,63,94,0.25)]"><i
-                                class="fas fa-paper-plane"></i> SUBMIT MESSAGE</button>
-                    </div>
-                    <div
-                        class="glass-card p-8 rounded-2xl border border-tealAccent/25 shadow-[0_0_30px_rgba(0,240,255,0.12)] flex flex-col justify-center">
-                        <div class="space-y-5">
-                            <div class="flex gap-4">
-                                <div
-                                    class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 flex items-center justify-center shrink-0">
-                                    <i class="fas fa-headset"></i></div>
-                                <div>
-                                    <h4 class="text-white font-display font-bold text-lg">Fast Support</h4>
-                                    <p class="text-coolLight text-sm leading-relaxed">Login, registration, APK aur
-                                        portal issue ke liye support request yahin se raise ho sakti hai.</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-4">
-                                <div
-                                    class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-400/30 text-emerald-300 flex items-center justify-center shrink-0">
-                                    <i class="fas fa-shield-halved"></i></div>
-                                <div>
-                                    <h4 class="text-white font-display font-bold text-lg">Secure Review</h4>
-                                    <p class="text-coolLight text-sm leading-relaxed">Har feedback ko company admin
-                                        review karega aur required action track hoga.</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-4">
-                                <div
-                                    class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-300 flex items-center justify-center shrink-0">
-                                    <i class="fas fa-clock"></i></div>
-                                <div>
-                                    <h4 class="text-white font-display font-bold text-lg">24/7 Channel</h4>
-                                    <p class="text-coolLight text-sm leading-relaxed">Emergency ya technical issue ke
-                                        liye support desk hamesha title bar se accessible rahega.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </section>
@@ -3417,91 +3302,6 @@
             </div>
         </div>
     </div>
-
-    <!-- DETAILS SECTION (SEO Optimized) -->
-    <section id="details"
-        class="pt-24 pb-20 px-6 relative z-10 bg-slateSurface min-h-screen flex flex-col items-center border-t border-glassBorder">
-        <div class="max-w-5xl mx-auto w-full">
-            <h1 class="text-4xl md:text-5xl font-display font-bold text-white mb-6 text-center">Platform Details &
-                Facilities</h1>
-            <p class="text-coolLight text-lg mb-12 text-center max-w-3xl mx-auto">Discover the comprehensive features
-                and capabilities of our advanced school management platform designed for modern educational
-                institutions.</p>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <article
-                    class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-tealAccent/50 transition-all">
-                    <h2 class="text-2xl font-bold text-tealAccent mb-4"><i class="fas fa-user-shield mr-2"></i>
-                        Role-Based Access</h2>
-                    <p class="text-coolLight leading-relaxed">Our platform provides strict role-based access control
-                        ensuring that Chairman, Staff, and Students have secure and isolated access to their respective
-                        data and tools.</p>
-                </article>
-                <article
-                    class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-emerald-400/50 transition-all">
-                    <h2 class="text-2xl font-bold text-emerald-400 mb-4"><i class="fas fa-chart-line mr-2"></i> Advanced
-                        Analytics</h2>
-                    <p class="text-coolLight leading-relaxed">Gain powerful insights with real-time analytics,
-                        comprehensive reports, and interactive dashboards to monitor institutional performance and
-                        financials.</p>
-                </article>
-                <article
-                    class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-indigo-400/50 transition-all">
-                    <h2 class="text-2xl font-bold text-indigo-400 mb-4"><i class="fas fa-mobile-alt mr-2"></i> Mobile
-                        Ready</h2>
-                    <p class="text-coolLight leading-relaxed">Access your portal anywhere, anytime. Our fully responsive
-                        design and dedicated mobile applications ensure seamless operations on all devices.</p>
-                </article>
-                <article
-                    class="glass-card p-8 rounded-2xl border border-glassBorder hover:border-amber-400/50 transition-all">
-                    <h2 class="text-2xl font-bold text-amber-400 mb-4"><i class="fas fa-lock mr-2"></i> Enterprise
-                        Security</h2>
-                    <p class="text-coolLight leading-relaxed">Built with state-of-the-art security protocols including
-                        Firebase Auth, end-to-end encryption, and automated database backups to protect sensitive data.
-                    </p>
-                </article>
-            </div>
-        </div>
-    </section>
-
-    <!-- DOWNLOAD APK SECTION -->
-    <section id="download-apk"
-        class="pt-24 pb-20 px-6 relative z-10 bg-slateBase min-h-screen flex flex-col items-center justify-center border-t border-glassBorder">
-        <div class="max-w-4xl mx-auto w-full text-center">
-            <h2 class="text-4xl font-display font-bold text-white mb-4">Download Our Mobile App</h2>
-            <p class="text-coolLight text-lg mb-12 max-w-2xl mx-auto">Get the full experience on your mobile device.
-                Download our official APK below.</p>
-
-            <div
-                class="glass-card p-10 rounded-3xl border border-cyan-500/30 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col items-center">
-                <!-- App Logo (will be dynamically populated via JS in future) -->
-                <img id="public-app-logo" src="https://via.placeholder.com/120" alt="App Logo"
-                    class="w-28 h-28 rounded-2xl shadow-lg mb-6 border-2 border-cyan-500/50">
-
-                <h3 class="text-2xl font-bold text-white mb-2">School Portal App</h3>
-                <p class="text-cyan-400 font-mono text-sm mb-8">Version 4.1.0 • Android APK</p>
-
-                <!-- App Screenshots (will be dynamically populated via JS in future) -->
-                <div id="public-app-screenshots" class="flex flex-wrap justify-center gap-4 mb-10 w-full">
-                    <div
-                        class="w-32 h-64 bg-slateSurface/50 rounded-lg border border-glassBorder animate-pulse flex items-center justify-center">
-                        <i class="fas fa-image text-coolGray text-3xl"></i></div>
-                    <div
-                        class="w-32 h-64 bg-slateSurface/50 rounded-lg border border-glassBorder animate-pulse flex items-center justify-center hidden md:flex">
-                        <i class="fas fa-image text-coolGray text-3xl"></i></div>
-                    <div
-                        class="w-32 h-64 bg-slateSurface/50 rounded-lg border border-glassBorder animate-pulse flex items-center justify-center hidden md:flex">
-                        <i class="fas fa-image text-coolGray text-3xl"></i></div>
-                </div>
-
-                <!-- Download Button -->
-                <button id="public-download-btn"
-                    class="px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-slateBase font-bold rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all transform hover:scale-105 flex items-center gap-3 font-mono text-lg">
-                    <i class="fas fa-download"></i> DOWNLOAD APK
-                </button>
-            </div>
-        </div>
-    </section>
 
     <!-- AI Assistant Floating Widget -->
     <div id="ai-chat-widget" class="fixed bottom-6 right-6 z-[10000] flex flex-col items-end hidden-el">
