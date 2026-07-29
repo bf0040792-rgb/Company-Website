@@ -312,7 +312,7 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
         window.logAudit("Master Login Success", "System Core");
     } catch (error) {
         // Record Failure
-        err.innerText = "INVALID MASTER KEY!";
+        err.innerText = "Invalid ID / Password";
         try {
             const failRef = db.collection("login_logs").doc(e.replace(/[\.\#\$\[\]]/g, "_"));
             const failDoc = await failRef.get();
@@ -324,7 +324,7 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
                 err.innerText = "MAX ATTEMPTS REACHED. ACCOUNT LOCKED.";
                 window.logAudit(`Brute Force Lockout - User: ${e}`, "Security");
             } else {
-                err.innerText = `INVALID MASTER KEY! (${3 - fails} attempts left)`;
+                err.innerText = `Invalid ID / Password (${3 - fails} attempts left)`;
                 window.logAudit(`Failed Login - User: ${e}`, "Security");
             }
 
