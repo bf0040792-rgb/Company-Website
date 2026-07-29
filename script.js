@@ -2196,14 +2196,18 @@ window.submitSchoolRegistration = async () => {
     btn.disabled = true;
 
     try {
-        // Mock upload using base64 for simplicity in frontend
-        const readAsDataURL = (file) => new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(file);
-        });
-
-        const logoData = await readAsDataURL(logoInput);
+        let logoData = "https://via.placeholder.com/150";
+        if (logoInput) {
+            const uploadedUrl = await uploadToCloudinary(logoInput);
+            if (uploadedUrl) {
+                logoData = uploadedUrl;
+            } else {
+                window.showToast('LOGO UPLOAD FAILED', '#e11d48');
+                btn.innerHTML = 'SUBMIT DEPLOYMENT REQUEST';
+                btn.disabled = false;
+                return;
+            }
+        }
 
         const payload = {
             schoolName: sName,
