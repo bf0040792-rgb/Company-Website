@@ -2106,6 +2106,11 @@ window.submitSchoolRegistration = async () => {
     const email = document.getElementById('reg-email').value.trim();
     const pwd = document.getElementById('reg-password').value.trim();
     const phone = document.getElementById('reg-phone').value.trim();
+    const altPhone = document.getElementById('reg-alt-phone').value.trim();
+    const affiliationNo = document.getElementById('reg-affiliation-no').value.trim();
+    const board = document.getElementById('reg-board').value;
+    const schoolType = document.getElementById('reg-school-type').value;
+    const website = document.getElementById('reg-website').value.trim();
     const country = document.getElementById('reg-country').value;
     const state = document.getElementById('reg-state').value;
     const dist = document.getElementById('reg-district').value || (document.getElementById('reg-district-manual') ? document.getElementById('reg-district-manual').value.trim() : '');
@@ -2113,8 +2118,8 @@ window.submitSchoolRegistration = async () => {
     const addr = document.getElementById('reg-address').value.trim();
     const logoInput = document.getElementById('reg-logo').files[0];
 
-    if (!sName || !pName || !email || !pwd || !phone || !country || !state || !dist || !pin || !addr || !logoInput) {
-        window.showToast('ALL FIELDS AND UPLOADS ARE MANDATORY', '#e11d48');
+    if (!sName || !pName || !email || !pwd || !phone || !affiliationNo || !board || !schoolType || !country || !state || !dist || !pin || !addr || !logoInput) {
+        window.showToast('ALL MANDATORY FIELDS AND UPLOADS ARE REQUIRED', '#e11d48');
         return;
     }
 
@@ -2138,6 +2143,11 @@ window.submitSchoolRegistration = async () => {
             email: email,
             password: pwd,
             phone: phone,
+            altPhone: altPhone,
+            affiliationNo: affiliationNo,
+            board: board,
+            schoolType: schoolType,
+            website: website,
             country, state, district: dist, pincode: pin, address: addr,
             logoUrl: logoData,
             timestamp: Date.now(),

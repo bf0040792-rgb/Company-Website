@@ -101,7 +101,7 @@
                         <i class="fas fa-school mr-1"></i> SCHOOL LOGIN
                     </button>
                     <button onclick="window.showRegistrationModal()"
-                        class="px-2 xl:px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] hover:shadow-[0_0_25px_rgba(16,185,129,0.8)] transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 xl:px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 hover:from-pink-400 hover:via-fuchsia-500 hover:to-purple-500 text-white shadow-[0_0_20px_rgba(217,70,239,0.5)] hover:shadow-[0_0_30px_rgba(217,70,239,0.8)] border border-fuchsia-400/50 transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap transform hover:-translate-y-0.5 duration-300">
                         <i class="fas fa-plus-circle mr-1"></i> NEW REGISTRATION
                     </button>
                     <button onclick="window.openPublicApkDownload()"
@@ -827,7 +827,7 @@
                 <i class="fas fa-school"></i> SCHOOL LOGIN
             </button>
             <button onclick="window.toggleHamburger(); window.showRegistrationModal();"
-                class="w-full py-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500 text-emerald-400 rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
+                class="w-full py-4 bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 hover:from-fuchsia-500/30 hover:to-purple-500/30 border border-fuchsia-400 text-fuchsia-300 shadow-[0_0_15px_rgba(217,70,239,0.3)] rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
                 <i class="fas fa-plus-circle"></i> REGISTRATION NEW SCHOOL
             </button>
             <button onclick="window.toggleHamburger(); window.showForgotPasswordModal();"
@@ -841,39 +841,70 @@
     <div id="registration-modal"
         class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[160] hidden-el flex justify-center items-center px-4 overflow-y-auto py-10">
         <div
-            class="glass-card p-8 rounded-3xl w-full max-w-2xl relative shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-emerald-500/30 my-auto">
+            class="glass-card p-8 rounded-3xl w-full max-w-2xl relative shadow-[0_0_40px_rgba(217,70,239,0.2)] border border-fuchsia-500/30 my-auto">
             <div
-                class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent">
+                class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-fuchsia-500 to-transparent">
             </div>
             <div class="flex justify-between items-start mb-6">
                 <div>
                     <h2 class="text-2xl font-display font-bold text-white flex items-center gap-2"><i
-                            class="fas fa-plus-circle text-emerald-400"></i> NEW SCHOOL DEPLOYMENT</h2>
-                    <p class="text-emerald-400/70 text-xs font-mono mt-1 tracking-widest">REQUEST NODE ALLOCATION</p>
+                            class="fas fa-plus-circle text-fuchsia-400"></i> NEW SCHOOL DEPLOYMENT</h2>
+                    <p class="text-fuchsia-400/70 text-xs font-mono mt-1 tracking-widest">REQUEST NODE ALLOCATION</p>
                 </div>
                 <button onclick="window.closeCustomModal('registration-modal')"
-                    class="text-coolGray hover:text-emerald-400 transition p-2 bg-slateSurface rounded-lg border border-glassBorder"><i
+                    class="text-coolGray hover:text-fuchsia-400 transition p-2 bg-slateSurface rounded-lg border border-glassBorder"><i
                         class="fas fa-times"></i></button>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">School
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">School
                         Name *</label><input type="text" id="reg-school-name"
                         class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
                 <div><label
-                        class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Principal
+                        class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Principal
                         Name *</label><input type="text" id="reg-principal-name"
                         class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
-                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Official
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Official
                         Email ID *</label><input type="email" id="reg-email"
                         class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
-                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Desired
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Desired
                         Password *</label><input type="password" id="reg-password"
                         class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
-                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Phone
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Phone
                         Number *</label><input type="text" id="reg-phone"
                         class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
-                <div><label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">School
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Alt Contact
+                        (Optional)</label><input type="text" id="reg-alt-phone"
+                        class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm"></div>
+                
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Registration / Affiliation No *</label>
+                    <input type="text" id="reg-affiliation-no" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required></div>
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Board of Education *</label>
+                    <select id="reg-board" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required>
+                        <option value="">Select Board</option>
+                        <option value="CBSE">CBSE</option>
+                        <option value="ICSE">ICSE</option>
+                        <option value="State Board">State Board</option>
+                        <option value="International">International</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">School Type *</label>
+                    <select id="reg-school-type" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required>
+                        <option value="">Select Type</option>
+                        <option value="Primary (Pre-K to 5)">Primary (Pre-K to 5)</option>
+                        <option value="Middle (6 to 8)">Middle (6 to 8)</option>
+                        <option value="High School (9 to 10)">High School (9 to 10)</option>
+                        <option value="Higher Secondary (11 to 12)">Higher Secondary (11 to 12)</option>
+                        <option value="K-12 (Pre-K to 12)">K-12 (Pre-K to 12)</option>
+                    </select>
+                </div>
+                
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Website (Optional)</label>
+                    <input type="url" id="reg-website" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" placeholder="https://"></div>
+
+                <div class="md:col-span-2"><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">School
                         Logo *</label><input type="file" id="reg-logo" accept="image/*"
                         class="input-premium w-full px-3 py-1.5 rounded-lg text-white text-xs" required></div>
             </div>
@@ -918,7 +949,7 @@
 
 
             <button id="submitRegBtn" onclick="window.submitSchoolRegistration()"
-                class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(16,185,129,0.3)]">SUBMIT
+                class="w-full py-4 bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 hover:from-pink-400 hover:via-fuchsia-500 hover:to-purple-500 text-white rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(217,70,239,0.4)]">SUBMIT
                 DEPLOYMENT REQUEST</button>
         </div>
     </div>
