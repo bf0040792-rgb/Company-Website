@@ -3806,13 +3806,20 @@ window.deleteAppApk = async () => {
 window.saveAppMedia = async () => {
     const logoFile = document.getElementById("app-logo-upload")?.files[0];
     const apkFile = document.getElementById("apk-file-upload")?.files[0];
-    if (!logoFile && !apkFile) return window.showToast("UPLOAD LOGO OR APK", "#e11d48");
+    const screenshotFiles = document.getElementById("app-screenshots-upload")?.files;
+    
+    if (!logoFile && !apkFile && (!screenshotFiles || screenshotFiles.length === 0)) return window.showToast("UPLOAD LOGO, APK, OR SCREENSHOTS", "#e11d48");
     try {
         window.showToast("UPLOADING APP MEDIA VIA SECURE BACKEND...", "#f59e0b");
         const idToken = await auth.currentUser.getIdToken();
         const formData = new FormData();
         if (apkFile) formData.append('apk', apkFile);
         if (logoFile) formData.append('logo', logoFile);
+        if (screenshotFiles && screenshotFiles.length > 0) {
+            for (let i = 0; i < screenshotFiles.length; i++) {
+                formData.append('screenshots', screenshotFiles[i]);
+            }
+        }
         
         const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-app-media", {
             method: 'POST',
