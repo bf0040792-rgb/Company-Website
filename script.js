@@ -293,6 +293,9 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
     const err = document.getElementById("loginErrorMsg");
     if (!e || !p) { err.innerText = "CREDENTIALS REQUIRED."; err.classList.remove('hidden-el'); return; }
 
+    const recaptchaField = document.querySelector('#login-modal [name="g-recaptcha-response"]');
+    if (recaptchaField && !recaptchaField.value) { err.innerText = "PLEASE VERIFY YOU ARE NOT A ROBOT."; err.classList.remove('hidden-el'); return; }
+
     b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> VERIFYING HASH...`;
 
     // Anti-Brute Force Logic (3-Strike Rule)
@@ -508,6 +511,39 @@ window.initQuotaMonitor = () => {
 // ==========================================
 // 6. CHAIRMEN & TENANT DEPLOYMENT
 // ==========================================
+window.fetchRegistrationDetails = async () => {
+    const regNo = document.getElementById("fetchRegNo").value.trim();
+    if (!regNo) { window.showToast("PLEASE ENTER REGISTRATION NO", "#e11d48"); return; }
+    
+    try {
+        const docId = regNo.replace(/\//g, "_");
+        const docSnap = await db.collection("accepted_registrations").doc(docId).get();
+        if (!docSnap.exists) {
+            window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
+            return;
+        }
+        
+        const data = docSnap.data();
+        
+        // Auto-fill fields
+        document.getElementById("schoolName").value = data.schoolName || "";
+        document.getElementById("chairmanName").value = data.principalName || "";
+        document.getElementById("chairmanEmail").value = data.email || "";
+        document.getElementById("chairmanPassword").value = data.password || "";
+        
+        // Logo is tricky because it's a file input. We can store the data URL globally and bypass the file check,
+        // but it requires changing createChairmanBtn logic to accept a pre-filled logoData.
+        window.fetchedRegLogoData = data.logoUrl || null;
+        window.fetchedRegFullData = data; // store all data for later
+        
+        window.showToast("DETAILS AUTO-FILLED SUCCESSFULLY!", "#10b981");
+        
+    } catch (e) {
+        console.error(e);
+        window.showToast("ERROR FETCHING DETAILS", "#e11d48");
+    }
+};
+
 document.getElementById("createChairmanBtn").addEventListener("click", async () => {
     const sN = document.getElementById("schoolName").value.trim(); const cN = document.getElementById("chairmanName").value.trim(); const em = document.getElementById("chairmanEmail").value.trim(); const pA = document.getElementById("chairmanPassword").value.trim(); const lF = document.getElementById("schoolLogo").files[0]; const b = document.getElementById("createChairmanBtn");
     if (!sN || !cN || !em || !pA) return window.showToast("FILL ALL PARAMETERS!", "#e11d48");
@@ -517,18 +553,44 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
     const watermarkUrl = document.getElementById("watermarkUrl") ? document.getElementById("watermarkUrl").value.trim() : "";
     b.innerText = "DEPLOYING NODE...";
     try {
-        let lU = "https://via.placeholder.com/40";
+    let lU = "https://via.placeholder.com/40";
         if (lF) {
             const upU = await uploadToCloudinary(lF);
             if (upU) { lU = upU; } else { window.showToast("ASSET UPLOAD FAILED.", "#e11d48"); b.innerText = "DEPLOY NODE"; return; }
+        } else if (window.fetchedRegLogoData) {
+            lU = window.fetchedRegLogoData; // Use the logo data URL from the registration form
         }
+
         b.innerText = "PROVISIONING ID...";
         const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA);
         const nuId = uC.user.uid; const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+        
+        let extraSchoolData = {};
+        if (window.fetchedRegFullData) {
+            extraSchoolData = {
+                regNo: window.fetchedRegFullData.regNo || "",
+                phone: window.fetchedRegFullData.phone || "",
+                altPhone: window.fetchedRegFullData.altPhone || "",
+                affiliationNo: window.fetchedRegFullData.affiliationNo || "",
+                board: window.fetchedRegFullData.board || "",
+                schoolType: window.fetchedRegFullData.schoolType || "",
+                website: window.fetchedRegFullData.website || "",
+                country: window.fetchedRegFullData.country || "",
+                state: window.fetchedRegFullData.state || "",
+                district: window.fetchedRegFullData.district || "",
+                pincode: window.fetchedRegFullData.pincode || "",
+                address: window.fetchedRegFullData.address || ""
+            };
+        }
+
         await db.collection("users").doc(nuId).set({ name: cN, email: em, role: "chairman", plainPassword: pA, schoolId: sId, schoolName: sN, logoUrl: lU, status: "active", blockReason: "" });
-        await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId, watermarkUrl: watermarkUrl });
+        await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId, watermarkUrl: watermarkUrl, ...extraSchoolData });
         window.showToast("✅ TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
+        
+        // Reset form & fetched data
         document.getElementById("schoolName").value = ""; document.getElementById("chairmanName").value = ""; document.getElementById("chairmanEmail").value = ""; document.getElementById("chairmanPassword").value = ""; document.getElementById("schoolLogo").value = "";
+        if (document.getElementById("fetchRegNo")) document.getElementById("fetchRegNo").value = "";
+        window.fetchedRegLogoData = null; window.fetchedRegFullData = null;
         if (document.getElementById("watermarkUrl")) document.getElementById("watermarkUrl").value = "";
         loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff();
     } catch (err) { window.showToast("ERROR: " + err.message, "#e11d48"); } finally { await secondaryAuth.signOut().catch(e => { }); b.innerText = "DEPLOY NODE"; }
@@ -2123,6 +2185,12 @@ window.submitSchoolRegistration = async () => {
         return;
     }
 
+    const recaptchaField = document.querySelector('#registration-modal [name="g-recaptcha-response"]');
+    if (recaptchaField && !recaptchaField.value) {
+        window.showToast('PLEASE VERIFY YOU ARE NOT A ROBOT', '#e11d48');
+        return;
+    }
+
     const btn = document.getElementById('submitRegBtn');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> UPLOADING ASSETS...';
     btn.disabled = true;
@@ -2309,7 +2377,8 @@ window.loadPendingRegistrations = () => {
                 <td class="p-4 text-xs text-gray-300">${data.district}, ${data.state}</td>
                 <td class="p-4"><a href="${data.authorityLetterUrl}" download="Authority_${data.schoolName}.pdf" class="text-indigo-400 hover:text-indigo-300 underline"><i class="fas fa-download"></i> View</a></td>
                 <td class="p-4 text-right flex gap-2 justify-end">
-                    <button onclick="window.approveRegistration('${doc.id}')" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded border border-emerald-500 transition"><i class="fas fa-check"></i></button>
+                    <button onclick="window.approveRegistrationOnly('${doc.id}')" class="px-2 py-1.5 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded border border-indigo-500 transition text-[10px] font-bold" title="Generate Registration No Only"><i class="fas fa-file-signature"></i> REG ONLY</button>
+                    <button onclick="window.approveRegistrationAuto('${doc.id}')" class="px-2 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded border border-emerald-500 transition text-[10px] font-bold" title="Auto Deploy Node Instantly"><i class="fas fa-rocket"></i> AUTO DEPLOY</button>
                     <button onclick="window.rejectRegistration('${doc.id}')" class="px-3 py-1.5 bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded border border-rose-500 transition"><i class="fas fa-times"></i></button>
                 </td>
             `;
@@ -2318,7 +2387,7 @@ window.loadPendingRegistrations = () => {
     });
 };
 
-window.approveRegistration = async (docId) => {
+window.approveRegistrationAuto = async (docId) => {
     window.customConfirm("APPROVE THIS NODE DEPLOYMENT?", async () => {
         try {
             const docRef = db.collection("pending_registrations").doc(docId);
@@ -2326,6 +2395,10 @@ window.approveRegistration = async (docId) => {
             if (!docSnap.exists) return;
 
             const data = docSnap.data();
+
+            // Generate Registration No
+            const randomDigits = Math.floor(100000 + Math.random() * 900000);
+            const regNo = `CORE/REG/EDU/${randomDigits}`;
 
             // 1. Create SecondaryAuth user
             let userRecord;
@@ -2344,7 +2417,8 @@ window.approveRegistration = async (docId) => {
                 name: data.principalName,
                 schoolName: data.schoolName,
                 plainPassword: data.password,
-                logoUrl: data.logoUrl || ""
+                logoUrl: data.logoUrl || "",
+                regNo: regNo
             });
 
             // 3. Add to schools collection
@@ -2360,6 +2434,7 @@ window.approveRegistration = async (docId) => {
                 pincode: data.pincode,
                 logoUrl: data.logoUrl,
                 status: "active",
+                regNo: regNo,
                 createdAt: Date.now()
             });
 
@@ -2370,6 +2445,40 @@ window.approveRegistration = async (docId) => {
             await docRef.delete();
             window.showToast("NODE PROVISIONED SUCCESSFULLY", "#10b981");
             window.logAudit("Provisioned Node", data.schoolName);
+
+        } catch (err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
+};
+
+window.approveRegistrationOnly = async (docId) => {
+    window.customConfirm("APPROVE REGISTRATION AND GENERATE REG/NO?", async () => {
+        try {
+            const docRef = db.collection("pending_registrations").doc(docId);
+            const docSnap = await docRef.get();
+            if (!docSnap.exists) return;
+
+            const data = docSnap.data();
+            
+            // Generate Registration No
+            const randomDigits = Math.floor(100000 + Math.random() * 900000);
+            const regNo = `CORE/REG/EDU/${randomDigits}`;
+
+            // Save to accepted_registrations
+            await db.collection("accepted_registrations").doc(regNo.replace(/\//g, "_")).set({
+                ...data,
+                regNo: regNo,
+                acceptedAt: Date.now(),
+                status: "approved_not_deployed"
+            });
+
+            // Delete from pending
+            await docRef.delete();
+            
+            // Show the RegNo to the user
+            prompt("SUCCESS! REGISTRATION NO GENERATED. Please copy this number:", regNo);
+            window.logAudit("Generated Reg/No", regNo);
 
         } catch (err) {
             window.showToast("ERROR: " + err.message, "#e11d48");

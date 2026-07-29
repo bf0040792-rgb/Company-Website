@@ -18,6 +18,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -759,6 +760,9 @@
                     <input type="password" id="loginPassword" placeholder="Password"
                         class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono tracking-widest">
                 </div>
+                <div class="flex justify-center w-full overflow-hidden mt-2">
+                    <div class="g-recaptcha transform scale-90 sm:scale-100 origin-center" data-sitekey="6LdA-GstAAAAAABAu0pU-ZkearQVooMW0l-hsf__"></div>
+                </div>
                 <button id="doLoginBtn"
                     class="w-full py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(0,240,255,0.3)] mt-4 flex justify-center items-center gap-2">
                     <i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE
@@ -946,7 +950,9 @@
                 </div>
             </div>
 
-
+            <div class="mb-4 flex justify-center w-full overflow-hidden">
+                <div class="g-recaptcha transform scale-90 sm:scale-100 origin-center" data-sitekey="6LdA-GstAAAAAABAu0pU-ZkearQVooMW0l-hsf__"></div>
+            </div>
 
             <button id="submitRegBtn" onclick="window.submitSchoolRegistration()"
                 class="w-full py-4 bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 hover:from-pink-400 hover:via-fuchsia-500 hover:to-purple-500 text-white rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(217,70,239,0.4)]">SUBMIT
@@ -1340,7 +1346,7 @@
                             class="absolute top-0 left-0 w-1 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]">
                         </div>
                         <h3 class="text-lg font-display font-bold text-white mb-4 flex items-center gap-2"><i
-                                class="fas fa-user-plus text-emerald-400"></i> Pending Node Registrations</h3>
+                                class="fas fa-user-plus text-emerald-400"></i> PENDING NEW REGISTRATION</h3>
                         <div class="overflow-x-auto rounded-xl border border-glassBorder mt-4">
                             <table class="w-full text-left border-collapse">
                                 <thead
@@ -1430,6 +1436,14 @@
                         </div>
                         <h3 class="text-lg font-display font-bold text-white mb-4 flex items-center gap-2"><i
                                 class="fas fa-plus-hexagon text-tealAccent"></i> Provision New Node</h3>
+                        
+                        <div class="flex gap-2 mb-6 p-4 bg-slateSurface/50 rounded-xl border border-glassBorder items-end max-w-2xl">
+                            <div class="flex-1">
+                                <label class="text-[10px] font-mono text-tealAccent uppercase block mb-1">Fetch from Registration No (Optional)</label>
+                                <input type="text" id="fetchRegNo" placeholder="CORE/REG/EDU/..." class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono">
+                            </div>
+                            <button onclick="window.fetchRegistrationDetails()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-mono text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition"><i class="fas fa-search"></i> FETCH</button>
+                        </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                             <div class="col-span-1"><label
                                     class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Entity
