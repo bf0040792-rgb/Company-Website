@@ -1930,15 +1930,17 @@ window.scrollToPublicSection = (sectionId) => {
 };
 
 window.openPublicApkDownload = () => {
-    const appSection = document.getElementById("public-app-section");
+    window.openCustomModal('apk-download-modal');
+};
+
+window.triggerApkDownload = () => {
     const downloadLink = document.getElementById("public-apk-download");
-    const baseUrl = window.location.href.split('#')[0];
     if (downloadLink && !downloadLink.classList.contains("hidden-el") && downloadLink.href && !downloadLink.href.endsWith("#")) {
-        window.open(`${baseUrl}#public-app-section`, '_blank', 'noopener');
-        return;
+        downloadLink.click(); // Automatically trigger the download
+        if (window.showToast) window.showToast("DOWNLOAD STARTED", "#10b981");
+    } else {
+        if (window.showToast) window.showToast("SCHOOL APK ABHI PUBLISH NAHI HUA", "#f59e0b");
     }
-    if (appSection) appSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (window.showToast) window.showToast("SCHOOL APK ABHI PUBLISH NAHI HUA", "#f59e0b");
 };
 
 window.toggleHamburger = () => {
@@ -3711,7 +3713,15 @@ window.deleteHeroBanner = async (index) => {
         if (index < 0 || index >= banners.length) return;
         const targetUrl = banners[index];
         window.customConfirm("DELETE THIS HERO BANNER?", async () => {
-            await deleteFirebaseStorageImage(targetUrl);
+            try {
+                await fetch('https://school-backend-zlgy.onrender.com/api/admin/delete-hero-banner', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageUrl: targetUrl })
+                });
+            } catch(e) {
+                console.error("Backend Cloudinary delete failed", e);
+            }
             banners.splice(index, 1);
             await PUBLIC_MEDIA_DOC.set({ banners, updatedAt: Date.now() }, { merge: true });
             await refreshPublicMedia();
@@ -3851,8 +3861,6 @@ function initPublicMediaAdminToggles() {
     });
 }
 
-document.getElementById("heroPrevBtn")?.addEventListener("click", () => window.setPublicHeroSlide(publicHeroIndex - 1));
-document.getElementById("heroNextBtn")?.addEventListener("click", () => window.setPublicHeroSlide(publicHeroIndex + 1));
 document.addEventListener("DOMContentLoaded", () => {
     initPublicMediaAdminToggles();
     refreshPublicMedia();

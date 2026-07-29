@@ -1144,7 +1144,7 @@ body.light-theme .feature-access-copy span {
     display: grid;
     place-items: center;
     transition: all .25s ease;
-    z-index: 3;
+    z-index: 50;
     cursor: pointer;
     font-size: 1.5rem;
 }
