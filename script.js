@@ -3603,7 +3603,7 @@ window.setPublicHeroSlide = (index) => {
 function startPublicHeroAutoScroll() {
     if (publicHeroTimer) clearInterval(publicHeroTimer);
     if (publicHeroSlides.length < 2) return;
-    publicHeroTimer = setInterval(() => window.setPublicHeroSlide(publicHeroIndex + 1), 4500);
+    publicHeroTimer = setInterval(() => window.setPublicHeroSlide(publicHeroIndex + 1), 3000);
 }
 
 function renderPublicAppSection(appMedia = {}) {
