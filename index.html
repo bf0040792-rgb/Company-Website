@@ -30,13 +30,13 @@
                         mono: ['JetBrains Mono', 'monospace']
                     },
                     colors: {
-                        slateBase: '#050B14', /* Deep Space Navy Black - More premium */
-                        slateSurface: '#0B172A', /* Rich Cyber Panel Background */
+                        slateBase: '#0a1220', /* Deep Space Cyber Dark - slightly brighter */
+                        slateSurface: '#0a1428', /* Cyber Panel Background */
                         tealAccent: '#00F0FF', /* Neon Cyan */
                         tealHover: '#00c3ff',
                         coolGray: '#6B7280',
                         coolLight: '#9CA3AF',
-                        glassBorder: 'rgba(0, 240, 255, 0.2)' /* Enhanced Holographic border */
+                        glassBorder: 'rgba(0, 240, 255, 0.15)' /* Holographic border */
                     }
                 }
             }
@@ -1030,9 +1030,10 @@
                     <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i
                             class="fas fa-desktop text-blue-400"></i> Force PC</span>
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer hidden-el">
+                <label
+                    class="flex items-center gap-2 cursor-pointer bg-slateSurface px-3 py-1.5 rounded-lg border border-glassBorder hover:border-amber-400 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
                     <input type="checkbox" id="themeToggle" class="input-checkbox w-4 h-4 rounded">
-                    <span class="text-xs font-mono font-bold text-coolLight tracking-widest"><i
+                    <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i
                             class="fas fa-sun text-amber-400"></i> Theme</span>
                 </label>
 
