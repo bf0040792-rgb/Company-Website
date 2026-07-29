@@ -353,15 +353,19 @@ auth.onAuthStateChanged(async (user) => {
 
                 // PIN Logic
                 let devData = ud.exists ? ud.data() : {};
-                pinWrapper.classList.remove("hidden-el");
-                pinWrapper.style.display = "flex";
-                if (devData.pin) {
-                    document.getElementById("enter-pin-box").classList.remove("hidden-el");
-                    document.getElementById("create-pin-box").classList.add("hidden-el");
-                    window.currentAppPin = devData.pin;
+                if (sessionStorage.getItem("pin_verified") === "true") {
+                    window.unlockDashboard();
                 } else {
-                    document.getElementById("create-pin-box").classList.remove("hidden-el");
-                    document.getElementById("enter-pin-box").classList.add("hidden-el");
+                    pinWrapper.classList.remove("hidden-el");
+                    pinWrapper.style.display = "flex";
+                    if (devData.pin) {
+                        document.getElementById("enter-pin-box").classList.remove("hidden-el");
+                        document.getElementById("create-pin-box").classList.add("hidden-el");
+                        window.currentAppPin = devData.pin;
+                    } else {
+                        document.getElementById("create-pin-box").classList.remove("hidden-el");
+                        document.getElementById("enter-pin-box").classList.add("hidden-el");
+                    }
                 }
 
                 document.getElementById("adminEmail").innerText = user.email;
@@ -402,12 +406,14 @@ window.saveNewPin = async () => {
     if (pin.length < 4) return window.showToast("PLEASE ENTER 4 DIGITS", "#e11d48");
     await db.collection("users").doc(superAdminUid).update({ pin: pin });
     window.currentAppPin = pin;
+    sessionStorage.setItem("pin_verified", "true");
     window.unlockDashboard();
 };
 
 window.verifyPin = () => {
     const pin = document.getElementById("loginPin").value;
     if (pin === window.currentAppPin) {
+        sessionStorage.setItem("pin_verified", "true");
         window.unlockDashboard();
     } else {
         document.getElementById("pinErrorMsg").classList.remove("hidden-el");

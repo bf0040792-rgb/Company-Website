@@ -30,13 +30,13 @@
                         mono: ['JetBrains Mono', 'monospace']
                     },
                     colors: {
-                        slateBase: '#0a1220', /* Deep Space Cyber Dark - slightly brighter */
-                        slateSurface: '#0a1428', /* Cyber Panel Background */
+                        slateBase: '#050B14', /* Deep Space Navy Black - More premium */
+                        slateSurface: '#0B172A', /* Rich Cyber Panel Background */
                         tealAccent: '#00F0FF', /* Neon Cyan */
                         tealHover: '#00c3ff',
                         coolGray: '#6B7280',
                         coolLight: '#9CA3AF',
-                        glassBorder: 'rgba(0, 240, 255, 0.15)' /* Holographic border */
+                        glassBorder: 'rgba(0, 240, 255, 0.2)' /* Enhanced Holographic border */
                     }
                 }
             }
@@ -95,25 +95,25 @@
                     <h1 class="text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span
                             class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">.IN</span></h1>
                 </div>
-                <div class="hidden lg:flex flex-wrap items-center justify-center gap-2 flex-1 px-4">
+                <div class="hidden lg:flex items-center justify-center gap-1 xl:gap-2 flex-1 px-2">
                     <button onclick="window.showSchoolLoginModal()"
-                        class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.5)] hover:shadow-[0_0_25px_rgba(79,70,229,0.8)] transition-all font-mono text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 xl:px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.5)] hover:shadow-[0_0_25px_rgba(79,70,229,0.8)] transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-school mr-1"></i> SCHOOL LOGIN
                     </button>
                     <button onclick="window.showRegistrationModal()"
-                        class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] hover:shadow-[0_0_25px_rgba(16,185,129,0.8)] transition-all font-mono text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 xl:px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] hover:shadow-[0_0_25px_rgba(16,185,129,0.8)] transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-plus-circle mr-1"></i> NEW REGISTRATION
                     </button>
                     <button onclick="window.openPublicApkDownload()"
-                        class="px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_15px_rgba(8,145,178,0.5)] hover:shadow-[0_0_25px_rgba(8,145,178,0.8)] transition-all font-mono text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 xl:px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_15px_rgba(8,145,178,0.5)] hover:shadow-[0_0_25px_rgba(8,145,178,0.8)] transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-download mr-1"></i> DOWNLOAD SCHOOL APK
                     </button>
                     <button onclick="window.scrollToPublicSection('features')"
-                        class="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.5)] hover:shadow-[0_0_25px_rgba(147,51,234,0.8)] transition-all font-mono text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 xl:px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.5)] hover:shadow-[0_0_25px_rgba(147,51,234,0.8)] transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-circle-info mr-1"></i> DETAILS
                     </button>
                     <button onclick="window.scrollToPublicSection('contact')"
-                        class="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 shadow-[0_0_15px_rgba(225,29,72,0.5)] hover:shadow-[0_0_25px_rgba(225,29,72,0.8)] transition-all font-mono text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 xl:px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 shadow-[0_0_15px_rgba(225,29,72,0.5)] hover:shadow-[0_0_25px_rgba(225,29,72,0.8)] transition-all font-mono text-[9px] xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-headset mr-1"></i> COMPLAINT
                     </button>
                 </div>
@@ -135,7 +135,7 @@
 
         <!-- Hero Section -->
         <header id="home"
-            class="pt-16 md:pt-24 lg:pt-32 pb-16 md:pb-20 lg:pb-24 px-4 sm:px-6 md:px-8 text-center relative overflow-hidden flex flex-col items-center min-h-[60vh] md:min-h-[70vh] lg:min-h-[80vh] justify-center">
+            class="pt-10 md:pt-16 lg:pt-20 pb-12 md:pb-16 lg:pb-20 px-4 sm:px-6 md:px-8 text-center relative overflow-hidden flex flex-col items-center min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh] justify-center">
             <!-- Pure CSS Cyber Grid Background -->
             <div class="absolute inset-0 z-0">
                 <div class="absolute inset-0 bg-gradient-to-br from-slateBase via-slateSurface to-slateBase"></div>
@@ -749,9 +749,8 @@
             <div class="space-y-5">
                 <div>
                     <label
-                        class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Username
-                        / Email ID</label>
-                    <input type="text" id="loginId" placeholder="Username - Gmail ID"
+                        class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Username</label>
+                    <input type="text" id="loginId" placeholder="Username"
                         class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono">
                 </div>
                 <div>
