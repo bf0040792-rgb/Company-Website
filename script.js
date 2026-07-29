@@ -1930,16 +1930,10 @@ window.scrollToPublicSection = (sectionId) => {
 };
 
 window.openPublicApkDownload = () => {
-    window.openCustomModal('apk-download-modal');
-};
-
-window.triggerApkDownload = () => {
-    const downloadLink = document.getElementById("public-apk-download");
-    if (downloadLink && !downloadLink.classList.contains("hidden-el") && downloadLink.href && !downloadLink.href.endsWith("#")) {
-        downloadLink.click(); // Automatically trigger the download
-        if (window.showToast) window.showToast("DOWNLOAD STARTED", "#10b981");
-    } else {
-        if (window.showToast) window.showToast("SCHOOL APK ABHI PUBLISH NAHI HUA", "#f59e0b");
+    const appSection = document.getElementById("public-app-section");
+    if (appSection) {
+        appSection.classList.remove("hidden-el");
+        appSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 };
 
