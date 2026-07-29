@@ -3581,6 +3581,12 @@ function renderPublicHeroCarousel(banners = []) {
         </div>
     `).join("");
     dots.innerHTML = publicHeroSlides.map((_, index) => `<button type="button" class="public-carousel-dot ${index === 0 ? "active" : ""}" aria-label="Go to banner ${index + 1}" onclick="window.setPublicHeroSlide(${index})"></button>`).join("");
+    
+    const prevBtn = document.getElementById("heroPrevBtn");
+    const nextBtn = document.getElementById("heroNextBtn");
+    if(prevBtn) prevBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex - 1);
+    if(nextBtn) nextBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex + 1);
+
     updatePublicHeroSlide();
     startPublicHeroAutoScroll();
 }
