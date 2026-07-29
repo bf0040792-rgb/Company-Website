@@ -589,6 +589,27 @@ window.openEditChairman = async (uid) => {
     openCustomModal("edit-chairman-modal");
 };
 
+window.deleteSchoolLogoFromEdit = async () => {
+    const uid = window.currentEditChairmanId;
+    const ch = window.fetchedChairmen.find(c => c.id === uid);
+    if (!ch || !ch.logoUrl) return window.showToast("NO EXISTING LOGO FOUND", "#e11d48");
+    
+    window.customConfirm("DELETE OLD LOGO PERMANENTLY?", async () => {
+        try {
+            await deleteFirebaseStorageImage(ch.logoUrl);
+            await db.collection("users").doc(uid).update({ logoUrl: "" });
+            if (ch.schoolId) {
+                await db.collection("schools").doc(ch.schoolId).update({ logoUrl: "" });
+            }
+            ch.logoUrl = "";
+            document.getElementById("edit-preview-logo").src = "https://via.placeholder.com/80";
+            window.showToast("✅ OLD LOGO DELETED. YOU CAN NOW UPLOAD A NEW ONE.");
+        } catch(e) {
+            window.showToast("ERROR DELETING LOGO", "#e11d48");
+        }
+    });
+};
+
 window.saveChairmanEdit = async () => {
     const uid = window.currentEditChairmanId; const ch = window.fetchedChairmen.find(c => c.id === uid); if (!ch) return;
     const newSchoolName = document.getElementById("edit-schoolName").value.trim(); const newChairmanName = document.getElementById("edit-chairmanName").value.trim(); let newEmail = document.getElementById("edit-chairmanEmail").value.trim();
