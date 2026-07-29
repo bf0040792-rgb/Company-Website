@@ -3754,7 +3754,7 @@ window.deleteAppLogo = async () => {
             const data = snap.exists ? snap.data() : {};
             const appMedia = { ...(data.appMedia || {}) };
             await deleteFirebaseStorageImage(appMedia.logoUrl);
-            delete appMedia.logoUrl;
+            appMedia.logoUrl = "";
             await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
             await refreshPublicMedia();
             window.showToast("APP LOGO DELETED", "#10b981");
@@ -3792,8 +3792,8 @@ window.deleteAppApk = async () => {
             const data = snap.exists ? snap.data() : {};
             const appMedia = { ...(data.appMedia || {}) };
             await deleteFirebaseStorageImage(appMedia.apkUrl);
-            delete appMedia.apkUrl;
-            delete appMedia.apkName;
+            appMedia.apkUrl = "";
+            appMedia.apkName = "";
             await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
             await refreshPublicMedia();
             window.showToast("APK DELETED", "#10b981");
