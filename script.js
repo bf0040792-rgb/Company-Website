@@ -166,31 +166,98 @@ const uploadToFirebaseStorage = async (fileObj, folder = 'uploads') => {
         window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
         return downloadURL;
     } catch (err) {
-        window.showToast("❌ UPLOAD FAILED: " + err.message, "#e11d48");
+        console.error("Firebase upload failed:", err);
         return null;
     }
 };
 
-const uploadToCloudinary = async (fileObj) => {
+const CLOUDINARY_SETTINGS = window.APP_CONFIG?.cloudinary || {};
+const PUBLIC_MEDIA_FALLBACK_FOLDER = window.APP_CONFIG?.publicMediaFallbackFolder || 'public/media';
+const PUBLIC_MEDIA_UPLOAD_PATHS = Array.isArray(window.APP_CONFIG?.publicMediaUploadPaths)
+    ? window.APP_CONFIG.publicMediaUploadPaths
+    : [];
+const PUBLIC_MEDIA_BACKEND_BASE = window.APP_CONFIG?.backendBaseUrl || '';
+
+const buildBackendUploadUrls = (options = {}) => {
+    const explicit = options.backendEndpoint ? [options.backendEndpoint] : [];
+    const base = PUBLIC_MEDIA_BACKEND_BASE ? PUBLIC_MEDIA_UPLOAD_PATHS.map(path => `${PUBLIC_MEDIA_BACKEND_BASE}${path}`) : [];
+    return [...explicit, ...base].filter(Boolean);
+};
+
+const uploadToCloudinary = async (fileObj, options = {}) => {
     if (!fileObj) return null;
+
+    const uploadPreset = options.uploadPreset || CLOUDINARY_SETTINGS.uploadPreset || 'ml_default';
+    const cloudName = options.cloudName || CLOUDINARY_SETTINGS.cloudName || 'disgtvs6f';
+    const cloudinaryUrl = options.cloudinaryUrl || CLOUDINARY_SETTINGS.uploadUrl || `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    const fallbackFolder = options.fallbackFolder || PUBLIC_MEDIA_FALLBACK_FOLDER;
+    const backendUrls = buildBackendUploadUrls(options);
+
+    const tryFirebaseFallback = async (reason) => {
+        if (reason) console.warn("Public media upload fallback triggered:", reason);
+        const fallbackUrl = await uploadToFirebaseStorage(fileObj, fallbackFolder);
+        if (fallbackUrl) {
+            window.showToast("✅ MEDIA SAVED VIA FIREBASE FALLBACK", "#10b981");
+            return fallbackUrl;
+        }
+        window.showToast("❌ UPLOAD FAILED: CLOUDINARY AND FIREBASE BOTH FAILED", "#e11d48");
+        return null;
+    };
+
+    const parseUploadResponse = async (res) => {
+        const text = await res.text();
+        if (!text) return {};
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return { raw: text };
+        }
+    };
+
+    const tryBackendUpload = async (endpoint) => {
+        const backendForm = new FormData();
+        backendForm.append("file", fileObj);
+        backendForm.append("upload_preset", uploadPreset);
+        const res = await fetch(endpoint, {
+            method: "POST",
+            body: backendForm
+        });
+        const data = await parseUploadResponse(res);
+        const backendUrl = data.secure_url || data.url || data.location || data.fileUrl;
+        if (res.ok && backendUrl) return backendUrl;
+        throw new Error(data.error || data.message || data.raw || `Backend upload failed (${res.status})`);
+    };
+
     try {
+        for (const endpoint of backendUrls) {
+            try {
+                window.showToast("⏳ UPLOADING VIA BACKEND...", "#f59e0b");
+                const backendUrl = await tryBackendUpload(endpoint);
+                if (backendUrl) {
+                    window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
+                    return backendUrl;
+                }
+            } catch (backendErr) {
+                console.warn("Backend media upload failed for endpoint:", endpoint, backendErr);
+            }
+        }
+
         const formData = new FormData();
         formData.append("file", fileObj);
-        formData.append("upload_preset", "ml_default");
+        formData.append("upload_preset", uploadPreset);
         window.showToast("⏳ UPLOADING TO CLOUDINARY...", "#f59e0b");
-        const res = await fetch("https://api.cloudinary.com/v1_1/disgtvs6f/image/upload", {
+        const res = await fetch(cloudinaryUrl, {
             method: "POST",
             body: formData
         });
-        const data = await res.json();
-        if (data.secure_url) {
+        const data = await parseUploadResponse(res);
+        if (res.ok && data.secure_url) {
             window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
             return data.secure_url;
         }
-        return null;
+        return await tryFirebaseFallback(data.error || data.message || data.raw || `Cloudinary response ${res.status}`);
     } catch (err) {
-        window.showToast("❌ UPLOAD FAILED: " + err.message, "#e11d48");
-        return null;
+        return await tryFirebaseFallback(err.message);
     }
 };
 
@@ -3659,7 +3726,7 @@ window.saveHeroBanners = async () => {
         const current = currentSnap.exists ? currentSnap.data() : {};
         const banners = Array.isArray(current.banners) ? [...current.banners] : [];
         for (const file of files) {
-            const uploadedUrl = await uploadToFirebaseStorage(file, "public/hero-banners");
+            const uploadedUrl = await uploadToCloudinary(file);
             if (uploadedUrl) banners.push(uploadedUrl);
         }
         await PUBLIC_MEDIA_DOC.set({ banners, updatedAt: Date.now() }, { merge: true });
@@ -3739,11 +3806,11 @@ window.saveAppMedia = async () => {
         const currentSnap = await PUBLIC_MEDIA_DOC.get();
         const current = currentSnap.exists ? currentSnap.data().appMedia || {} : {};
         const appMedia = { ...current, title, description };
-        if (logoFile) appMedia.logoUrl = await uploadToFirebaseStorage(logoFile, "public/app-logo");
+        if (logoFile) appMedia.logoUrl = await uploadToCloudinary(logoFile);
         if (shotFiles.length) {
             const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
             for (const file of shotFiles) {
-                const uploadedUrl = await uploadToFirebaseStorage(file, "public/app-screenshots");
+                const uploadedUrl = await uploadToCloudinary(file);
                 if (uploadedUrl) screenshots.push(uploadedUrl);
             }
             appMedia.screenshots = screenshots;
