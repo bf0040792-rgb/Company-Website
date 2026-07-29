@@ -297,7 +297,7 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
 
     // Anti-Brute Force Logic (3-Strike Rule)
     try {
-        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
         await auth.signInWithEmailAndPassword(e, p);
 
         try {
@@ -2078,69 +2078,6 @@ window.updateDistrictDropdown = async () => {
     }
 };
 
-window.downloadAuthorityTemplate = () => {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    let y = 20;
-
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.5);
-    doc.line(20, y, pageWidth - 20, y);
-    y += 10;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('OFFICIAL AUTHORITY LETTER TEMPLATE', pageWidth / 2, y, { align: 'center' });
-    y += 8;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'italic');
-    doc.text('(To be printed on School Letterhead)', pageWidth / 2, y, { align: 'center' });
-    y += 5;
-    doc.line(20, y, pageWidth - 20, y);
-    y += 15;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text('Date: __________________________', 20, y);
-    y += 15;
-
-    doc.text('To,', 20, y); y += 7;
-    doc.text('The Onboarding Team,', 20, y); y += 7;
-    doc.text('CoreEdu.IN Platform.', 20, y); y += 15;
-
-    doc.setFont('helvetica', 'bold');
-    doc.text('Subject: Authorization for Institutional Registration on CoreEdu.IN.', 20, y);
-    y += 15;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    const para1 = 'This is to certify that Mr./Ms./Dr. ___________________________, holding the position of ___________________________ (Principal / Chairman / Director), is officially authorized to register, deploy, and manage our institution, ___________________________ (School Name), on the CoreEdu.IN Global Master Core SaaS Platform.';
-    const splitPara1 = doc.splitTextToSize(para1, pageWidth - 40);
-    doc.text(splitPara1, 20, y);
-    y += splitPara1.length * 7 + 10;
-
-    const para2 = 'The management confirms that the provided email ID, phone number, and institutional details during registration are authentic and under our official custody.';
-    const splitPara2 = doc.splitTextToSize(para2, pageWidth - 40);
-    doc.text(splitPara2, 20, y);
-    y += splitPara2.length * 7 + 20;
-
-    doc.text('Authorized Signatory Name: ___________________________', 20, y); y += 10;
-    doc.text('Designation: ___________________________', 20, y); y += 10;
-    doc.text('Contact Number: ___________________________', 20, y); y += 25;
-
-    doc.line(20, y, pageWidth - 20, y);
-    y += 15;
-
-    doc.setFontSize(10);
-    doc.text('[ Place Official School Seal / Stamp Here ]', 25, y);
-    doc.text('[ Signature of Authority ]', pageWidth - 75, y);
-    y += 10;
-    doc.line(20, y, pageWidth - 20, y);
-
-    doc.save('Authority_Letter_Template.pdf');
-};
-
 // 2. Registration Logic
 window.submitSchoolRegistration = async () => {
     const sName = document.getElementById('reg-school-name').value.trim();
@@ -2154,9 +2091,8 @@ window.submitSchoolRegistration = async () => {
     const pin = document.getElementById('reg-pincode').value.trim();
     const addr = document.getElementById('reg-address').value.trim();
     const logoInput = document.getElementById('reg-logo').files[0];
-    const authInput = document.getElementById('reg-authority-letter').files[0];
 
-    if (!sName || !pName || !email || !pwd || !phone || !country || !state || !dist || !pin || !addr || !logoInput || !authInput) {
+    if (!sName || !pName || !email || !pwd || !phone || !country || !state || !dist || !pin || !addr || !logoInput) {
         window.showToast('ALL FIELDS AND UPLOADS ARE MANDATORY', '#e11d48');
         return;
     }
@@ -2174,7 +2110,6 @@ window.submitSchoolRegistration = async () => {
         });
 
         const logoData = await readAsDataURL(logoInput);
-        const authData = await readAsDataURL(authInput);
 
         const payload = {
             schoolName: sName,
@@ -2184,7 +2119,6 @@ window.submitSchoolRegistration = async () => {
             phone: phone,
             country, state, district: dist, pincode: pin, address: addr,
             logoUrl: logoData,
-            authorityLetterUrl: authData,
             timestamp: Date.now(),
             status: 'pending'
         };
