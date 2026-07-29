@@ -2143,7 +2143,15 @@ window.updateDistrictDropdown = async () => {
 
         districtSelect.innerHTML = '<option value="">Select District/City</option>';
         if (data && !data.error && data.data && data.data.length > 0) {
-            const uniqueCities = [...new Set(data.data)];
+            const cityMap = {};
+            data.data.forEach(city => {
+                const trimmedCity = city.trim();
+                const lower = trimmedCity.toLowerCase();
+                if (!cityMap[lower]) {
+                    cityMap[lower] = trimmedCity;
+                }
+            });
+            const uniqueCities = Object.values(cityMap).sort();
             uniqueCities.forEach(city => {
                 districtSelect.innerHTML += `<option value="${city}">${city}</option>`;
             });
