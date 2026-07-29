@@ -3625,7 +3625,7 @@ function renderPublicAppSection(appMedia = {}) {
         logoFallback.classList.remove("hidden-el");
     }
     if (appMedia.apkUrl) {
-        download.href = appMedia.apkUrl;
+        download.href = `https://school-backend-zlgy.onrender.com/api/download-apk?url=${encodeURIComponent(appMedia.apkUrl)}&name=${encodeURIComponent(appMedia.apkName || "MasterCore.apk")}`;
         download.download = appMedia.apkName || "latest-version.apk";
         download.classList.remove("hidden-el");
     } else {
@@ -3668,7 +3668,7 @@ function renderAdminMediaPreviews(data = {}) {
                         <strong>${media.apkName || "latest-version.apk"}</strong>
                     </div>
                     <div class="admin-media-file-actions">
-                        <a href="${media.apkUrl}" target="_blank" rel="noopener" class="admin-media-download-btn"><i class="fas fa-download"></i> Download</a>
+                        <a href="https://school-backend-zlgy.onrender.com/api/download-apk?url=${encodeURIComponent(media.apkUrl)}&name=${encodeURIComponent(media.apkName || 'MasterCore.apk')}" class="admin-media-download-btn"><i class="fas fa-download"></i> Download</a>
                         <button type="button" class="admin-media-delete-btn" onclick="window.deleteAppApk()"><i class="fas fa-trash"></i> Delete</button>
                     </div>
                 </div>
