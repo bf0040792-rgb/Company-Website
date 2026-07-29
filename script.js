@@ -262,12 +262,23 @@ const uploadToCloudinary = async (fileObj, options = {}) => {
 };
 
 const deleteFirebaseStorageImage = async (imageUrl) => {
-    if (imageUrl && imageUrl.includes("firebasestorage.googleapis.com")) {
+    if (!imageUrl) return;
+    if (imageUrl.includes("firebasestorage.googleapis.com")) {
         try {
             const storageRef = storage.refFromURL(imageUrl);
             await storageRef.delete();
         } catch (e) {
-            console.log("Delete error:", e);
+            console.log("Firebase Storage Delete error:", e);
+        }
+    } else if (imageUrl.includes("cloudinary.com")) {
+        try {
+            await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageUrl: imageUrl })
+            });
+        } catch (e) {
+            console.log("Cloudinary Delete error:", e);
         }
     }
 };
@@ -1992,12 +2003,13 @@ window.loadCountriesAPI = async () => {
     try {
         const res = await fetch("https://countriesnow.space/api/v0.1/countries/states");
         const data = await res.json();
-        globalCountries = data.data;
+        globalCountries = data.data.filter(c => c.name === "India");
         const cSelect = document.getElementById("reg-country");
-        cSelect.innerHTML = '<option value="">Select Country</option>';
+        cSelect.innerHTML = '';
         globalCountries.forEach(c => {
-            cSelect.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+            cSelect.innerHTML += `<option value="${c.name}" selected>${c.name}</option>`;
         });
+        window.updateStateDropdown();
     } catch (e) {
         console.error("API Error", e);
     }
@@ -2048,7 +2060,8 @@ window.updateDistrictDropdown = async () => {
 
         districtSelect.innerHTML = '<option value="">Select District/City</option>';
         if (data && !data.error && data.data && data.data.length > 0) {
-            data.data.forEach(city => {
+            const uniqueCities = [...new Set(data.data)];
+            uniqueCities.forEach(city => {
                 districtSelect.innerHTML += `<option value="${city}">${city}</option>`;
             });
         } else {
