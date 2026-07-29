@@ -1711,6 +1711,24 @@ window.loadRecycleBin = async () => {
 window.permanentlyDeleteBinItem = async (binId) => {
     window.customConfirm("PERMANENTLY DELETE THIS ITEM FROM STORAGE?", async () => {
         try {
+            const binDoc = await db.collection("recycle_bin").doc(binId).get();
+            if (binDoc.exists) {
+                const itemData = binDoc.data().data || {};
+                const urlsToCheck = [itemData.photoUrl, itemData.logoUrl, itemData.signatureUrl, itemData.imageUrl];
+                for (let url of urlsToCheck) {
+                    if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
+                        try {
+                            await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ imageUrl: url })
+                            });
+                        } catch(err) {
+                            console.error("Cloudinary delete failed:", err);
+                        }
+                    }
+                }
+            }
             await db.collection("recycle_bin").doc(binId).delete();
             window.showToast("PERMANENTLY DELETED!", "#10b981");
             window.loadRecycleBin();
