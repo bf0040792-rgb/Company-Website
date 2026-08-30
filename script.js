@@ -3982,3 +3982,44 @@ document.addEventListener("DOMContentLoaded", () => {
     initPublicMediaAdminToggles();
     refreshPublicMedia();
 });
+
+// ========================================================
+// 8. DATABASE BACKUP EXPORT
+// ========================================================
+const btnExportBackup = document.getElementById("btn-export-backup");
+if(btnExportBackup) {
+    btnExportBackup.addEventListener("click", async () => {
+        const secret = document.getElementById("master-secret").value.trim();
+        if(!secret) return alert("Please enter the Master Secret first!");
+        
+        btnExportBackup.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating Backup...';
+        btnExportBackup.disabled = true;
+
+        try {
+            const res = await fetch('https://school-backend-zlgy.onrender.com/api/admin/export-backup', {
+                method: 'GET',
+                headers: { 'mastersecret': secret }
+            });
+            const data = await res.json();
+            if(data.success) {
+                const jsonStr = JSON.stringify(data.backup, null, 2);
+                const blob = new Blob([jsonStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = \MasterCore_Backup_\.json\;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                alert("Backup downloaded successfully!");
+            } else {
+                alert("Backup Failed: " + data.error);
+            }
+        } catch(err) {
+            alert("Error connecting to server for backup.");
+        }
+        
+        btnExportBackup.innerHTML = '<i class="fa-solid fa-download"></i> Download Full Backup';
+        btnExportBackup.disabled = false;
+    });
+}
