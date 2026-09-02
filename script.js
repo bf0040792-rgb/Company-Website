@@ -156,7 +156,7 @@ const storage = firebase.storage();
 
 // Clear obsolete client-side Firebase/test-session artifacts only. Supabase remote data is untouched.
 ['firebase:authUser', 'firebaseui::rememberedAccounts', 'master_core_cache', 'old_student_ids'].forEach(key => localStorage.removeItem(key));
-// ['pin_verified', 'firebase_session'].forEach(key => sessionStorage.removeItem(key));
+['pin_verified', 'firebase_session'].forEach(key => sessionStorage.removeItem(key));
 
 // Initialize Theme
 if (localStorage.getItem('master_theme') === 'light') {
