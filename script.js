@@ -38,10 +38,16 @@ const makeCollectionRef = (col, constraints = []) => ({
 });
 const getAuth = () => ({
     get currentUser() { return window.__supabaseCurrentUser || null; },
-    getIdToken: async () => {
-        const session = (window.__supabaseSecondarySession && (await window.__supabaseSecondarySession()))?.access_token || (await supabaseClient.auth.getSession()).data?.session?.access_token;
-        if (!session) throw new Error('No active Supabase session');
-        return session;
+        getIdToken: async () => {
+        let session = (await supabaseClient.auth.getSession()).data?.session;
+        if (!session) {
+            const localData = localStorage.getItem('sb-ynlcbpxcsnfxqrogizns-auth-token');
+            if (localData) {
+                try { session = JSON.parse(localData); } catch(e){}
+            }
+        }
+        if (!session || !session.access_token) throw new Error('No active Supabase session');
+        return session.access_token;
     },
     onAuthStateChanged: callback => {
         const subscription = supabaseClient.auth.onAuthStateChange((event, session) => {
