@@ -2322,8 +2322,8 @@ window.submitSchoolRegistration = async () => {
     // const recaptchaField = document.querySelector('#registration-modal [name="g-recaptcha-response"]');
     // if (recaptchaField && !recaptchaField.value) {
         // window.showToast('PLEASE VERIFY YOU ARE NOT A ROBOT', '#e11d48');
-        return;
-    }
+        // return;
+    // }
 
     const btn = document.getElementById('submitRegBtn');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> UPLOADING ASSETS...';
