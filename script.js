@@ -540,7 +540,7 @@ window.unlockDashboard = () => {
 window.saveNewPin = async () => {
     const pin = document.getElementById("newPin").value;
     if (pin.length < 4) return window.showToast("PLEASE ENTER 4 DIGITS", "#e11d48");
-    try { await db.collection("users").doc(superAdminUid).set({ pin: pin }, { merge: true }); } catch(e) { window.showToast("WARNING: DB SAVE FAILED (Table missing?)", "#e11d48"); console.warn(e); }
+    await db.collection("users").doc(superAdminUid).set({ pin: pin }, { merge: true });
     window.currentAppPin = pin;
     sessionStorage.setItem("pin_verified", "true");
     window.unlockDashboard();
