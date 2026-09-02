@@ -528,8 +528,8 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 const logoutBtnEl = document.getElementById("logoutBtn");
-if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => auth.signOut().then(() => location.reload()));
-window.logoutFromPin = () => auth.signOut().then(() => location.reload());
+if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => { sessionStorage.removeItem("pin_verified"); auth.signOut().then(() => location.reload()); });
+window.logoutFromPin = () => { sessionStorage.removeItem("pin_verified"); auth.signOut().then(() => location.reload()); };
 
 window.unlockDashboard = () => {
     pinWrapper.classList.add("hidden-el");
