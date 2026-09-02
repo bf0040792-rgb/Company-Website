@@ -11,7 +11,7 @@ const normalizeRow = row => {
     if (!row || typeof row !== 'object') return row;
     return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value && (key.endsWith('At') || key === 'timestamp' || key === 'date') ? toTimestamp(value) : value]));
 };
-const makeSnapshot = (row, id) => row ? { exists: () => true, data: () => normalizeRow(row), id: id || row.id } : { exists: () => false, data: () => undefined, id };
+const makeSnapshot = (row, id) => row ? { get exists() { return true; }, data: () => normalizeRow(row), id: id || row.id } : { get exists() { return false; }, data: () => undefined, id };
 const applyConstraints = (builder, constraints = []) => constraints.reduce((q, c) => {
     if (c.type === 'where') return c.op === '==' ? q.eq(c.field, c.val) : c.op === '!=' ? q.neq(c.field, c.val) : c.op === 'in' ? q.in(c.field, c.val) : q;
     if (c.type === 'orderBy') return q.order(c.field, { ascending: c.dir !== 'desc' });
