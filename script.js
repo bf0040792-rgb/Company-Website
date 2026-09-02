@@ -513,7 +513,7 @@ auth.onAuthStateChanged(async (user) => {
                 window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
 
             } else { await auth.signOut(); window.showToast("ACCESS DENIED. ROOT ONLY.", "#e11d48"); }
-        } catch (error) { window.showToast("DB CONNECTION ERROR.", "#e11d48"); }
+        } catch (error) { window.showToast("DB ERR: " + (error.message || error), "#e11d48"); console.error(error); }
     } else {
         document.getElementById("auth-overlay").classList.add("hidden-el");
         landingPage.classList.remove("hidden-el");
@@ -540,7 +540,7 @@ window.unlockDashboard = () => {
 window.saveNewPin = async () => {
     const pin = document.getElementById("newPin").value;
     if (pin.length < 4) return window.showToast("PLEASE ENTER 4 DIGITS", "#e11d48");
-    await db.collection("users").doc(superAdminUid).set({ pin: pin }, { merge: true });
+    try { await db.collection("users").doc(superAdminUid).set({ pin: pin }, { merge: true }); } catch (e) { window.showToast("PIN SAVE ERR: " + (e.message || e), "#e11d48"); console.error("Pin Error:", e); return; }
     window.currentAppPin = pin;
     sessionStorage.setItem("pin_verified", "true");
     window.unlockDashboard();
