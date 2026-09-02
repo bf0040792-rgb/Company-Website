@@ -1,153 +1,127 @@
 ﻿const supabaseUrl = 'https://ynlcbpxcsnfxqrogizns.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGNicHhjc25meHFyb2dpem5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MDMxNjMsImV4cCI6MjEwMzQ3OTE2M30.sx5iFeugOuLBt4pqt0-8_4VOGz1yWa7HQWl4NyGCWkE';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGNicHhjc25meHFyb2dpem5zIiwicm9sZSI6IkFOT04iLCJpYXQiOjE3ODc5MDMxNjMsImV4cCI6MjEwMzQ3OTE2M30.sx5iFeugOuLBt4pqt0-8_4VOGz1yWa7HQWl4NyGCWkE';
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-const getAuth = () => supabase.auth;
-const onAuthStateChanged = (auth, callback) => {
-    supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
-            callback({ uid: session.user.id, email: session.user.email });
-        } else {
-            callback(null);
-        }
-    });
-    supabase.auth.getSession().then(({ data }) => {
-        if (data.session?.user) {
-            callback({ uid: data.session.user.id, email: data.session.user.email });
-        } else {
-            callback(null);
-        }
-    });
+const toTimestamp = value => {
+    if (value && typeof value.toMillis === 'function') return value;
+    const date = value ? new Date(value) : new Date();
+    return { toMillis: () => date.getTime(), toDate: () => date };
 };
-const signInWithEmailAndPassword = async (auth, email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return { user: { uid: data.user.id, email: data.user.email } };
+const normalizeRow = row => {
+    if (!row || typeof row !== 'object') return row;
+    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value && (key.endsWith('At') || key === 'timestamp' || key === 'date') ? toTimestamp(value) : value]));
 };
-const createUserWithEmailAndPassword = async (auth, email, password) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
-    return { user: { uid: data.user.id, email: data.user.email } };
-};
-const signOut = async (auth) => await supabase.auth.signOut();
-const setPersistence = async () => {};
-const browserLocalPersistence = {};
-
-const getFirestore = () => supabase;
-const doc = (db, col, id, ...path) => {
-    if (path.length > 0) {
-        if (path[0] === 'feature_controls') {
-           return { _isDoc: true, col: 'feature_controls', id: path[1], extraFilter: { field: 'schoolId', val: id } };
-        }
-    }
-    return { _isDoc: true, col, id };
-};
-const collection = (db, col) => ({ _isCol: true, col });
-const query = (colRef, ...constraints) => ({ ...colRef, constraints });
+const makeSnapshot = (row, id) => row ? { exists: () => true, data: () => normalizeRow(row), id: id || row.id } : { exists: () => false, data: () => undefined, id };
+const applyConstraints = (builder, constraints = []) => constraints.reduce((q, c) => {
+    if (c.type === 'where') return c.op === '==' ? q.eq(c.field, c.val) : c.op === '!=' ? q.neq(c.field, c.val) : c.op === 'in' ? q.in(c.field, c.val) : q;
+    if (c.type === 'orderBy') return q.order(c.field, { ascending: c.dir !== 'desc' });
+    return c.type === 'limit' ? q.limit(c.num) : q;
+}, builder);
+const makeDocRef = (col, id, extraFilter) => ({
+    _isDoc: true, col, id, extraFilter,
+    get: () => getDoc(makeDocRef(col, id, extraFilter)),
+    set: (data, options) => setDoc(makeDocRef(col, id, extraFilter), data, options),
+    update: data => updateDoc(makeDocRef(col, id, extraFilter), data),
+    delete: () => deleteDoc(makeDocRef(col, id, extraFilter)),
+    onSnapshot: callback => onSnapshot(makeDocRef(col, id, extraFilter), callback),
+    collection: childCollection => makeCollectionRef(childCollection, extraFilter ? [where(extraFilter.field, '==', extraFilter.val)] : [])
+});
+const makeCollectionRef = (col, constraints = []) => ({
+    _isCol: true, col, constraints,
+    where: (field, op, val) => makeCollectionRef(col, [...constraints, { type: 'where', field, op, val }]),
+    orderBy: (field, dir) => makeCollectionRef(col, [...constraints, { type: 'orderBy', field, dir }]),
+    limit: num => makeCollectionRef(col, [...constraints, { type: 'limit', num }]),
+    get: () => getDocs(makeCollectionRef(col, constraints)),
+    add: data => addDoc(makeCollectionRef(col, constraints), data),
+    doc: id => makeDocRef(col, id || crypto.randomUUID()),
+    onSnapshot: callback => onSnapshot(makeCollectionRef(col, constraints), callback)
+});
+const getAuth = () => ({
+    get currentUser() { return window.__supabaseCurrentUser || null; },
+    getIdToken: async () => {
+        const session = (window.__supabaseSecondarySession && (await window.__supabaseSecondarySession()))?.access_token || (await supabase.auth.getSession()).data?.session?.access_token;
+        if (!session) throw new Error('No active Supabase session');
+        return session;
+    },
+    onAuthStateChanged: callback => {
+        const subscription = supabase.auth.onAuthStateChange((event, session) => {
+            window.__supabaseCurrentUser = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
+            callback(window.__supabaseCurrentUser);
+        });
+        supabase.auth.getSession().then(({ data }) => {
+            window.__supabaseCurrentUser = data.session?.user ? { uid: data.session.user.id, email: data.session.user.email, id: data.session.user.id } : null;
+            callback(window.__supabaseCurrentUser);
+        }).catch(error => console.error('Supabase session bootstrap failed:', error));
+        return subscription;
+    },
+    signInWithEmailAndPassword: (email, password) => signInWithEmailAndPassword(null, email, password),
+    createUserWithEmailAndPassword: (email, password) => createUserWithEmailAndPassword(null, email, password),
+    signOut: () => signOut(null),
+    setPersistence: () => Promise.resolve()
+});
+const onAuthStateChanged = (authInstance, callback) => authInstance.onAuthStateChanged(callback);
+const signInWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; window.__supabaseCurrentUser = { uid: data.user.id, email: data.user.email, id: data.user.id }; return { user: window.__supabaseCurrentUser }; };
+const createUserWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabase.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user.id, email: data.user.email, id: data.user.id } }; };
+const signOut = async () => { window.__supabaseCurrentUser = null; return supabase.auth.signOut(); };
+const getFirestore = () => ({ collection: col => makeCollectionRef(col), batch: writeBatch, enablePersistence: () => Promise.resolve() });
+const doc = (db, col, id, ...path) => path[0] === 'feature_controls' ? makeDocRef('feature_controls', path[1], { field: 'schoolId', val: id }) : makeDocRef(col, id);
+const collection = (db, col) => makeCollectionRef(col);
+const query = (colRef, ...constraints) => makeCollectionRef(colRef.col, [...(colRef.constraints || []), ...constraints]);
 const where = (field, op, val) => ({ type: 'where', field, op, val });
 const orderBy = (field, dir) => ({ type: 'orderBy', field, dir });
-const limit = (num) => ({ type: 'limit', num });
+const limit = num => ({ type: 'limit', num });
 const serverTimestamp = () => new Date().toISOString();
-const deleteField = () => null;
-
-const getDoc = async (docRef) => {
-    let q = supabase.from(docRef.col).select('*').eq('id', docRef.id);
-    if (docRef.extraFilter) q = q.eq(docRef.extraFilter.field, docRef.extraFilter.val);
-    const { data, error } = await q.single();
-    if (error || !data) return { exists: () => false, data: () => undefined, id: docRef.id };
-    return { exists: () => true, data: () => data, id: docRef.id };
+const deleteField = () => undefined;
+const DELETE_FIELD_SENTINEL = deleteField();
+const arrayUnionBuilder = values => ({ __arrayUnion: [values].flat().filter(Boolean) });
+const getDoc = async ref => { let q = supabase.from(ref.col).select('*').eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { data, error } = await q.maybeSingle(); if (error || !data) return makeSnapshot(null, ref.id); return makeSnapshot(data, ref.id); };
+const getDocs = async ref => { const { data, error } = await applyConstraints(supabase.from(ref.col).select('*'), ref.constraints); if (error) throw error; const docs = (data || []).map(row => makeSnapshot(row, row.id)); return { empty: !docs.length, size: docs.length, docs, forEach: callback => docs.forEach(callback) }; };
+const applyArrayUnions = async (ref, data) => {
+    const unionEntries = Object.entries(data).filter(([, value]) => value && value.__arrayUnion);
+    if (!unionEntries.length) return;
+    const snap = await getDoc(ref);
+    const current = snap.exists ? snap.data() : {};
+    unionEntries.forEach(([key, value]) => {
+        const merged = new Set([...(Array.isArray(current[key]) ? current[key] : []), ...value.__arrayUnion]);
+        data[key] = Array.from(merged);
+    });
 };
-
-const getDocs = async (queryRef) => {
-    let q = supabase.from(queryRef.col).select('*');
-    if (queryRef.constraints) {
-        for (const c of queryRef.constraints) {
-            if (c.type === 'where') {
-                if (c.op === '==') q = q.eq(c.field, c.val);
-                else if (c.op === '!=') q = q.neq(c.field, c.val);
-                else if (c.op === 'in') q = q.in(c.field, c.val);
-            } else if (c.type === 'orderBy') {
-                q = q.order(c.field, { ascending: c.dir !== 'desc' });
-            } else if (c.type === 'limit') {
-                q = q.limit(c.num);
-            }
+const setDoc = async (ref, data, options = {}) => {
+    const payload = { id: ref.id, ...data };
+    if (ref.extraFilter) payload[ref.extraFilter.field] = ref.extraFilter.val;
+    if (!options.merge) {
+        const snap = await supabase.from(ref.col).select('*').eq('id', ref.id).maybeSingle();
+        if (!snap.data) {
+            const { error } = await supabase.from(ref.col).insert(payload);
+            if (error) throw error;
+            return;
         }
     }
-    const { data, error } = await q;
-    if (error) throw error;
-    const docs = (data || []).map(d => ({ id: d.id, data: () => d, exists: () => true }));
-    return { empty: docs.length === 0, size: docs.length, docs, forEach: (cb) => docs.forEach(cb) };
-};
-
-const setDoc = async (docRef, data, options = {}) => {
-    const payload = { id: docRef.id, ...data };
-    if (docRef.extraFilter) payload[docRef.extraFilter.field] = docRef.extraFilter.val;
-    const { error } = await supabase.from(docRef.col).upsert(payload);
+    const { error } = await supabase.from(ref.col).upsert(payload);
     if (error) throw error;
 };
-
-const updateDoc = async (docRef, data) => {
-    let q = supabase.from(docRef.col).update(data).eq('id', docRef.id);
-    if (docRef.extraFilter) q = q.eq(docRef.extraFilter.field, docRef.extraFilter.val);
-    const { error } = await q;
-    if (error) throw error;
-};
-
-const deleteDoc = async (docRef) => {
-    const { error } = await supabase.from(docRef.col).delete().eq('id', docRef.id);
-    if (error) throw error;
-};
-
-const addDoc = async (colRef, data) => {
-    const { data: res, error } = await supabase.from(colRef.col).insert(data).select().single();
-    if (error) throw error;
-    return { id: res.id };
-};
-
-const writeBatch = () => {
-    const operations = [];
-    return {
-        set: (docRef, data) => operations.push({ type: 'set', ref: docRef, data }),
-        update: (docRef, data) => operations.push({ type: 'update', ref: docRef, data }),
-        delete: (docRef) => operations.push({ type: 'delete', ref: docRef }),
-        commit: async () => {
-            for (const op of operations) {
-                if (op.type === 'set') await setDoc(op.ref, op.data);
-                if (op.type === 'update') await updateDoc(op.ref, op.data);
-                if (op.type === 'delete') await deleteDoc(op.ref);
-            }
-        }
-    };
-};
-
+const updateDoc = async (ref, data) => { const clean = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)); await applyArrayUnions(ref, clean); let q = supabase.from(ref.col).update(clean).eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { error } = await q; if (error) throw error; };
+const deleteDoc = async ref => { const { error } = await supabase.from(ref.col).delete().eq('id', ref.id); if (error) throw error; };
+const addDoc = async (ref, data) => { const { data: row, error } = await supabase.from(ref.col).insert(data).select().single(); if (error) throw error; return { id: row.id, ref: makeDocRef(ref.col, row.id) }; };
+const writeBatch = () => { const operations = []; return { set: (ref, data) => operations.push(() => setDoc(ref, data)), update: (ref, data) => operations.push(() => updateDoc(ref, data)), delete: ref => operations.push(() => deleteDoc(ref)), commit: async () => { for (const operation of operations) await operation(); } }; };
 const onSnapshot = (ref, callback) => {
-    if (ref._isDoc) {
-        getDoc(ref).then(callback);
-        const channel = supabase.channel(public: + ref.col + : + ref.id)
-            .on('postgres_changes', { event: '*', schema: 'public', table: ref.col, filter: id=eq. + ref.id }, async () => {
-                const snap = await getDoc(ref);
-                callback(snap);
-            }).subscribe();
-        return () => supabase.removeChannel(channel);
-    } else {
-        getDocs(ref).then(callback);
-        const channel = supabase.channel(public: + ref.col)
-            .on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, async () => {
-                const snap = await getDocs(ref);
-                callback(snap);
-            }).subscribe();
-        return () => supabase.removeChannel(channel);
-    }
+    const fetcher = ref._isDoc ? () => getDoc(ref) : () => getDocs(ref);
+    const run = () => fetcher().then(callback).catch(console.error);
+    run();
+    const channel = supabase.channel(`public:${ref.col}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
+    return () => supabase.removeChannel(channel);
 };
-
-const increment = (num) => num;
-const initializeApp = () => supabase;
-
-// --- END ADAPTER ---
-
+const firebase = { appCheck: () => ({ activate: () => { } }), storage: () => ({ ref: () => ({ put: async () => ({ ref: { getDownloadURL: async () => null } }) }), refFromURL: () => ({ delete: async () => { } }) }), firestore: { FieldValue: { serverTimestamp, delete: deleteField, arrayUnion: arrayUnionBuilder } }, auth: { Auth: { Persistence: { SESSION: 'session' } } }, initializeApp: () => supabase };
 const auth = getAuth();
 const db = getFirestore();
-const secondaryAuth = getAuth();
+// Secondary auth uses an isolated Supabase client so chairman login/user creation
+// never replaces the primary developer session on the company portal.
+const secondarySupabase = window.supabase.createClient(supabaseUrl, supabaseKey, { auth: { storageKey: 'company-secondary-auth' } });
+const secondaryAuth = {
+    signInWithEmailAndPassword: async (email, password) => { const { data, error } = await secondarySupabase.auth.signInWithPassword({ email, password }); if (error) throw error; const user = { uid: data.user.id, email: data.user.email, id: data.user.id }; window.__supabaseSecondarySession = async () => (await secondarySupabase.auth.getSession()).data?.session; return { user }; },
+    createUserWithEmailAndPassword: async (email, password) => { const { data, error } = await secondarySupabase.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user?.id || '', email: data.user?.email || email, id: data.user?.id || '' } }; },
+    signOut: async () => { window.__supabaseSecondarySession = null; await secondarySupabase.auth.signOut(); }
+};
 
 // ==========================================
 // ðŸ›¡ï¸ GEO-FENCING LAYER
@@ -170,12 +144,13 @@ async function verifyGeoFence() {
 verifyGeoFence();
 
 // ==========================================
-// 1. FIREBASE & SYSTEM INITIALIZATION
+// 1. SUPABASE SYSTEM INITIALIZATION
 // ==========================================
-const appCheck = firebase.appCheck();
-appCheck.activate('6LeAT9csAAAAANn9sBk-BPOFASXX9liQLCwwO5_4', true);
+const storage = firebase.storage();
 
-const storage = firebase.storage(app);
+// Clear obsolete client-side Firebase/test-session artifacts only. Supabase remote data is untouched.
+['firebase:authUser', 'firebaseui::rememberedAccounts', 'master_core_cache', 'old_student_ids'].forEach(key => localStorage.removeItem(key));
+['pin_verified', 'firebase_session'].forEach(key => sessionStorage.removeItem(key));
 
 // Initialize Theme
 if (localStorage.getItem('master_theme') === 'light') {
@@ -193,9 +168,6 @@ document.getElementById('themeToggle').addEventListener('change', (e) => {
 });
 
 db.enablePersistence({ synchronizeTabs: true }).catch(function (err) { console.log("Cache Error: ", err); });
-
-const secondaryApp = firebase.initializeApp(firebaseConfig, "SecondaryApp");
-const secondaryAuth = firebase.auth(secondaryApp);
 
 // Global State Variables
 window.fetchedChairmen = [];
@@ -220,7 +192,10 @@ const landingPage = document.getElementById('landing-page');
 const pinWrapper = document.getElementById('pin-wrapper');
 
 // Initialize Icons
-setTimeout(() => lucide.createIcons(), 100);
+setTimeout(() => window.lucide?.createIcons(), 100);
+
+// A database outage must never prevent the public landing page from rendering.
+setTimeout(() => document.getElementById('auth-overlay')?.classList.add('hidden-el'), 8000);
 
 // ==========================================
 // 2. CORE UI & UTILITY FUNCTIONS
@@ -259,7 +234,8 @@ window.customConfirm = (message, onYes) => {
 };
 
 // Device Mode & Privacy Shield
-document.getElementById("deviceModeToggle").addEventListener("change", (e) => {
+const deviceModeToggleEl = document.getElementById("deviceModeToggle");
+if (deviceModeToggleEl) deviceModeToggleEl.addEventListener("change", (e) => {
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     if (e.target.checked) {
         document.body.classList.add("force-desktop");
@@ -270,7 +246,8 @@ document.getElementById("deviceModeToggle").addEventListener("change", (e) => {
     }
 });
 
-document.getElementById("privacyShieldToggle").addEventListener("change", (e) => {
+const privacyShieldToggleEl = document.getElementById("privacyShieldToggle");
+if (privacyShieldToggleEl) privacyShieldToggleEl.addEventListener("change", (e) => {
     if (e.target.checked) { document.body.classList.add("privacy-mode"); window.showToast("<i class='fas fa-user-secret'></i> STEALTH MODE ENGAGED", "#6366f1"); }
     else { document.body.classList.remove("privacy-mode"); window.showToast("STEALTH MODE DISABLED", "#64748b"); }
 });
@@ -424,15 +401,17 @@ const deleteFirebaseStorageImage = async (imageUrl) => {
 // ==========================================
 // 3. AUTHENTICATION & PIN SECURITY
 // ==========================================
-document.getElementById("doLoginBtn").addEventListener("click", async () => {
+const doLoginBtnEl = document.getElementById("doLoginBtn");
+if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
     const e = document.getElementById("loginId").value.trim();
     const p = document.getElementById("loginPassword").value.trim();
     const b = document.getElementById("doLoginBtn");
     const err = document.getElementById("loginErrorMsg");
     if (!e || !p) { err.innerText = "CREDENTIALS REQUIRED."; err.classList.remove('hidden-el'); return; }
 
+    // reCAPTCHA stays optional: Supabase auth must not be blocked by a third-party captcha widget.
     const recaptchaField = document.querySelector('#login-modal [name="g-recaptcha-response"]');
-    if (recaptchaField && !recaptchaField.value) { err.innerText = "PLEASE VERIFY YOU ARE NOT A ROBOT."; err.classList.remove('hidden-el'); return; }
+    if (recaptchaField && recaptchaField.value) { /* verified */ }
 
     b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> VERIFYING HASH...`;
 
@@ -442,7 +421,7 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
         await auth.signInWithEmailAndPassword(e, p);
 
         try {
-            const failRef = db.collection("login_logs").doc(e.replace(/[\.\#\$\[\]]/g, "_"));
+            const failRef = db.collection("login_logs").doc(e.replace(/[^a-zA-Z0-9_@-]/g, "_"));
             const failDoc = await failRef.get();
             if (failDoc.exists) {
                 let lockTime = failDoc.data().lockTime || 0;
@@ -466,7 +445,7 @@ document.getElementById("doLoginBtn").addEventListener("click", async () => {
         // Record Failure
         err.innerText = "Invalid ID / Password";
         try {
-            const failRef = db.collection("login_logs").doc(e.replace(/[\.\#\$\[\]]/g, "_"));
+            const failRef = db.collection("login_logs").doc(e.replace(/[^a-zA-Z0-9_@-]/g, "_"));
             const failDoc = await failRef.get();
             let fails = (failDoc.exists ? (failDoc.data().fails || 0) : 0) + 1;
             let newLockTime = 0;
@@ -496,7 +475,11 @@ auth.onAuthStateChanged(async (user) => {
         try {
             const ud = await db.collection("users").doc(user.uid).get();
             if (!ud.exists || ud.data().role === "developer") {
-                if (!ud.exists) await db.collection("users").doc(user.uid).set({ email: user.email, role: "developer", name: "Super Admin", status: "active" });
+                if (!ud.exists) {
+                    // First Supabase login: self-provision the developer profile. If RLS blocks the write,
+                    // still allow the session so the admin can create the profile from Supabase dashboard.
+                    try { await db.collection("users").doc(user.uid).set({ email: user.email, role: "developer", name: "Super Admin", status: "active" }); } catch (provisionErr) { console.warn('Developer profile self-provision failed (check users RLS):', provisionErr); }
+                }
                 superAdminUid = user.uid;
 
                 document.getElementById("auth-overlay").classList.add("hidden-el");
@@ -538,7 +521,8 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-document.getElementById("logoutBtn").addEventListener("click", () => auth.signOut().then(() => location.reload()));
+const logoutBtnEl = document.getElementById("logoutBtn");
+if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => auth.signOut().then(() => location.reload()));
 window.logoutFromPin = () => auth.signOut().then(() => location.reload());
 
 window.unlockDashboard = () => {
@@ -652,7 +636,7 @@ window.initQuotaMonitor = () => {
 window.fetchRegistrationDetails = async () => {
     const regNo = document.getElementById("fetchRegNo").value.trim();
     if (!regNo) { window.showToast("PLEASE ENTER REGISTRATION NO", "#e11d48"); return; }
-    
+
     try {
         const docId = regNo.replace(/\//g, "_");
         const docSnap = await db.collection("accepted_registrations").doc(docId).get();
@@ -660,29 +644,30 @@ window.fetchRegistrationDetails = async () => {
             window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
             return;
         }
-        
+
         const data = docSnap.data();
-        
+
         // Auto-fill fields
         document.getElementById("schoolName").value = data.schoolName || "";
         document.getElementById("chairmanName").value = data.principalName || "";
         document.getElementById("chairmanEmail").value = data.email || "";
         document.getElementById("chairmanPassword").value = data.password || "";
-        
+
         // Logo is tricky because it's a file input. We can store the data URL globally and bypass the file check,
         // but it requires changing createChairmanBtn logic to accept a pre-filled logoData.
         window.fetchedRegLogoData = data.logoUrl || null;
         window.fetchedRegFullData = data; // store all data for later
-        
+
         window.showToast("DETAILS AUTO-FILLED SUCCESSFULLY!", "#10b981");
-        
+
     } catch (e) {
         console.error(e);
         window.showToast("ERROR FETCHING DETAILS", "#e11d48");
     }
 };
 
-document.getElementById("createChairmanBtn").addEventListener("click", async () => {
+const createChairmanBtnEl = document.getElementById("createChairmanBtn");
+if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () => {
     const sN = document.getElementById("schoolName").value.trim(); const cN = document.getElementById("chairmanName").value.trim(); const em = document.getElementById("chairmanEmail").value.trim(); const pA = document.getElementById("chairmanPassword").value.trim(); const lF = document.getElementById("schoolLogo").files[0]; const b = document.getElementById("createChairmanBtn");
     if (!sN || !cN || !em || !pA) return window.showToast("FILL ALL PARAMETERS!", "#e11d48");
     const tier = document.getElementById("subscriptionTier") ? document.getElementById("subscriptionTier").value : "Starter";
@@ -691,7 +676,7 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
     const watermarkUrl = document.getElementById("watermarkUrl") ? document.getElementById("watermarkUrl").value.trim() : "";
     b.innerText = "DEPLOYING NODE...";
     try {
-    let lU = "https://via.placeholder.com/40";
+        let lU = "https://via.placeholder.com/40";
         if (lF) {
             const upU = await uploadToCloudinary(lF);
             if (upU) { lU = upU; } else { window.showToast("ASSET UPLOAD FAILED.", "#e11d48"); b.innerText = "DEPLOY NODE"; return; }
@@ -702,7 +687,7 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
         b.innerText = "PROVISIONING ID...";
         const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA);
         const nuId = uC.user.uid; const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
-        
+
         let extraSchoolData = {};
         if (window.fetchedRegFullData) {
             extraSchoolData = {
@@ -724,7 +709,7 @@ document.getElementById("createChairmanBtn").addEventListener("click", async () 
         await db.collection("users").doc(nuId).set({ name: cN, email: em, role: "chairman", plainPassword: pA, schoolId: sId, schoolName: sN, logoUrl: lU, status: "active", blockReason: "" });
         await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId, watermarkUrl: watermarkUrl, ...extraSchoolData });
         window.showToast("âœ… TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
-        
+
         // Reset form & fetched data
         document.getElementById("schoolName").value = ""; document.getElementById("chairmanName").value = ""; document.getElementById("chairmanEmail").value = ""; document.getElementById("chairmanPassword").value = ""; document.getElementById("schoolLogo").value = "";
         if (document.getElementById("fetchRegNo")) document.getElementById("fetchRegNo").value = "";
@@ -793,7 +778,7 @@ window.deleteSchoolLogoFromEdit = async () => {
     const uid = window.currentEditChairmanId;
     const ch = window.fetchedChairmen.find(c => c.id === uid);
     if (!ch || !ch.logoUrl) return window.showToast("NO EXISTING LOGO FOUND", "#e11d48");
-    
+
     window.customConfirm("DELETE OLD LOGO PERMANENTLY?", async () => {
         try {
             await deleteFirebaseStorageImage(ch.logoUrl);
@@ -804,7 +789,7 @@ window.deleteSchoolLogoFromEdit = async () => {
             ch.logoUrl = "";
             document.getElementById("edit-preview-logo").src = "https://via.placeholder.com/80";
             window.showToast("âœ… OLD LOGO DELETED. YOU CAN NOW UPLOAD A NEW ONE.");
-        } catch(e) {
+        } catch (e) {
             window.showToast("ERROR DELETING LOGO", "#e11d48");
         }
     });
@@ -926,7 +911,8 @@ window.impersonateUser = async (uid, schoolId, email, pass) => {
 // ==========================================
 // 7. INSPECT STUDENTS & AADHAAR SEARCH
 // ==========================================
-document.getElementById("inspectSchoolSelect").addEventListener("change", async (e) => {
+const inspectSchoolSelectEl = document.getElementById("inspectSchoolSelect");
+if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", async (e) => {
     const sid = e.target.value; const dd = document.getElementById("schoolInspectData");
     if (!sid) { dd.classList.add("hidden-el"); return; }
     try {
@@ -1684,7 +1670,8 @@ window.toggleAdvancedSecurity = async (type) => {
 };
 window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { } };
 
-document.getElementById("csvExportBtn").addEventListener("click", async () => {
+const csvExportBtnEl = document.getElementById("csvExportBtn");
+if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
     window.showToast("COMPILING DIRECTORY...", "#00F0FF");
     try {
         const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); doc.text("Global Node Directory", 14, 20);
@@ -1694,7 +1681,8 @@ document.getElementById("csvExportBtn").addEventListener("click", async () => {
     } catch (e) { }
 });
 
-document.getElementById("cleanupBtn").addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`âœ… ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
+const cleanupBtnEl = document.getElementById("cleanupBtn");
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1961,7 +1949,7 @@ window.permanentlyDeleteBinItem = async (binId) => {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ imageUrl: url })
                             });
-                        } catch(err) {
+                        } catch (err) {
                             console.error("Cloudinary delete failed:", err);
                         }
                     }
@@ -2085,7 +2073,7 @@ window.sendAIMessage = async () => {
 
         const contextData = JSON.stringify({ schools, transactions });
 
-        const res = await fetch("http://localhost:5000/api/ai-assistant", {
+        const res = await fetch((window.APP_CONFIG?.backendBaseUrl || '') + "/api/ai-assistant", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ prompt: msg, context: contextData })
@@ -2610,7 +2598,7 @@ window.approveRegistrationOnly = async (docId) => {
             if (!docSnap.exists) return;
 
             const data = docSnap.data();
-            
+
             // Generate Registration No
             const randomDigits = Math.floor(100000 + Math.random() * 900000);
             const regNo = `CORE/REG/EDU/${randomDigits}`;
@@ -2625,7 +2613,7 @@ window.approveRegistrationOnly = async (docId) => {
 
             // Delete from pending
             await docRef.delete();
-            
+
             // Show the RegNo to the user
             prompt("SUCCESS! REGISTRATION NO GENERATED. Please copy this number:", regNo);
             window.logAudit("Generated Reg/No", regNo);
@@ -3838,11 +3826,11 @@ function renderPublicHeroCarousel(banners = []) {
         </div>
     `).join("");
     dots.innerHTML = publicHeroSlides.map((_, index) => `<button type="button" class="public-carousel-dot ${index === 0 ? "active" : ""}" aria-label="Go to banner ${index + 1}" onclick="window.setPublicHeroSlide(${index})"></button>`).join("");
-    
+
     const prevBtn = document.getElementById("heroPrevBtn");
     const nextBtn = document.getElementById("heroNextBtn");
-    if(prevBtn) prevBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex - 1);
-    if(nextBtn) nextBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex + 1);
+    if (prevBtn) prevBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex - 1);
+    if (nextBtn) nextBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex + 1);
 
     updatePublicHeroSlide();
     startPublicHeroAutoScroll();
@@ -3974,7 +3962,7 @@ window.deleteHeroBanner = async (index) => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageUrl: targetUrl })
                 });
-            } catch(e) {
+            } catch (e) {
                 console.error("Backend Cloudinary delete failed", e);
             }
             banners.splice(index, 1);
@@ -3996,13 +3984,13 @@ window.saveHeroBanners = async () => {
         const idToken = await auth.currentUser.getIdToken();
         const formData = new FormData();
         files.forEach(file => formData.append('banners', file));
-        
+
         const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-hero-banners", {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${idToken}` },
             body: formData
         });
-        
+
         const data = await res.json();
         if (data.success) {
             input.value = "";
@@ -4076,7 +4064,7 @@ window.saveAppMedia = async () => {
     const logoFile = document.getElementById("app-logo-upload")?.files[0];
     const apkFile = document.getElementById("apk-file-upload")?.files[0];
     const screenshotFiles = document.getElementById("app-screenshots-upload")?.files;
-    
+
     if (!logoFile && !apkFile && (!screenshotFiles || screenshotFiles.length === 0)) return window.showToast("UPLOAD LOGO, APK, OR SCREENSHOTS", "#e11d48");
     try {
         window.showToast("UPLOADING APP MEDIA VIA SECURE BACKEND...", "#f59e0b");
@@ -4089,13 +4077,13 @@ window.saveAppMedia = async () => {
                 formData.append('screenshots', screenshotFiles[i]);
             }
         }
-        
+
         const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-app-media", {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${idToken}` },
             body: formData
         });
-        
+
         const data = await res.json();
         if (data.success) {
             ["app-logo-upload", "app-screenshots-upload", "apk-file-upload"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
@@ -4132,11 +4120,11 @@ document.addEventListener("DOMContentLoaded", () => {
 // 8. DATABASE BACKUP EXPORT
 // ========================================================
 const btnExportBackup = document.getElementById("btn-export-backup");
-if(btnExportBackup) {
+if (btnExportBackup) {
     btnExportBackup.addEventListener("click", async () => {
         const secret = document.getElementById("master-secret").value.trim();
-        if(!secret) return alert("Please enter the Master Secret first!");
-        
+        if (!secret) return alert("Please enter the Master Secret first!");
+
         btnExportBackup.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating Backup...';
         btnExportBackup.disabled = true;
 
@@ -4146,13 +4134,13 @@ if(btnExportBackup) {
                 headers: { 'mastersecret': secret }
             });
             const data = await res.json();
-            if(data.success) {
+            if (data.success) {
                 const jsonStr = JSON.stringify(data.backup, null, 2);
                 const blob = new Blob([jsonStr], { type: "application/json" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = \MasterCore_Backup_\.json\;
+                a.download = `MasterCore_Backup_${Date.now()}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -4160,12 +4148,13 @@ if(btnExportBackup) {
             } else {
                 alert("Backup Failed: " + data.error);
             }
-        } catch(err) {
+        } catch (err) {
             alert("Error connecting to server for backup.");
         }
-        
+
         btnExportBackup.innerHTML = '<i class="fa-solid fa-download"></i> Download Full Backup';
         btnExportBackup.disabled = false;
     });
 }
+
 
