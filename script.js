@@ -3981,7 +3981,7 @@ window.saveHeroBanners = async () => {
     if (!files.length) return window.showToast("SELECT HERO BANNER IMAGES", "#e11d48");
     try {
         window.showToast("UPLOADING HERO BANNERS VIA SECURE BACKEND...", "#f59e0b");
-        const idToken = await auth.currentUser.getIdToken();
+        const idToken = await auth.getIdToken();
         const formData = new FormData();
         files.forEach(file => formData.append('banners', file));
 
@@ -4068,7 +4068,7 @@ window.saveAppMedia = async () => {
     if (!logoFile && !apkFile && (!screenshotFiles || screenshotFiles.length === 0)) return window.showToast("UPLOAD LOGO, APK, OR SCREENSHOTS", "#e11d48");
     try {
         window.showToast("UPLOADING APP MEDIA VIA SECURE BACKEND...", "#f59e0b");
-        const idToken = await auth.currentUser.getIdToken();
+        const idToken = await auth.getIdToken();
         const formData = new FormData();
         if (apkFile) formData.append('apk', apkFile);
         if (logoFile) formData.append('logo', logoFile);
