@@ -1,6 +1,6 @@
-﻿const supabaseUrl = 'https://ynlcbpxcsnfxqrogizns.supabase.co';
+const supabaseUrl = 'https://ynlcbpxcsnfxqrogizns.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGNicHhjc25meHFyb2dpem5zIiwicm9sZSI6IkFOT04iLCJpYXQiOjE3ODc5MDMxNjMsImV4cCI6MjEwMzQ3OTE2M30.sx5iFeugOuLBt4pqt0-8_4VOGz1yWa7HQWl4NyGCWkE';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 const toTimestamp = value => {
     if (value && typeof value.toMillis === 'function') return value;
@@ -39,16 +39,16 @@ const makeCollectionRef = (col, constraints = []) => ({
 const getAuth = () => ({
     get currentUser() { return window.__supabaseCurrentUser || null; },
     getIdToken: async () => {
-        const session = (window.__supabaseSecondarySession && (await window.__supabaseSecondarySession()))?.access_token || (await supabase.auth.getSession()).data?.session?.access_token;
+        const session = (window.__supabaseSecondarySession && (await window.__supabaseSecondarySession()))?.access_token || (await supabaseClient.auth.getSession()).data?.session?.access_token;
         if (!session) throw new Error('No active Supabase session');
         return session;
     },
     onAuthStateChanged: callback => {
-        const subscription = supabase.auth.onAuthStateChange((event, session) => {
+        const subscription = supabaseClient.auth.onAuthStateChange((event, session) => {
             window.__supabaseCurrentUser = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
             callback(window.__supabaseCurrentUser);
         });
-        supabase.auth.getSession().then(({ data }) => {
+        supabaseClient.auth.getSession().then(({ data }) => {
             window.__supabaseCurrentUser = data.session?.user ? { uid: data.session.user.id, email: data.session.user.email, id: data.session.user.id } : null;
             callback(window.__supabaseCurrentUser);
         }).catch(error => console.error('Supabase session bootstrap failed:', error));
@@ -60,9 +60,9 @@ const getAuth = () => ({
     setPersistence: () => Promise.resolve()
 });
 const onAuthStateChanged = (authInstance, callback) => authInstance.onAuthStateChanged(callback);
-const signInWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; window.__supabaseCurrentUser = { uid: data.user.id, email: data.user.email, id: data.user.id }; return { user: window.__supabaseCurrentUser }; };
-const createUserWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabase.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user.id, email: data.user.email, id: data.user.id } }; };
-const signOut = async () => { window.__supabaseCurrentUser = null; return supabase.auth.signOut(); };
+const signInWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password }); if (error) throw error; window.__supabaseCurrentUser = { uid: data.user.id, email: data.user.email, id: data.user.id }; return { user: window.__supabaseCurrentUser }; };
+const createUserWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabaseClient.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user.id, email: data.user.email, id: data.user.id } }; };
+const signOut = async () => { window.__supabaseCurrentUser = null; return supabaseClient.auth.signOut(); };
 const getFirestore = () => ({ collection: col => makeCollectionRef(col), batch: writeBatch, enablePersistence: () => Promise.resolve() });
 const doc = (db, col, id, ...path) => path[0] === 'feature_controls' ? makeDocRef('feature_controls', path[1], { field: 'schoolId', val: id }) : makeDocRef(col, id);
 const collection = (db, col) => makeCollectionRef(col);
@@ -74,8 +74,8 @@ const serverTimestamp = () => new Date().toISOString();
 const deleteField = () => undefined;
 const DELETE_FIELD_SENTINEL = deleteField();
 const arrayUnionBuilder = values => ({ __arrayUnion: [values].flat().filter(Boolean) });
-const getDoc = async ref => { let q = supabase.from(ref.col).select('*').eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { data, error } = await q.maybeSingle(); if (error || !data) return makeSnapshot(null, ref.id); return makeSnapshot(data, ref.id); };
-const getDocs = async ref => { const { data, error } = await applyConstraints(supabase.from(ref.col).select('*'), ref.constraints); if (error) throw error; const docs = (data || []).map(row => makeSnapshot(row, row.id)); return { empty: !docs.length, size: docs.length, docs, forEach: callback => docs.forEach(callback) }; };
+const getDoc = async ref => { let q = supabaseClient.from(ref.col).select('*').eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { data, error } = await q.maybeSingle(); if (error || !data) return makeSnapshot(null, ref.id); return makeSnapshot(data, ref.id); };
+const getDocs = async ref => { const { data, error } = await applyConstraints(supabaseClient.from(ref.col).select('*'), ref.constraints); if (error) throw error; const docs = (data || []).map(row => makeSnapshot(row, row.id)); return { empty: !docs.length, size: docs.length, docs, forEach: callback => docs.forEach(callback) }; };
 const applyArrayUnions = async (ref, data) => {
     const unionEntries = Object.entries(data).filter(([, value]) => value && value.__arrayUnion);
     if (!unionEntries.length) return;
@@ -90,28 +90,28 @@ const setDoc = async (ref, data, options = {}) => {
     const payload = { id: ref.id, ...data };
     if (ref.extraFilter) payload[ref.extraFilter.field] = ref.extraFilter.val;
     if (!options.merge) {
-        const snap = await supabase.from(ref.col).select('*').eq('id', ref.id).maybeSingle();
+        const snap = await supabaseClient.from(ref.col).select('*').eq('id', ref.id).maybeSingle();
         if (!snap.data) {
-            const { error } = await supabase.from(ref.col).insert(payload);
+            const { error } = await supabaseClient.from(ref.col).insert(payload);
             if (error) throw error;
             return;
         }
     }
-    const { error } = await supabase.from(ref.col).upsert(payload);
+    const { error } = await supabaseClient.from(ref.col).upsert(payload);
     if (error) throw error;
 };
-const updateDoc = async (ref, data) => { const clean = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)); await applyArrayUnions(ref, clean); let q = supabase.from(ref.col).update(clean).eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { error } = await q; if (error) throw error; };
-const deleteDoc = async ref => { const { error } = await supabase.from(ref.col).delete().eq('id', ref.id); if (error) throw error; };
-const addDoc = async (ref, data) => { const { data: row, error } = await supabase.from(ref.col).insert(data).select().single(); if (error) throw error; return { id: row.id, ref: makeDocRef(ref.col, row.id) }; };
+const updateDoc = async (ref, data) => { const clean = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)); await applyArrayUnions(ref, clean); let q = supabaseClient.from(ref.col).update(clean).eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { error } = await q; if (error) throw error; };
+const deleteDoc = async ref => { const { error } = await supabaseClient.from(ref.col).delete().eq('id', ref.id); if (error) throw error; };
+const addDoc = async (ref, data) => { const { data: row, error } = await supabaseClient.from(ref.col).insert(data).select().single(); if (error) throw error; return { id: row.id, ref: makeDocRef(ref.col, row.id) }; };
 const writeBatch = () => { const operations = []; return { set: (ref, data) => operations.push(() => setDoc(ref, data)), update: (ref, data) => operations.push(() => updateDoc(ref, data)), delete: ref => operations.push(() => deleteDoc(ref)), commit: async () => { for (const operation of operations) await operation(); } }; };
 const onSnapshot = (ref, callback) => {
     const fetcher = ref._isDoc ? () => getDoc(ref) : () => getDocs(ref);
     const run = () => fetcher().then(callback).catch(console.error);
     run();
-    const channel = supabase.channel(`public:${ref.col}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
-    return () => supabase.removeChannel(channel);
+    const channel = supabaseClient.channel(`public:${ref.col}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
+    return () => supabaseClient.removeChannel(channel);
 };
-const firebase = { appCheck: () => ({ activate: () => { } }), storage: () => ({ ref: () => ({ put: async () => ({ ref: { getDownloadURL: async () => null } }) }), refFromURL: () => ({ delete: async () => { } }) }), firestore: { FieldValue: { serverTimestamp, delete: deleteField, arrayUnion: arrayUnionBuilder } }, auth: { Auth: { Persistence: { SESSION: 'session' } } }, initializeApp: () => supabase };
+const firebase = { appCheck: () => ({ activate: () => { } }), storage: () => ({ ref: () => ({ put: async () => ({ ref: { getDownloadURL: async () => null } }) }), refFromURL: () => ({ delete: async () => { } }) }), firestore: { FieldValue: { serverTimestamp, delete: deleteField, arrayUnion: arrayUnionBuilder } }, auth: { Auth: { Persistence: { SESSION: 'session' } } }, initializeApp: () => supabaseClient };
 const auth = getAuth();
 const db = getFirestore();
 // Secondary auth uses an isolated Supabase client so chairman login/user creation
@@ -124,7 +124,7 @@ const secondaryAuth = {
 };
 
 // ==========================================
-// ðŸ›¡ï¸ GEO-FENCING LAYER
+// 🛡️ GEO-FENCING LAYER
 // ==========================================
 const allowedMasterIPs = ['127.0.0.1', '192.168.1.1', '::1'];
 
@@ -135,7 +135,7 @@ async function verifyGeoFence() {
         if (!allowedMasterIPs.includes(data.ip)) {
             console.warn(`Unauthorized Access Attempt from IP: ${data.ip} (Geo-Fence currently disabled for testing)`);
         } else {
-            console.log(`âœ… Geo-Fence Passed: ${data.ip}`);
+            console.log(`✅ Geo-Fence Passed: ${data.ip}`);
         }
     } catch (e) {
         console.error("Geo-fencing verification failed:", e);
@@ -259,11 +259,11 @@ window.robustWebViewDownload = async (blobData, filename) => {
         reader.onloadend = function () {
             let base64data = reader.result;
             base64data = base64data.replace(";base64,", `;filename=${encodeURIComponent(filename.replace(/ /g, "_"))};base64,`);
-            window.showToast("â³ EXTRACTING " + filename + "...", "#f59e0b");
+            window.showToast("⏳ EXTRACTING " + filename + "...", "#f59e0b");
             const a = document.createElement("a"); a.href = base64data; a.download = filename;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         };
-    } catch (e) { window.showToast("âŒ EXTRACTION ERROR: " + e.message, "#e11d48"); }
+    } catch (e) { window.showToast("❌ EXTRACTION ERROR: " + e.message, "#e11d48"); }
 };
 
 // Firebase Storage Helper
@@ -274,11 +274,11 @@ const uploadToFirebaseStorage = async (fileObj, folder = 'uploads') => {
         const fileName = `${folder}/${timestamp}_${fileObj.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
         const storageRef = storage.ref(fileName);
 
-        window.showToast("â³ UPLOADING TO FIREBASE...", "#f59e0b");
+        window.showToast("⏳ UPLOADING TO FIREBASE...", "#f59e0b");
         const uploadTask = await storageRef.put(fileObj);
         const downloadURL = await uploadTask.ref.getDownloadURL();
 
-        window.showToast("âœ… UPLOAD COMPLETE!", "#00F0FF");
+        window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
         return downloadURL;
     } catch (err) {
         console.error("Firebase upload failed:", err);
@@ -312,10 +312,10 @@ const uploadToCloudinary = async (fileObj, options = {}) => {
         if (reason) console.warn("Public media upload fallback triggered:", reason);
         const fallbackUrl = await uploadToFirebaseStorage(fileObj, fallbackFolder);
         if (fallbackUrl) {
-            window.showToast("âœ… MEDIA SAVED VIA FIREBASE FALLBACK", "#10b981");
+            window.showToast("✅ MEDIA SAVED VIA FIREBASE FALLBACK", "#10b981");
             return fallbackUrl;
         }
-        window.showToast("âŒ UPLOAD FAILED: CLOUDINARY AND FIREBASE BOTH FAILED", "#e11d48");
+        window.showToast("❌ UPLOAD FAILED: CLOUDINARY AND FIREBASE BOTH FAILED", "#e11d48");
         return null;
     };
 
@@ -346,10 +346,10 @@ const uploadToCloudinary = async (fileObj, options = {}) => {
     try {
         for (const endpoint of backendUrls) {
             try {
-                window.showToast("â³ UPLOADING VIA BACKEND...", "#f59e0b");
+                window.showToast("⏳ UPLOADING VIA BACKEND...", "#f59e0b");
                 const backendUrl = await tryBackendUpload(endpoint);
                 if (backendUrl) {
-                    window.showToast("âœ… UPLOAD COMPLETE!", "#00F0FF");
+                    window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
                     return backendUrl;
                 }
             } catch (backendErr) {
@@ -360,14 +360,14 @@ const uploadToCloudinary = async (fileObj, options = {}) => {
         const formData = new FormData();
         formData.append("file", fileObj);
         formData.append("upload_preset", uploadPreset);
-        window.showToast("â³ UPLOADING TO CLOUDINARY...", "#f59e0b");
+        window.showToast("⏳ UPLOADING TO CLOUDINARY...", "#f59e0b");
         const res = await fetch(cloudinaryUrl, {
             method: "POST",
             body: formData
         });
         const data = await parseUploadResponse(res);
         if (res.ok && data.secure_url) {
-            window.showToast("âœ… UPLOAD COMPLETE!", "#00F0FF");
+            window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
             return data.secure_url;
         }
         return await tryFirebaseFallback(data.error || data.message || data.raw || `Cloudinary response ${res.status}`);
@@ -708,7 +708,7 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
 
         await db.collection("users").doc(nuId).set({ name: cN, email: em, role: "chairman", plainPassword: pA, schoolId: sId, schoolName: sN, logoUrl: lU, status: "active", blockReason: "" });
         await db.collection("schools").doc(sId).set({ schoolName: sN, chairmanUid: nuId, logoUrl: lU, subscriptionTier: tier, isSubNode: isSubNode, masterNodeId: masterNodeId, watermarkUrl: watermarkUrl, ...extraSchoolData });
-        window.showToast("âœ… TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
+        window.showToast("✅ TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
 
         // Reset form & fetched data
         document.getElementById("schoolName").value = ""; document.getElementById("chairmanName").value = ""; document.getElementById("chairmanEmail").value = ""; document.getElementById("chairmanPassword").value = ""; document.getElementById("schoolLogo").value = "";
@@ -788,7 +788,7 @@ window.deleteSchoolLogoFromEdit = async () => {
             }
             ch.logoUrl = "";
             document.getElementById("edit-preview-logo").src = "https://via.placeholder.com/80";
-            window.showToast("âœ… OLD LOGO DELETED. YOU CAN NOW UPLOAD A NEW ONE.");
+            window.showToast("✅ OLD LOGO DELETED. YOU CAN NOW UPLOAD A NEW ONE.");
         } catch (e) {
             window.showToast("ERROR DELETING LOGO", "#e11d48");
         }
@@ -815,15 +815,15 @@ window.saveChairmanEdit = async () => {
         if (newEmail !== ch.email) {
             const response = await fetch("https://school-backend-zlgy.onrender.com/changeEmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newEmail: newEmail }) });
             const data = await response.json();
-            if (!data.success) { btn.innerText = "WRITE CHANGES"; return window.showToast("âŒ SERVER ERROR: " + data.error, "#e11d48"); }
+            if (!data.success) { btn.innerText = "WRITE CHANGES"; return window.showToast("❌ SERVER ERROR: " + data.error, "#e11d48"); }
         }
 
         await db.collection("users").doc(uid).update({ name: newChairmanName, schoolName: newSchoolName, email: newEmail, logoUrl: finalLogoUrl });
         if (ch.schoolId) { await db.collection("schools").doc(ch.schoolId).update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: maxStudents ? Number(maxStudents) : null, themeColor: themeColor }); }
 
-        window.showToast("âœ… DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
+        window.showToast("✅ DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
         window.closeCustomModal("edit-chairman-modal"); loadChairmen(); loadSchoolsForDropdown();
-    } catch (e) { window.showToast("âŒ ERROR: " + e.message, "#e11d48"); } finally { btn.innerText = "WRITE CHANGES"; }
+    } catch (e) { window.showToast("❌ ERROR: " + e.message, "#e11d48"); } finally { btn.innerText = "WRITE CHANGES"; }
 };
 
 window.openLicenseModal = async (schoolId) => {
@@ -847,7 +847,7 @@ window.saveLicenseDate = async () => {
 
     try {
         await db.collection("schools").doc(schoolId).update({ licenseExpiry: expiryDate });
-        window.showToast("âœ… LICENSE UPDATED SUCCESSFULLY!", "#10B981");
+        window.showToast("✅ LICENSE UPDATED SUCCESSFULLY!", "#10B981");
         window.closeCustomModal("license-modal");
         window.logAudit("Renewed License", schoolId);
     } catch (e) {
@@ -865,7 +865,7 @@ window.updateStatus = (uid, ns) => {
         };
     } else {
         window.customConfirm("UNBLOCK THIS ACCOUNT?", () => {
-            db.collection("users").doc(uid).update({ status: ns, blockReason: "" }).then(() => { window.showToast("âœ… ACCOUNT UNBLOCKED!"); loadChairmen(); window.logAudit("Unblocked User", uid); });
+            db.collection("users").doc(uid).update({ status: ns, blockReason: "" }).then(() => { window.showToast("✅ ACCOUNT UNBLOCKED!"); loadChairmen(); window.logAudit("Unblocked User", uid); });
         });
     }
 };
@@ -893,8 +893,8 @@ window.deleteChairman = (uid, sid) => {
                 const staff = await db.collection("users").where("schoolId", "==", sid).where("role", "==", "staff").get();
                 for (const doc of staff.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("users").doc(doc.id).delete(); }
             }
-            window.showToast("âœ… COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
-        } catch (err) { window.showToast("âŒ DELETE ERROR: " + err.message, "#e11d48"); }
+            window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
+        } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
     });
 };
 
@@ -923,7 +923,7 @@ if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", asyn
             const sc = dt.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400';
             sh += `<tr class="hover:bg-slateSurface/50 transition">
                 <td class="p-4"><img src="${dt.photoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
-                <td class="p-4 sensitive-data"><strong class="block text-white">${dt.name || 'N/A'}</strong><span class="text-[10px] text-coolGray font-mono tracking-widest">ðŸ“ž ${dt.mobile || 'NO COMM'}</span><br><span class="text-[10px] text-amber-400 font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">UID: ${dt.aadhaar || dt.aadhar || dt.aadhaarNumber || 'N/A'}</span></td>
+                <td class="p-4 sensitive-data"><strong class="block text-white">${dt.name || 'N/A'}</strong><span class="text-[10px] text-coolGray font-mono tracking-widest">📞 ${dt.mobile || 'NO COMM'}</span><br><span class="text-[10px] text-amber-400 font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">UID: ${dt.aadhaar || dt.aadhar || dt.aadhaarNumber || 'N/A'}</span></td>
                 <td class="p-4"><span class="bg-blue-500/10 border border-blue-500/50 text-blue-400 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-widest shadow-[0_0_5px_rgba(59,130,246,0.3)]">SEC: ${dt.class || 'N/A'}</span></td>
                 <td class="p-4 sensitive-data text-[10px] font-mono text-gray-300"><b>O1:</b> ${dt.fatherName || 'N/A'}<br><b>O2:</b> ${dt.motherName || 'N/A'}</td>
                 <td class="p-4"><span class="${sc} font-bold font-mono text-[10px] tracking-widest drop-shadow-[0_0_5px_currentColor]">${(dt.status || 'N/A').toUpperCase()}</span></td>
@@ -946,7 +946,7 @@ window.showStudentDetail = (id) => {
     document.getElementById("stu-class").innerText = `${st.class || 'N/A'} (ID: ${st.roll || 'N/A'})`;
     document.getElementById("stu-father").innerText = st.fatherName || "N/A";
     document.getElementById("stu-mobile").innerText = st.mobile || "N/A";
-    document.getElementById("stu-password").innerText = st.appPassword || "â€¢â€¢â€¢â€¢â€¢â€¢";
+    document.getElementById("stu-password").innerText = st.appPassword || "••••••";
     document.getElementById("stu-status").innerHTML = `<span class="${st.status === "Approved" ? "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]" : "text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]"}">${(st.status || "Pending").toUpperCase()}</span>`;
     openCustomModal("student-modal");
 };
@@ -957,7 +957,7 @@ window.deleteInspectStudent = (id) => {
             const stDoc = await db.collection("students").doc(id).get();
             if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl);
             await db.collection("students").doc(id).delete();
-            window.showToast("âœ… SUBJECT & ASSETS PURGED!");
+            window.showToast("✅ SUBJECT & ASSETS PURGED!");
             document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
         } catch (e) { }
     });
@@ -1024,14 +1024,14 @@ window.filterStaffList = () => {
     document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>";
 };
 
-window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get(); if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl); await db.collection("users").doc(uid).delete(); window.showToast("âœ… STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { } }); };
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get(); if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl); await db.collection("users").doc(uid).delete(); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { } }); };
 window.showStaffDetail = (sId) => {
     const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if (!st) return;
     document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
     document.getElementById("sd-name").innerText = st.name || "N/A";
     document.getElementById("sd-role").innerText = (st.staffRole || st.role || "N/A").toUpperCase();
     document.getElementById("sd-email").innerText = st.email || "N/A";
-    document.getElementById("sd-password").innerText = st.plainPassword || "â€¢â€¢â€¢â€¢â€¢â€¢";
+    document.getElementById("sd-password").innerText = st.plainPassword || "••••••";
     document.getElementById("sd-status").innerHTML = `<span class="${st.status === "blocked" ? "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" : "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"}">${st.status === "blocked" ? "BLOCKED" : "ACTIVE"}</span>`;
     openCustomModal("staff-modal");
 };
@@ -1041,7 +1041,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
         const m = document.getElementById("msg-prompt-input").value; if (!m) return;
         try {
             await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-            window.closeCustomModal("msg-prompt-modal"); window.showToast("âœ… COMM TRANSMITTED!");
+            window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
         } catch (e) { }
     };
 };
@@ -1049,7 +1049,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
 // ==========================================
 // 9. SCHOOL PAYMENTS & BILLING
 // ==========================================
-window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "â‚¹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { } };
+window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { } };
 window.filterPaymentList = () => {
     const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments;
     if (sid !== "ALL") { ls = ls.filter(s => s.id === sid); }
@@ -1075,25 +1075,25 @@ window.saveSchoolPayment = async (sid) => {
         const historyEntry = { fee: fee, date: bDate, savedAt: Date.now() };
         const nextDate = new Date(bDate); nextDate.setMonth(nextDate.getMonth() + 1); const nextDateString = nextDate.toISOString().split('T')[0];
         await db.collection("schools").doc(sid).update({ appFee: fee, billingDate: nextDateString, paymentHistory: firebase.firestore.FieldValue.arrayUnion(historyEntry) });
-        window.showToast("âœ… LEDGER UPDATED!"); window.loadSchoolPayments();
+        window.showToast("✅ LEDGER UPDATED!"); window.loadSchoolPayments();
     } catch (e) { }
 };
 
-window.deletePaymentRecord = (sid, savedAt) => { window.customConfirm("PURGE LEDGER RECORD?", async () => { try { const s = window.fetchedSchoolPayments.find(x => x.id === sid); const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt); await db.collection("schools").doc(sid).update({ paymentHistory: updatedHistory }); window.showToast("âœ… RECORD PURGED!"); s.paymentHistory = updatedHistory; window.viewSchoolBilling(sid); window.loadSchoolPayments(); } catch (e) { } }); };
+window.deletePaymentRecord = (sid, savedAt) => { window.customConfirm("PURGE LEDGER RECORD?", async () => { try { const s = window.fetchedSchoolPayments.find(x => x.id === sid); const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt); await db.collection("schools").doc(sid).update({ paymentHistory: updatedHistory }); window.showToast("✅ RECORD PURGED!"); s.paymentHistory = updatedHistory; window.viewSchoolBilling(sid); window.loadSchoolPayments(); } catch (e) { } }); };
 window.viewSchoolBilling = (sid) => {
     const s = window.fetchedSchoolPayments.find(x => x.id === sid); if (!s) return;
     document.getElementById("bill-school-name").innerHTML = `${s.schoolName.replace('\n', '<br>')} <br><span class="text-xs text-gray-500 font-mono tracking-widest">(${s.id})</span>`;
-    document.getElementById("bill-monthly-fee").innerText = s.appFee ? "â‚¹ " + s.appFee : "NOT SET";
+    document.getElementById("bill-monthly-fee").innerText = s.appFee ? "₹ " + s.appFee : "NOT SET";
     let ht = "";
     if (s.appFee && s.billingDate) {
         const recDate = new Date(s.billingDate).toLocaleDateString(); const mN = new Date(s.billingDate).toLocaleString('default', { month: 'long', year: 'numeric' });
-        ht += `<tr class="bg-rose-50"><td class="p-3 border-b border-gray-200">${recDate}</td><td class="p-3 border-b border-gray-200">Platform Fee - ${mN}</td><td class="p-3 border-b border-gray-200">â‚¹ ${s.appFee}</td><td class="p-3 border-b border-gray-200 text-rose-600 font-bold uppercase tracking-widest">Pending</td></tr>`;
+        ht += `<tr class="bg-rose-50"><td class="p-3 border-b border-gray-200">${recDate}</td><td class="p-3 border-b border-gray-200">Platform Fee - ${mN}</td><td class="p-3 border-b border-gray-200">₹ ${s.appFee}</td><td class="p-3 border-b border-gray-200 text-rose-600 font-bold uppercase tracking-widest">Pending</td></tr>`;
     }
     if (s.paymentHistory && s.paymentHistory.length > 0) {
         const sortedHistory = s.paymentHistory.sort((a, b) => b.savedAt - a.savedAt);
         sortedHistory.forEach(record => {
             const recDate = new Date(record.date).toLocaleDateString(); const mN = new Date(record.date).toLocaleString('default', { month: 'long', year: 'numeric' });
-            ht += `<tr><td class="p-3 border-b border-gray-200">${recDate}</td><td class="p-3 border-b border-gray-200">Platform Fee - ${mN}</td><td class="p-3 border-b border-gray-200">â‚¹ ${record.fee}</td><td class="p-3 border-b border-gray-200 flex justify-between items-center"><span class="text-emerald-600 font-bold uppercase tracking-widest">Cleared</span><button class="text-rose-500 hover:text-rose-700" onclick="window.deletePaymentRecord('${sid}', ${record.savedAt})"><i class="fas fa-trash"></i></button></td></tr>`;
+            ht += `<tr><td class="p-3 border-b border-gray-200">${recDate}</td><td class="p-3 border-b border-gray-200">Platform Fee - ${mN}</td><td class="p-3 border-b border-gray-200">₹ ${record.fee}</td><td class="p-3 border-b border-gray-200 flex justify-between items-center"><span class="text-emerald-600 font-bold uppercase tracking-widest">Cleared</span><button class="text-rose-500 hover:text-rose-700" onclick="window.deletePaymentRecord('${sid}', ${record.savedAt})"><i class="fas fa-trash"></i></button></td></tr>`;
         });
     }
     document.getElementById("billing-history-body").innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-gray-500'>NO HISTORY.</td></tr>";
@@ -1177,13 +1177,13 @@ window.addCompanyExpense = async () => {
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdBy: superAdminUid
         });
-        window.showToast("âœ… EXPENSE RECORDED!");
+        window.showToast("✅ EXPENSE RECORDED!");
         document.getElementById("expense-amount").value = "";
         document.getElementById("expense-desc").value = "";
         window.loadCompanyExpenses();
-        window.logAudit("Added Expense", `${type}: â‚¹${amount}`);
+        window.logAudit("Added Expense", `${type}: ₹${amount}`);
     } catch (e) {
-        window.showToast("âŒ ERROR: " + e.message, "#e11d48");
+        window.showToast("❌ ERROR: " + e.message, "#e11d48");
     }
 };
 
@@ -1198,7 +1198,7 @@ window.loadCompanyExpenses = async () => {
                 <td class="p-4 text-coolGray tracking-widest">${date}</td>
                 <td class="p-4"><span class="bg-amber-500/10 border border-amber-500/50 text-amber-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.type}</span></td>
                 <td class="p-4 text-white">${d.description}</td>
-                <td class="p-4 text-emerald-400 font-bold">â‚¹ ${d.amount.toLocaleString()}</td>
+                <td class="p-4 text-emerald-400 font-bold">₹ ${d.amount.toLocaleString()}</td>
                 <td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteExpense('${doc.id}')"><i class="fas fa-trash"></i></button></td>
             </tr>`;
         });
@@ -1209,7 +1209,7 @@ window.loadCompanyExpenses = async () => {
 window.deleteExpense = (id) => {
     window.customConfirm("DELETE THIS EXPENSE?", async () => {
         await db.collection("company_expenses").doc(id).delete();
-        window.showToast("âœ… EXPENSE DELETED!");
+        window.showToast("✅ EXPENSE DELETED!");
         window.loadCompanyExpenses();
     });
 };
@@ -1265,7 +1265,7 @@ window.loadPasswordRequests = () => {
         let reqHtml = `<span class="text-coolGray text-[10px] font-mono tracking-widest">NO REQUEST</span>`;
         let btnHtml = `<button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`;
         if (dt.suggestedPassword) { reqHtml = `<span class="text-amber-400 font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">${dt.suggestedPassword}</span>`; btnHtml = `<button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.approvePasswordRequest('${dt.id}', '${dt.suggestedPassword}')">APPROVE</button> <button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition ml-1" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`; }
-        html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" data-id="${dt.id}"></td><td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name}</span></td><td class="p-4"><div class="flex items-center gap-2"><span class="pwd-mask tracking-widest text-lg text-tealAccent">â€¢â€¢â€¢â€¢â€¢â€¢â€¢</span><span class="pwd-text hidden-el text-rose-400 font-mono font-bold text-[10px] tracking-widest">KEY: ${dt.plainPassword || 'N/A'}<br>PIN: ${dt.pin || 'NOT SET'}</span><button class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition border border-glassBorder" onclick="window.togglePwd(this)">DECRYPT</button></div></td><td class="p-4">${reqHtml}</td><td class="p-4 text-right flex gap-1 justify-end">${btnHtml} <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition ml-1" onclick="window.deletePasswordRequest('${dt.id}')"><i class="fas fa-trash"></i></button></td></tr>`;
+        html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" data-id="${dt.id}"></td><td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name}</span></td><td class="p-4"><div class="flex items-center gap-2"><span class="pwd-mask tracking-widest text-lg text-tealAccent">•••••••</span><span class="pwd-text hidden-el text-rose-400 font-mono font-bold text-[10px] tracking-widest">KEY: ${dt.plainPassword || 'N/A'}<br>PIN: ${dt.pin || 'NOT SET'}</span><button class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition border border-glassBorder" onclick="window.togglePwd(this)">DECRYPT</button></div></td><td class="p-4">${reqHtml}</td><td class="p-4 text-right flex gap-1 justify-end">${btnHtml} <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition ml-1" onclick="window.deletePasswordRequest('${dt.id}')"><i class="fas fa-trash"></i></button></td></tr>`;
     });
     document.getElementById("password-req-table").innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO TARGETS FOUND</td></tr>";
 }
@@ -1279,8 +1279,8 @@ window.deletePasswordRequest = async (uid) => {
     });
 };
 window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
-window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.showToast("âœ… KEY UPDATED!"); loadChairmen(); } catch (e) { } }); };
-window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.closeCustomModal("pwd-prompt-modal"); window.showToast("âœ… KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { } }; };
+window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { } }); };
+window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { } }; };
 
 async function loadSchoolsForDropdown() {
     const h = '<option value="ALL">-- GLOBAL NETWORK --</option>';
@@ -1321,7 +1321,7 @@ window.approveSessionUpgrade = (schoolId) => {
     window.customConfirm("APPROVE SESSION UPGRADE FOR THIS NODE? The Chairman will be able to execute bulk promotions.", async () => {
         try {
             await db.collection("schools").doc(schoolId).update({ sessionUpgradeStatus: "approved" });
-            window.showToast("âœ… UPGRADE APPROVED!");
+            window.showToast("✅ UPGRADE APPROVED!");
             window.logAudit("Approved Session Upgrade", schoolId);
             loadSchoolsForDropdown(); // Refresh table
         } catch (e) {
@@ -1632,7 +1632,7 @@ window.loadSchoolSecurityStatus = async () => {
     pl.classList.remove("hidden-el");
     if (sI === "ALL") {
         document.getElementById("sec-chairman-info").innerText = "GLOBAL OVERRIDE"; document.getElementById("sec-staff-info").innerText = "GLOBAL OVERRIDE"; document.getElementById("sec-student-info").innerText = "GLOBAL OVERRIDE";
-        document.getElementById("sec-status-msg").innerText = "âš ï¸ GLOBAL OVERRIDE ACTIVE";
+        document.getElementById("sec-status-msg").innerText = "⚠️ GLOBAL OVERRIDE ACTIVE";
         document.getElementById("sec-chairman-toggle").checked = true; document.getElementById("sec-staff-toggle").checked = true; document.getElementById("sec-student-toggle").checked = true; return;
     }
     document.getElementById("sec-status-msg").innerText = "SCANNING NODE STATUS...";
@@ -1644,7 +1644,7 @@ window.loadSchoolSecurityStatus = async () => {
         document.getElementById("sec-student-toggle").checked = !stB; document.getElementById("sec-student-info").innerText = stB ? "LOCKED" : "ACTIVE";
         document.getElementById("sec-geofence-toggle").checked = gA; document.getElementById("sec-timelock-toggle").checked = tA; document.getElementById("sec-readonly-toggle").checked = rO;
         document.getElementById("mod-attendance").checked = mod.attendance !== false; document.getElementById("mod-finance").checked = mod.finance !== false; document.getElementById("mod-hr").checked = mod.hr !== false; document.getElementById("mod-exams").checked = mod.exams !== false;
-        document.getElementById("sec-status-msg").innerText = "âœ… NODE SYNCED.";
+        document.getElementById("sec-status-msg").innerText = "✅ NODE SYNCED.";
     } catch (e) { }
 };
 
@@ -1682,7 +1682,7 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1697,7 +1697,7 @@ window.deployNewNode = async () => {
             status: "active",
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        window.showToast("âœ… NODE DEPLOYED: " + docRef.id);
+        window.showToast("✅ NODE DEPLOYED: " + docRef.id);
         window.logAudit("Deployed New Node", sName);
     } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
@@ -1705,7 +1705,7 @@ window.deployNewNode = async () => {
 window.toggleServerShield = async () => { const btn = document.getElementById("serverShieldBtn"); if (btn.innerText.includes("TOGGLE")) { await db.collection("system_config").doc("shield").set({ active: true }); window.showToast("SERVER SHIELD ACTIVATED!"); window.logAudit("Activated Shield", "Global"); } };
 
 // ==========================================
-// ðŸ›¡ï¸ GLOBAL BLACKLIST SYSTEM
+// 🛡️ GLOBAL BLACKLIST SYSTEM
 // ==========================================
 window.openGlobalBlacklistModal = () => {
     document.getElementById("blacklist-modal").style.display = "flex";
@@ -1896,8 +1896,8 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // 12. BROADCAST, INBOX & EMERGENCY TICKER
 // ==========================================
 window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await db.collection("direct_messages").where("receiverType", "==", "developer").get(); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d.data() })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { } };
-window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await db.collection("direct_messages").doc(mid).delete(); window.showToast("âœ… PURGED!"); window.loadInboxMessages(); }); };
-window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("âœ… REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { } }; };
+window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await db.collection("direct_messages").doc(mid).delete(); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
+window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { } }; };
 
 // Removed Broadcast Event Listeners for UI Redesign
 
@@ -2319,9 +2319,9 @@ window.submitSchoolRegistration = async () => {
         return;
     }
 
-    const recaptchaField = document.querySelector('#registration-modal [name="g-recaptcha-response"]');
-    if (recaptchaField && !recaptchaField.value) {
-        window.showToast('PLEASE VERIFY YOU ARE NOT A ROBOT', '#e11d48');
+    // const recaptchaField = document.querySelector('#registration-modal [name="g-recaptcha-response"]');
+    // if (recaptchaField && !recaptchaField.value) {
+        // window.showToast('PLEASE VERIFY YOU ARE NOT A ROBOT', '#e11d48');
         return;
     }
 
@@ -2906,7 +2906,7 @@ window.approveTransfer = async (transferId) => {
                 hqApprovedBy: superAdminUid || "hq",
                 workflowStages: stages
             });
-            window.showToast("âœ… TRANSFER APPROVED & FORWARDED TO TARGET SCHOOL", "#10b981");
+            window.showToast("✅ TRANSFER APPROVED & FORWARDED TO TARGET SCHOOL", "#10b981");
             window.logAudit("Approved Student Transfer", `${tr.studentName} -> ${tr.toSchoolName}`);
             window.loadTransferApprovals();
         } catch (e) {
@@ -2948,7 +2948,7 @@ window.hqRejectTransfer = async (transferId) => {
             }
         }
         await batch.commit();
-        window.showToast("âœ… TRANSFER REJECTED BY HQ", "#10b981");
+        window.showToast("✅ TRANSFER REJECTED BY HQ", "#10b981");
         window.logAudit("Rejected Student Transfer", `${tr.studentName} -> ${tr.toSchoolName}`);
         window.loadTransferApprovals();
     } catch (e) {
@@ -3122,7 +3122,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
                 data: {
                     labels: Object.keys(monthlyRev),
                     datasets: [{
-                        label: 'Revenue (â‚¹)',
+                        label: 'Revenue (₹)',
                         data: Object.values(monthlyRev),
                         borderColor: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.14)',
@@ -3143,7 +3143,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
                         tooltip: {
                             ...sharedChartOptions.plugins.tooltip,
                             callbacks: {
-                                label: context => ` Revenue: â‚¹${Number(context.parsed.y || 0).toLocaleString('en-IN')}`
+                                label: context => ` Revenue: ₹${Number(context.parsed.y || 0).toLocaleString('en-IN')}`
                             }
                         }
                     },
@@ -3158,7 +3158,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
                             ticks: {
                                 color: axisColor,
                                 padding: 8,
-                                callback: value => `â‚¹${Number(value).toLocaleString('en-IN', { notation: 'compact' })}`
+                                callback: value => `₹${Number(value).toLocaleString('en-IN', { notation: 'compact' })}`
                             }
                         }
                     }
@@ -3442,7 +3442,7 @@ setTimeout(() => {
 }, 2000);
 
 // ==========================================
-// ðŸ›¡ï¸ MS STUDIO (BATCH PHOTO PROCESSOR) ðŸ›¡ï¸
+// 🛡️ MS STUDIO (BATCH PHOTO PROCESSOR) 🛡️
 // ==========================================
 
 let studioImages = [];
@@ -3997,7 +3997,7 @@ window.saveHeroBanners = async () => {
             await refreshPublicMedia();
             window.showToast("HERO CAROUSEL PUBLISHED", "#10b981");
         } else {
-            window.showToast("âŒ ERROR: " + data.error, "#e11d48");
+            window.showToast("❌ ERROR: " + data.error, "#e11d48");
         }
     } catch (err) {
         window.showToast("BANNER UPLOAD FAILED: " + err.message, "#e11d48");
@@ -4090,7 +4090,7 @@ window.saveAppMedia = async () => {
             await refreshPublicMedia();
             window.showToast("APP MEDIA PUBLISHED", "#10b981");
         } else {
-            window.showToast("âŒ ERROR: " + data.error, "#e11d48");
+            window.showToast("❌ ERROR: " + data.error, "#e11d48");
         }
     } catch (err) {
         window.showToast("APP MEDIA UPLOAD FAILED: " + err.message, "#e11d48");
