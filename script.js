@@ -108,7 +108,7 @@ const onSnapshot = (ref, callback) => {
     const fetcher = ref._isDoc ? () => getDoc(ref) : () => getDocs(ref);
     const run = () => fetcher().then(callback).catch(console.error);
     run();
-    const channel = supabaseClient.channel(`public:${ref.col}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
+    const channel = supabaseClient.channel(`public:${ref.col}:${crypto.randomUUID()}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
     return () => supabaseClient.removeChannel(channel);
 };
 const firebase = { appCheck: () => ({ activate: () => { } }), storage: () => ({ ref: () => ({ put: async () => ({ ref: { getDownloadURL: async () => null } }) }), refFromURL: () => ({ delete: async () => { } }) }), firestore: { FieldValue: { serverTimestamp, delete: deleteField, arrayUnion: arrayUnionBuilder } }, auth: { Auth: { Persistence: { SESSION: 'session' } } }, initializeApp: () => supabaseClient };
