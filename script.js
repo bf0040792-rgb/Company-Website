@@ -150,7 +150,7 @@ const storage = firebase.storage();
 
 // Clear obsolete client-side Firebase/test-session artifacts only. Supabase remote data is untouched.
 ['firebase:authUser', 'firebaseui::rememberedAccounts', 'master_core_cache', 'old_student_ids'].forEach(key => localStorage.removeItem(key));
-['pin_verified', 'firebase_session'].forEach(key => sessionStorage.removeItem(key));
+// ['pin_verified', 'firebase_session'].forEach(key => sessionStorage.removeItem(key));
 
 // Initialize Theme
 if (localStorage.getItem('master_theme') === 'light') {
@@ -2297,6 +2297,11 @@ window.updateDistrictDropdown = async () => {
 
 // 2. Registration Logic
 window.submitSchoolRegistration = async () => {
+    const lastRegTime = localStorage.getItem('last_registration_time');
+    if (lastRegTime && Date.now() - parseInt(lastRegTime) < 600000) {
+        const remainingMins = Math.ceil((600000 - (Date.now() - parseInt(lastRegTime))) / 60000);
+        return window.showToast("PLEASE WAIT " + remainingMins + " MINS BEFORE NEXT REQUEST", "#e11d48");
+    }
     const sName = document.getElementById('reg-school-name').value.trim();
     const pName = document.getElementById('reg-principal-name').value.trim();
     const email = document.getElementById('reg-email').value.trim();
@@ -2362,7 +2367,7 @@ window.submitSchoolRegistration = async () => {
 
         await db.collection("pending_registrations").add(payload);
 
-        window.showToast('REGISTRATION SUBMITTED FOR APPROVAL', '#10b981');
+        localStorage.setItem('last_registration_time', Date.now().toString()); window.showToast('REGISTRATION SUBMITTED FOR APPROVAL', '#10b981');
         window.closeCustomModal('registration-modal');
     } catch (err) {
         window.showToast('ERROR: ' + err.message, '#e11d48');
