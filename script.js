@@ -443,7 +443,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
         window.logAudit("Master Login Success", "System Core");
     } catch (error) {
         // Record Failure
-        err.innerText = "Invalid ID / Password";
+        err.innerText = "Error: " + (error.message || "Invalid ID / Password");
         try {
             const failRef = db.collection("login_logs").doc(e.replace(/[^a-zA-Z0-9_@-]/g, "_"));
             const failDoc = await failRef.get();
@@ -2486,7 +2486,7 @@ window.submitSchoolLogin = async () => {
         await secondaryAuth.signOut();
     } catch (err) {
         console.error("secondaryAuth login failed:", err);
-        window.showToast("INVALID CREDENTIALS", "#e11d48");
+        window.showToast("LOGIN FAILED: " + (err.message || "INVALID CREDENTIALS"), "#e11d48");
     } finally {
         btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> AUTHENTICATE';
         btn.disabled = false;
