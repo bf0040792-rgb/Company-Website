@@ -393,9 +393,11 @@ const deleteFirebaseStorageImage = async (imageUrl) => {
         }
     } else if (imageUrl.includes("cloudinary.com")) {
         try {
+            const sessionData = await supabase.auth.getSession();
+            const token = sessionData.data.session?.access_token;
             await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ imageUrl: imageUrl })
             });
         } catch (e) {
@@ -819,7 +821,9 @@ window.saveChairmanEdit = async () => {
             }
         }
         if (newEmail !== ch.email) {
-            const response = await fetch("https://school-backend-zlgy.onrender.com/changeEmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newEmail: newEmail }) });
+            const sessionData = await supabase.auth.getSession();
+            const token = sessionData.data.session?.access_token;
+            const response = await fetch("https://school-backend-zlgy.onrender.com/changeEmail", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newEmail: newEmail }) });
             const data = await response.json();
             if (!data.success) { btn.innerText = "WRITE CHANGES"; return window.showToast("❌ SERVER ERROR: " + data.error, "#e11d48"); }
         }
@@ -894,7 +898,7 @@ window.deleteChairman = (uid, sid) => {
                 await db.collection("schools").doc(sid).delete();
 
                 const students = await db.collection("students").where("schoolId", "==", sid).get();
-                for (const doc of students.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("students").doc(doc.id).delete(); }
+                for (const doc of students.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await supabase.rpc('delete_student', { p_student_id: doc.id }); }
 
                 const staff = await db.collection("users").where("schoolId", "==", sid).where("role", "==", "staff").get();
                 for (const doc of staff.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("users").doc(doc.id).delete(); }
@@ -962,7 +966,7 @@ window.deleteInspectStudent = (id) => {
         try {
             const stDoc = await db.collection("students").doc(id).get();
             if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl);
-            await db.collection("students").doc(id).delete();
+            await supabase.rpc('delete_student', { p_student_id: id });
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
             document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
         } catch (e) { }
@@ -1285,8 +1289,8 @@ window.deletePasswordRequest = async (uid) => {
     });
 };
 window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
-window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { } }); };
-window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ plainPassword: np, suggestedPassword: firebase.firestore.FieldValue.delete() }); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { } }; };
+window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ suggestedPassword: null, plainPassword: null }); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { } }); };
+window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ suggestedPassword: null, plainPassword: null }); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { } }; };
 
 async function loadSchoolsForDropdown() {
     const h = '<option value="ALL">-- GLOBAL NETWORK --</option>';
@@ -1688,7 +1692,7 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await db.collection("students").doc(d.id).delete(); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await supabase.rpc('delete_student', { p_student_id: d.id }); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1950,9 +1954,11 @@ window.permanentlyDeleteBinItem = async (binId) => {
                 for (let url of urlsToCheck) {
                     if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
                         try {
+                            const sessionData = await supabase.auth.getSession();
+                            const token = sessionData.data.session?.access_token;
                             await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                                 body: JSON.stringify({ imageUrl: url })
                             });
                         } catch (err) {
