@@ -898,7 +898,7 @@ window.deleteChairman = (uid, sid) => {
                 await db.collection("schools").doc(sid).delete();
 
                 const students = await db.collection("students").where("schoolId", "==", sid).get();
-                for (const doc of students.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await supabase.rpc('delete_student', { p_student_id: doc.id }); }
+                for (const doc of students.docs) { const {error: err} = await supabase.rpc('delete_student', { p_student_id: doc.id }); if (!err) await deleteFirebaseStorageImage(doc.data().photoUrl); }
 
                 const staff = await db.collection("users").where("schoolId", "==", sid).where("role", "==", "staff").get();
                 for (const doc of staff.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("users").doc(doc.id).delete(); }
@@ -965,8 +965,8 @@ window.deleteInspectStudent = (id) => {
     window.customConfirm("DELETE THIS SUBJECT GLOBALLY?", async () => {
         try {
             const stDoc = await db.collection("students").doc(id).get();
-            if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl);
             await supabase.rpc('delete_student', { p_student_id: id });
+            if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl);
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
             document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
         } catch (e) { }
@@ -1692,7 +1692,7 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await deleteFirebaseStorageImage(d.data().photoUrl); await supabase.rpc('delete_student', { p_student_id: d.id }); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await supabase.rpc('delete_student', { p_student_id: d.id }); await deleteFirebaseStorageImage(d.data().photoUrl); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
