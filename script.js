@@ -835,12 +835,12 @@ window.deleteChairman = (uid, sid) => {
             window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
             if (uid) {
                 const uDoc = await db.collection("users").doc(uid).get();
-                if (uDoc.exists && uDoc.data().logoUrl) .logoUrl);
+                
                 await db.collection("users").doc(uid).delete();
             }
             if (sid && sid !== "undefined" && sid !== "null") {
                 const sDoc = await db.collection("schools").doc(sid).get();
-                if (sDoc.exists && sDoc.data().logoUrl) .logoUrl);
+                
                 await db.collection("schools").doc(sid).delete();
 
                 const students = await db.collection("students").where("schoolId", "==", sid).get();
@@ -4105,6 +4105,7 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
 
 
 
