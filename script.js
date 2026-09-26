@@ -1438,33 +1438,6 @@ function normalizeFeatureSettings(data) {
     return settings;
 }
 
-/documents {
-    function signedIn() { return request.auth != null; }
-    function isDeveloper() {
-      return signedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer';
-    }
-    function isChairmanOfSchool(schoolId) {
-      return signedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chairman' &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId;
-    }
-
-    match /schools/{schoolId}/feature_controls/settings {
-      allow read: if signedIn();
-      allow create, update: if isDeveloper() || (
-        isChairmanOfSchool(schoolId) &&
-        request.resource.data.diff(resource.data).changedKeys().hasOnly(['featureSettings', 'updatedAt', 'updatedBy']) &&
-        request.resource.data.featureSettings.school == resource.data.featureSettings.school &&
-        request.resource.data.featureSettings.modules == resource.data.featureSettings.modules &&
-        request.resource.data.featureSettings.companyLocked == resource.data.featureSettings.companyLocked
-      );
-      allow delete: if isDeveloper();
-    }
-  }
-}`;
-}
-
 window.copyFeatureRulesSnippet = async () => {
     const snippet = "Supabase uses RLS, not Firestore rules.";
     try {
