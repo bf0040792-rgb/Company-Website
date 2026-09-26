@@ -117,7 +117,7 @@ const onSnapshot = (ref, callback) => {
     const channel = supabaseClient.channel(`public:${ref.col}:${crypto.randomUUID()}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
     return () => supabaseClient.removeChannel(channel);
 };
-const firebase = { appCheck: () => ({ activate: () => { } }), storage: () => ({ ref: () => ({ put: async () => ({ ref: { getDownloadURL: async () => null } }) }), refFromURL: () => ({ delete: async () => { } }) }), firestore: { FieldValue: { serverTimestamp, delete: deleteField, arrayUnion: arrayUnionBuilder } }, auth: { Auth: { Persistence: { SESSION: 'session' } } }, initializeApp: () => supabaseClient };
+
 const auth = getAuth();
 const db = getFirestore();
 // Secondary auth uses an isolated Supabase client so chairman login/user creation
@@ -152,12 +152,6 @@ verifyGeoFence();
 // ==========================================
 // 1. SUPABASE SYSTEM INITIALIZATION
 // ==========================================
-const storage = firebase.storage();
-
-// Clear obsolete client-side Firebase/test-session artifacts only. Supabase remote data is untouched.
-['firebase:authUser', 'firebaseui::rememberedAccounts', 'master_core_cache', 'old_student_ids'].forEach(key => localStorage.removeItem(key));
-['pin_verified', 'firebase_session'].forEach(key => sessionStorage.removeItem(key));
-
 // Initialize Theme
 if (localStorage.getItem('master_theme') === 'light') {
     document.body.classList.add('light-theme');
@@ -272,26 +266,6 @@ window.robustWebViewDownload = async (blobData, filename) => {
     } catch (e) { window.showToast("❌ EXTRACTION ERROR: " + e.message, "#e11d48"); }
 };
 
-// Firebase Storage Helper
-const uploadToFirebaseStorage = async (fileObj, folder = 'uploads') => {
-    if (!fileObj) return null;
-    try {
-        const timestamp = Date.now();
-        const fileName = `${folder}/${timestamp}_${fileObj.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-        const storageRef = storage.ref(fileName);
-
-        window.showToast("⏳ UPLOADING TO FIREBASE...", "#f59e0b");
-        const uploadTask = await storageRef.put(fileObj);
-        const downloadURL = await uploadTask.ref.getDownloadURL();
-
-        window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
-        return downloadURL;
-    } catch (err) {
-        console.error("Firebase upload failed:", err);
-        return null;
-    }
-};
-
 const CLOUDINARY_SETTINGS = window.APP_CONFIG?.cloudinary || {};
 const PUBLIC_MEDIA_FALLBACK_FOLDER = window.APP_CONFIG?.publicMediaFallbackFolder || 'public/media';
 const PUBLIC_MEDIA_UPLOAD_PATHS = Array.isArray(window.APP_CONFIG?.publicMediaUploadPaths)
@@ -314,18 +288,7 @@ const uploadToCloudinary = async (fileObj, options = {}) => {
     const fallbackFolder = options.fallbackFolder || PUBLIC_MEDIA_FALLBACK_FOLDER;
     const backendUrls = buildBackendUploadUrls(options);
 
-    const tryFirebaseFallback = async (reason) => {
-        if (reason) console.warn("Public media upload fallback triggered:", reason);
-        const fallbackUrl = await uploadToFirebaseStorage(fileObj, fallbackFolder);
-        if (fallbackUrl) {
-            window.showToast("✅ MEDIA SAVED VIA FIREBASE FALLBACK", "#10b981");
-            return fallbackUrl;
-        }
-        window.showToast("❌ UPLOAD FAILED: CLOUDINARY AND FIREBASE BOTH FAILED", "#e11d48");
-        return null;
-    };
-
-    const parseUploadResponse = async (res) => {
+        const parseUploadResponse = async (res) => {
         const text = await res.text();
         if (!text) return {};
         try {
@@ -376,33 +339,9 @@ const uploadToCloudinary = async (fileObj, options = {}) => {
             window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
             return data.secure_url;
         }
-        return await tryFirebaseFallback(data.error || data.message || data.raw || `Cloudinary response ${res.status}`);
+        throw new Error("Upload failed: " + err.message);
     } catch (err) {
-        return await tryFirebaseFallback(err.message);
-    }
-};
-
-const deleteFirebaseStorageImage = async (imageUrl) => {
-    if (!imageUrl) return;
-    if (imageUrl.includes("firebasestorage.googleapis.com")) {
-        try {
-            const storageRef = storage.refFromURL(imageUrl);
-            await storageRef.delete();
-        } catch (e) {
-            console.log("Firebase Storage Delete error:", e);
-        }
-    } else if (imageUrl.includes("cloudinary.com")) {
-        try {
-            const sessionData = await supabase.auth.getSession();
-            const token = sessionData.data.session?.access_token;
-            await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ imageUrl: imageUrl })
-            });
-        } catch (e) {
-            console.log("Cloudinary Delete error:", e);
-        }
+        throw new Error("Upload failed: " + err.message);
     }
 };
 
@@ -425,7 +364,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
 
     // Anti-Brute Force Logic (3-Strike Rule)
     try {
-        await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+        // Persistence managed by Supabase
         await auth.signInWithEmailAndPassword(e, p);
 
         try {
@@ -789,7 +728,7 @@ window.deleteSchoolLogoFromEdit = async () => {
 
     window.customConfirm("DELETE OLD LOGO PERMANENTLY?", async () => {
         try {
-            await deleteFirebaseStorageImage(ch.logoUrl);
+            
             await db.collection("users").doc(uid).update({ logoUrl: "" });
             if (ch.schoolId) {
                 await db.collection("schools").doc(ch.schoolId).update({ logoUrl: "" });
@@ -816,7 +755,7 @@ window.saveChairmanEdit = async () => {
         if (logoFile) {
             const uploaded = await uploadToCloudinary(logoFile);
             if (uploaded) {
-                if (finalLogoUrl) await deleteFirebaseStorageImage(finalLogoUrl);
+                if (finalLogoUrl) 
                 finalLogoUrl = uploaded;
             }
         }
@@ -856,7 +795,11 @@ window.saveLicenseDate = async () => {
     if (!expiryDate) return window.showToast("SELECT EXPIRY DATE!", "#e11d48");
 
     try {
-        await db.collection("schools").doc(schoolId).update({ licenseExpiry: expiryDate });
+        const { error } = await supabaseClient.rpc('update_school_license', {
+            p_school_id: schoolId,
+            p_license_expiry: expiryDate
+        });
+        if (error) throw error;
         window.showToast("✅ LICENSE UPDATED SUCCESSFULLY!", "#10B981");
         window.closeCustomModal("license-modal");
         window.logAudit("Renewed License", schoolId);
@@ -889,19 +832,19 @@ window.deleteChairman = (uid, sid) => {
             window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
             if (uid) {
                 const uDoc = await db.collection("users").doc(uid).get();
-                if (uDoc.exists && uDoc.data().logoUrl) await deleteFirebaseStorageImage(uDoc.data().logoUrl);
+                if (uDoc.exists && uDoc.data().logoUrl) .logoUrl);
                 await db.collection("users").doc(uid).delete();
             }
             if (sid && sid !== "undefined" && sid !== "null") {
                 const sDoc = await db.collection("schools").doc(sid).get();
-                if (sDoc.exists && sDoc.data().logoUrl) await deleteFirebaseStorageImage(sDoc.data().logoUrl);
+                if (sDoc.exists && sDoc.data().logoUrl) .logoUrl);
                 await db.collection("schools").doc(sid).delete();
 
                 const students = await db.collection("students").where("schoolId", "==", sid).get();
-                for (const doc of students.docs) { const {error: err} = await supabase.rpc('delete_student', { p_student_id: doc.id }); if (!err) await deleteFirebaseStorageImage(doc.data().photoUrl); }
+                for (const doc of students.docs) { const {error: err} = await supabase.rpc('delete_student', { p_student_id: doc.id }); if (!err) .photoUrl); }
 
                 const staff = await db.collection("users").where("schoolId", "==", sid).where("role", "==", "staff").get();
-                for (const doc of staff.docs) { await deleteFirebaseStorageImage(doc.data().photoUrl); await db.collection("users").doc(doc.id).delete(); }
+                for (const doc of staff.docs) { .photoUrl); await db.collection("users").doc(doc.id).delete(); }
             }
             window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
         } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
@@ -966,7 +909,7 @@ window.deleteInspectStudent = (id) => {
         try {
             const stDoc = await db.collection("students").doc(id).get();
             await supabase.rpc('delete_student', { p_student_id: id });
-            if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl);
+            if (stDoc.exists) .photoUrl);
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
             document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
         } catch (e) { }
@@ -1034,7 +977,7 @@ window.filterStaffList = () => {
     document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>";
 };
 
-window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get(); if (stDoc.exists) await deleteFirebaseStorageImage(stDoc.data().photoUrl); await db.collection("users").doc(uid).delete(); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { } }); };
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get(); if (stDoc.exists) .photoUrl); await db.collection("users").doc(uid).delete(); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { } }); };
 window.showStaffDetail = (sId) => {
     const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if (!st) return;
     document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
@@ -1050,7 +993,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
     document.getElementById("msg-prompt-confirm").onclick = async () => {
         const m = document.getElementById("msg-prompt-input").value; if (!m) return;
         try {
-            await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+            await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: serverTimestamp() });
             window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
         } catch (e) { }
     };
@@ -1084,7 +1027,7 @@ window.saveSchoolPayment = async (sid) => {
         if (!fee || !bDate) return window.showToast("ENTER VALUE AND CYCLE", "#e11d48");
         const historyEntry = { fee: fee, date: bDate, savedAt: Date.now() };
         const nextDate = new Date(bDate); nextDate.setMonth(nextDate.getMonth() + 1); const nextDateString = nextDate.toISOString().split('T')[0];
-        await db.collection("schools").doc(sid).update({ appFee: fee, billingDate: nextDateString, paymentHistory: firebase.firestore.FieldValue.arrayUnion(historyEntry) });
+        await db.collection("schools").doc(sid).update({ appFee: fee, billingDate: nextDateString, paymentHistory: arrayUnionBuilder(historyEntry) });
         window.showToast("✅ LEDGER UPDATED!"); window.loadSchoolPayments();
     } catch (e) { }
 };
@@ -1149,7 +1092,7 @@ async function checkAndSendBillingAlerts() {
                 if (dD >= 30) {
                     if (!dt.paymentAlertSentAt) {
                         const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
-                        cS.forEach(async (cD) => { await db.collection("direct_messages").doc().set({ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); });
+                        cS.forEach(async (cD) => { await db.collection("direct_messages").doc().set({ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: serverTimestamp() }); });
                         await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: nw });
                     } else {
                         const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60);
@@ -1161,7 +1104,7 @@ async function checkAndSendBillingAlerts() {
                     }
                 } else {
                     if (dt.paymentAlertSentAt || dt.paymentBlocked) {
-                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: firebase.firestore.FieldValue.delete(), paymentBlocked: firebase.firestore.FieldValue.delete() });
+                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: deleteField(), paymentBlocked: deleteField() });
                         const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
                         cS.forEach(async (cD) => { if (cD.data().blockReason && cD.data().blockReason.includes("Financial Clearance")) { await db.collection("users").doc(cD.id).update({ status: "active", blockReason: "" }); } });
                     }
@@ -1184,7 +1127,7 @@ window.addCompanyExpense = async () => {
             type: type,
             amount: Number(amount),
             description: desc,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: serverTimestamp(),
             createdBy: superAdminUid
         });
         window.showToast("✅ EXPENSE RECORDED!");
@@ -1282,7 +1225,7 @@ window.loadPasswordRequests = () => {
 window.deletePasswordRequest = async (uid) => {
     window.customConfirm("DELETE KEY FROM SYSTEM?", async () => {
         try {
-            await db.collection("users").doc(uid).update({ plainPassword: firebase.firestore.FieldValue.delete(), suggestedPassword: firebase.firestore.FieldValue.delete() });
+            await db.collection("users").doc(uid).update({ plainPassword: deleteField(), suggestedPassword: deleteField() });
             window.showToast("KEY ERASED!");
             loadChairmen();
         } catch (e) { }
@@ -1495,10 +1438,7 @@ function normalizeFeatureSettings(data) {
     return settings;
 }
 
-function getFirestoreRulesSnippet() {
-    return `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+/documents {
     function signedIn() { return request.auth != null; }
     function isDeveloper() {
       return signedIn() &&
@@ -1526,10 +1466,10 @@ service cloud.firestore {
 }
 
 window.copyFeatureRulesSnippet = async () => {
-    const snippet = getFirestoreRulesSnippet();
+    const snippet = "Supabase uses RLS, not Firestore rules.";
     try {
         await navigator.clipboard.writeText(snippet);
-        window.showToast("FIRESTORE RULES SNIPPET COPIED", "#10b981");
+        window.showToast("SUPABASE RLS INFO COPIED", "#10b981");
     } catch (e) {
         console.warn("Rules snippet copy failed", e);
         window.showToast("RULES SNIPPET READY IN CONSOLE", "#f59e0b");
@@ -1599,7 +1539,7 @@ window.saveFeatureToggles = async (group, key, enabled) => {
             featureSettings: companyFeatureSettings,
             enabledModules,
             restrictedModules,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: serverTimestamp(),
             updatedBy: superAdminUid || "hq"
         }, { merge: true });
         window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
@@ -1678,7 +1618,7 @@ window.toggleAdvancedSecurity = async (type) => {
     if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
     try { await db.collection("schools").doc(sid).update(updateObj); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { }
 };
-window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { } };
+window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: serverTimestamp(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { } };
 
 const csvExportBtnEl = document.getElementById("csvExportBtn");
 if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
@@ -1692,7 +1632,7 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await supabase.rpc('delete_student', { p_student_id: d.id }); await deleteFirebaseStorageImage(d.data().photoUrl); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await supabase.rpc('delete_student', { p_student_id: d.id }); .photoUrl); count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1705,7 +1645,7 @@ window.deployNewNode = async () => {
             tier: tier,
             subNodes: parseInt(subs) || 0,
             status: "active",
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: serverTimestamp()
         });
         window.showToast("✅ NODE DEPLOYED: " + docRef.id);
         window.logAudit("Deployed New Node", sName);
@@ -1757,7 +1697,7 @@ window.addBlacklistEntry = async () => {
         await db.collection("global_blacklist").add({
             type: type,
             value: val,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: serverTimestamp()
         });
         document.getElementById("blacklist-input").value = "";
         window.showToast("ADDED TO BLACKLIST", "#a855f7");
@@ -1907,7 +1847,7 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // ==========================================
 window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await db.collection("direct_messages").where("receiverType", "==", "developer").get(); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d.data() })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { } };
 window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await db.collection("direct_messages").doc(mid).delete(); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
-window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { } }; };
+window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { } }; };
 
 // Removed Broadcast Event Listeners for UI Redesign
 
@@ -1918,11 +1858,11 @@ window.listenToEmergencyTicker = () => { db.collection("system_config").doc("tic
 // ==========================================
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
 // ==========================================
-window.logAudit = async (action, target) => { try { await db.collection("audit_logs").add({ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: firebase.firestore.FieldValue.serverTimestamp() }); } catch (e) { } };
+window.logAudit = async (action, target) => { try { await db.collection("audit_logs").add({ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: serverTimestamp() }); } catch (e) { } };
 window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const snap = await db.collection("audit_logs").orderBy("timestamp", "desc").limit(50).get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { } };
 
 window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const snap = await db.collection("pending_deletions").get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { } };
-window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const orgDoc = await db.collection(collection).doc(docRefId).get(); if (orgDoc.exists) { await db.collection("recycle_bin").add({ originalCollection: collection, originalId: docRefId, data: orgDoc.data(), deletedAt: firebase.firestore.FieldValue.serverTimestamp() }); if (orgDoc.data().photoUrl || orgDoc.data().logoUrl) { /* optional cloudinary delete */ } await db.collection(collection).doc(docRefId).delete(); } await db.collection("pending_deletions").doc(docId).delete(); window.showToast("DELETED & MOVED TO BIN."); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { } }); };
+window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const orgDoc = await db.collection(collection).doc(docRefId).get(); if (orgDoc.exists) { await db.collection("recycle_bin").add({ originalCollection: collection, originalId: docRefId, data: orgDoc.data(), deletedAt: serverTimestamp() }); if (orgDoc.data().photoUrl || orgDoc.data().logoUrl) { /* optional cloudinary delete */ } await db.collection(collection).doc(docRefId).delete(); } await db.collection("pending_deletions").doc(docId).delete(); window.showToast("DELETED & MOVED TO BIN."); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { } }); };
 window.rejectDeletion = async (docId) => { try { await db.collection("pending_deletions").doc(docId).delete(); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { } };
 
 window.loadRecycleBin = async () => {
@@ -2483,7 +2423,7 @@ window.submitSchoolLogin = async () => {
                     longitude: coordinates?.longitude ?? null,
                     locationAccuracy: coordinates?.accuracy ?? null,
                     locationSource: coordinates?.source || "ip-fallback",
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    timestamp: serverTimestamp()
                 });
             } catch (logErr) {
                 console.log("Login log error:", logErr);
@@ -2785,7 +2725,7 @@ window.sendCommMessage = async () => {
             sender: 'master',
             text: text,
             attachmentUrl: attachmentUrl,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            timestamp: serverTimestamp()
         });
         input.value = '';
         fileInput.value = '';
@@ -2919,7 +2859,7 @@ window.approveTransfer = async (transferId) => {
             await db.collection("student_transfers").doc(transferId).update({
                 status: "Pending Target Accept",
                 workflowStage: 2,
-                hqApprovedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                hqApprovedAt: serverTimestamp(),
                 hqApprovedBy: superAdminUid || "hq",
                 workflowStages: stages
             });
@@ -2946,7 +2886,7 @@ window.hqRejectTransfer = async (transferId) => {
         const batch = db.batch();
         batch.update(db.collection("student_transfers").doc(transferId), {
             status: "Rejected",
-            rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            rejectedAt: serverTimestamp(),
             rejectedBy: superAdminUid || "hq",
             rejectReason: reason,
             workflowStages: stages
@@ -2958,8 +2898,8 @@ window.hqRejectTransfer = async (transferId) => {
                 const studentData = studentDoc.data();
                 if (studentData.transferRecordId === transferId) {
                     const updateData = {};
-                    if (studentData.transferStatus) updateData.transferStatus = firebase.firestore.FieldValue.delete();
-                    if (studentData.pendingTransferTo) updateData.pendingTransferTo = firebase.firestore.FieldValue.delete();
+                    if (studentData.transferStatus) updateData.transferStatus = deleteField();
+                    if (studentData.pendingTransferTo) updateData.pendingTransferTo = deleteField();
                     if (Object.keys(updateData).length > 0) batch.update(studentRef, updateData);
                 }
             }
@@ -3265,7 +3205,7 @@ window.sendGlobalNotification = async () => {
     try {
         await db.collection("notifications").add({
             title, type, target, message,
-            sentAt: firebase.firestore.FieldValue.serverTimestamp(),
+            sentAt: serverTimestamp(),
             sentBy: "master",
             isRead: false
         });
@@ -4027,7 +3967,7 @@ window.deleteAppLogo = async () => {
             const snap = await PUBLIC_MEDIA_DOC.get();
             const data = snap.exists ? snap.data() : {};
             const appMedia = { ...(data.appMedia || {}) };
-            await deleteFirebaseStorageImage(appMedia.logoUrl);
+            
             appMedia.logoUrl = "";
             await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
             await refreshPublicMedia();
@@ -4047,7 +3987,7 @@ window.deleteAppScreenshot = async (index) => {
         if (index < 0 || index >= screenshots.length) return;
         const targetUrl = screenshots[index];
         window.customConfirm("DELETE THIS APP SCREENSHOT?", async () => {
-            await deleteFirebaseStorageImage(targetUrl);
+            
             screenshots.splice(index, 1);
             appMedia.screenshots = screenshots;
             await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
@@ -4065,7 +4005,7 @@ window.deleteAppApk = async () => {
             const snap = await PUBLIC_MEDIA_DOC.get();
             const data = snap.exists ? snap.data() : {};
             const appMedia = { ...(data.appMedia || {}) };
-            await deleteFirebaseStorageImage(appMedia.apkUrl);
+            
             appMedia.apkUrl = "";
             appMedia.apkName = "";
             await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
@@ -4173,5 +4113,6 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
 
 
