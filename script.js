@@ -308,8 +308,8 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (user) {
         try {
             const ud = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
-            if (!ud.exists || ud.data().role === "developer") {
-                if (!ud.exists) {
+            if (!ud || ud.role === "developer") {
+                if (!ud) {
                     // First Supabase login: self-provision the developer profile. If RLS blocks the write,
                     // still allow the session so the admin can create the profile from Supabase dashboard.
                     try { await supabaseClient.from("users").upsert([{id: user.uid, ...{ email: user.email, role: "developer", name: "Super Admin", status: "active" }}]); } catch (provisionErr) { console.warn('Developer profile self-provision failed (check users RLS):', provisionErr); }
@@ -321,7 +321,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 hideLoginModal();
 
                 // PIN Logic
-                let devData = ud.exists ? ud.data() : {};
+                let devData = ud ? ud : {};
                 if (sessionStorage.getItem("pin_verified") === "true") {
                     window.unlockDashboard();
                 } else {
@@ -474,12 +474,12 @@ window.fetchRegistrationDetails = async () => {
     try {
         const docId = regNo.replace(/\//g, "_");
         const docSnap = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
-        if (!docSnap.exists) {
+        if (!docSnap) {
             window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
             return;
         }
 
-        const data = docSnap.data();
+        const data = docSnap;
 
         // Auto-fill fields
         document.getElementById("schoolName").value = data.schoolName || "";
@@ -557,7 +557,7 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
 async function loadChairmen() {
     try {
         const snp = await supabaseClient.from("users").select("*"); window.fetchedChairmen = []; let tS = 0;
-        snp.forEach(d => { const dt = d.data(); if (dt.role === "chairman") { dt.id = d.id; window.fetchedChairmen.push(dt); } else if (dt.role === "staff") { tS++; } });
+        snp.forEach(d => { const dt = d; if (dt.role === "chairman") { dt.id = d.id; window.fetchedChairmen.push(dt); } else if (dt.role === "staff") { tS++; } });
         const stuS = await supabaseClient.from("students").select("*");
         document.getElementById("stat-schools").innerText = window.fetchedChairmen.length; document.getElementById("stat-staff").innerText = tS; document.getElementById("stat-students").innerText = stuS.size;
         window.filterChairmenList(); window.loadPasswordRequests();
@@ -600,10 +600,10 @@ window.openEditChairman = async (uid) => {
     document.getElementById("edit-schoolLogo").value = "";
 
     if (ch.schoolId) {
-        const sDoc = await supabaseClient.from("schools").select("*").eq("id", ch.schoolId).maybeSingle();
-        if (sDoc.exists) {
-            document.getElementById("edit-maxStudents").value = sDoc.data().maxStudents || "";
-            document.getElementById("edit-themeColor").value = sDoc.data().themeColor || "#00F0FF";
+        const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", ch.schoolId).maybeSingle();
+        if (sDoc) {
+            document.getElementById("edit-maxStudents").value = sDoc.maxStudents || "";
+            document.getElementById("edit-themeColor").value = sDoc.themeColor || "#00F0FF";
         }
     }
     openCustomModal("edit-chairman-modal");
@@ -715,12 +715,12 @@ window.deleteChairman = (uid, sid) => {
         try {
             window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
             if (uid) {
-                const uDoc = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();
+                const { data: uDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();
                 
                 await supabaseClient.from("users").delete().eq("id", uid);
             }
             if (sid && sid !== "undefined" && sid !== "null") {
-                const sDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+                const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
                 
                 await supabaseClient.from("schools").delete().eq("id", sid);
 
@@ -756,7 +756,7 @@ if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", asyn
         let ss = (sid === "ALL") ? await supabaseClient.from("students").select("*") : await supabaseClient.from("students").select("*").eq("schoolId", sid);
         window.fetchedInspectStudents = []; let sh = "";
         ss.forEach(d => {
-            const dt = d.data(); dt.id = d.id; window.fetchedInspectStudents.push(dt);
+            const dt = d; dt.id = d.id; window.fetchedInspectStudents.push(dt);
             const sc = dt.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400';
             sh += `<tr class="hover:bg-slateSurface/50 transition">
                 <td class="p-4"><img src="${dt.photoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
@@ -811,8 +811,8 @@ window.searchStudentByAadhaar = async () => {
         if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhaarNumber", input);
         if (sn.empty) { errP.classList.remove("hidden-el"); return; }
 
-        let dt = sn.docs[0].data(); let sName = "UNKNOWN NODE";
-        if (dt.schoolId) { let scl = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl.exists) sName = scl.data().schoolName || "UNKNOWN NODE"; }
+        let dt = sn.docs[0]; let sName = "UNKNOWN NODE";
+        if (dt.schoolId) { let scl = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl) sName = scl.schoolName || "UNKNOWN NODE"; }
 
         document.getElementById("as-photo").src = dt.photoUrl || "https://via.placeholder.com/80";
         document.getElementById("as-name").innerText = dt.name || "N/A";
@@ -844,7 +844,7 @@ window.downloadAadhaarResultPDF = async () => {
 // ==========================================
 // 8. GLOBAL STAFF DIRECTORY
 // ==========================================
-window.loadAllStaff = async () => { try { const sp = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAllStaff = async () => { try { const sp = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; sp.forEach(d => { const dt = d; dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.filterStaffList = () => {
     const sid = document.getElementById("staffSchoolSelect").value; let ht = ""; let ls = window.fetchedGlobalStaffList;
     if (sid !== "ALL") { ls = ls.filter(s => s.schoolId === sid); }
@@ -886,7 +886,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
 // ==========================================
 // 9. SCHOOL PAYMENTS & BILLING
 // ==========================================
-window.loadSchoolPayments = async () => { try { const sp = await supabaseClient.from("schools").select("*"); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadSchoolPayments = async () => { try { const sp = await supabaseClient.from("schools").select("*"); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d; dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.filterPaymentList = () => {
     const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments;
     if (sid !== "ALL") { ls = ls.filter(s => s.id === sid); }
@@ -970,7 +970,7 @@ async function checkAndSendBillingAlerts() {
     try {
         const sp = await supabaseClient.from("schools").select("*"); const nw = Date.now();
         sp.forEach(async (d) => {
-            const dt = d.data();
+            const dt = d;
             if (dt.billingDate && dt.appFee) {
                 const bD = new Date(dt.billingDate).getTime(); const dD = Math.floor((nw - bD) / (1000 * 60 * 60 * 24));
                 if (dD >= 30) {
@@ -990,7 +990,7 @@ async function checkAndSendBillingAlerts() {
                     if (dt.paymentAlertSentAt || dt.paymentBlocked) {
                         await supabaseClient.from("schools").update({ paymentAlertSentAt: null.eq("id", d.id), paymentBlocked: null });
                         const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
-                        cS.forEach(async (cD) => { if (cD.data().blockReason && cD.data().blockReason.includes("Financial Clearance")) { await supabaseClient.from("users").update({ status: "active", blockReason: "" }).eq("id", cD.id); } });
+                        cS.forEach(async (cD) => { if (cD.blockReason && cD.blockReason.includes("Financial Clearance")) { await supabaseClient.from("users").update({ status: "active", blockReason: "" }).eq("id", cD.id); } });
                     }
                 }
             }
@@ -1129,7 +1129,7 @@ async function loadSchoolsForDropdown() {
         let requestsHtml = "";
 
         sp.forEach(d => {
-            const data = d.data();
+            const data = d;
             const op = `<option value="${d.id}">${data.schoolName.toUpperCase()}</option>`;
             t.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML += op; });
 
@@ -1352,8 +1352,8 @@ window.loadFeatureTogglesForSchool = async () => {
     setFeatureControlsBusy(true);
     try {
         const featureDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-        const schoolDoc = featureDoc.exists ? null : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-        const featureData = featureDoc.exists ? featureDoc.data() : (schoolDoc?.exists ? schoolDoc.data() : {});
+        const schoolDoc = featureDoc ? null : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+        const featureData = featureDoc ? featureDoc : (schoolDoc? ? schoolDoc : {});
         companyFeatureSettings = normalizeFeatureSettings(featureData);
         renderFeatureGroup("school", "feature-toggles-container");
         renderFeatureGroup("student", "feature-student-toggles-container");
@@ -1418,12 +1418,12 @@ window.generateSystemBackup = async () => {
     try {
         if (sc === "ALL") {
             const cl = ["users", "schools", "students", "notices", "direct_messages", "login_logs", "audit_logs", "system_config", "global_roles", "pending_deletions", "recycle_bin"];
-            for (let c of cl) { bD[c] = []; const { data: snData } = await supabaseClient.from(c).select("*"); const sn = snData || []; sn.forEach(d => bD[c].push({ id: d.id, ...d.data() })); }
+            for (let c of cl) { bD[c] = []; const { data: snData } = await supabaseClient.from(c).select("*"); const sn = snData || []; sn.forEach(d => bD[c].push({ id: d.id, ...d })); }
         } else {
             bD.schoolId = sc; bD.users = []; bD.students = [];
-            const sD = await supabaseClient.from("schools").select("*").eq("id", sc).maybeSingle(); if (sD.exists) bD.schoolData = sD.data();
-            const uS = await supabaseClient.from("users").select("*").eq("schoolId", sc); uS.forEach(d => bD.users.push(d.data()));
-            const stS = await supabaseClient.from("students").select("*").eq("schoolId", sc); stS.forEach(d => bD.students.push(d.data()));
+            const sD = await supabaseClient.from("schools").select("*").eq("id", sc).maybeSingle(); if (sD) bD.schoolData = sD;
+            const uS = await supabaseClient.from("users").select("*").eq("schoolId", sc); uS.forEach(d => bD.users.push(d));
+            const stS = await supabaseClient.from("students").select("*").eq("schoolId", sc); stS.forEach(d => bD.students.push(d));
         }
         const jsonString = JSON.stringify(bD, null, 2); const blobObj = new Blob([jsonString], { type: "application/json" });
         const fileName = sc === "ALL" ? `Matrix_Dump_Global_${Date.now()}.json` : `Matrix_Dump_Node_${sc}_${Date.now()}.json`;
@@ -1446,10 +1446,10 @@ window.loadSchoolSecurityStatus = async () => {
     }
     document.getElementById("sec-status-msg").innerText = "SCANNING NODE STATUS...";
     try {
-        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const cS = cSData || []; let cB = false; cS.forEach(d => { cB = d.data().status === "blocked"; }); document.getElementById("sec-chairman-toggle").checked = !cB; document.getElementById("sec-chairman-info").innerText = "SYNCED";
-        const { data: sSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sS = sSData || []; let aS = false; sS.forEach(d => { if (d.data().status === "blocked") aS = true; }); document.getElementById("sec-staff-toggle").checked = !aS; document.getElementById("sec-staff-info").innerText = "SYNCED";
+        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const cS = cSData || []; let cB = false; cS.forEach(d => { cB = d.status === "blocked"; }); document.getElementById("sec-chairman-toggle").checked = !cB; document.getElementById("sec-chairman-info").innerText = "SYNCED";
+        const { data: sSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sS = sSData || []; let aS = false; sS.forEach(d => { if (d.status === "blocked") aS = true; }); document.getElementById("sec-staff-toggle").checked = !aS; document.getElementById("sec-staff-info").innerText = "SYNCED";
         const scl = await supabaseClient.from("schools").select("*").eq("id", sI).maybeSingle(); let stB = false; let gA = false, tA = false, rO = false; let mod = {};
-        if (scl.exists) { stB = scl.data().studentsBlocked === true; gA = scl.data().geofenceActive; tA = scl.data().timeLockActive; rO = scl.data().readOnlyMode; mod = scl.data().modules || {}; }
+        if (scl) { stB = scl.studentsBlocked === true; gA = scl.geofenceActive; tA = scl.timeLockActive; rO = scl.readOnlyMode; mod = scl.modules || {}; }
         document.getElementById("sec-student-toggle").checked = !stB; document.getElementById("sec-student-info").innerText = stB ? "LOCKED" : "ACTIVE";
         document.getElementById("sec-geofence-toggle").checked = gA; document.getElementById("sec-timelock-toggle").checked = tA; document.getElementById("sec-readonly-toggle").checked = rO;
         document.getElementById("mod-attendance").checked = mod.attendance !== false; document.getElementById("mod-finance").checked = mod.finance !== false; document.getElementById("mod-hr").checked = mod.hr !== false; document.getElementById("mod-exams").checked = mod.exams !== false;
@@ -1484,7 +1484,7 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
     window.showToast("COMPILING DIRECTORY...", "#00F0FF");
     try {
         const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); doc.text("Global Node Directory", 14, 20);
-        const tableRows = []; const snp = await supabaseClient.from("schools").select("*"); snp.forEach(d => { tableRows.push([d.id, d.data().schoolName || "N/A", d.data().chairmanUid || "N/A"]); });
+        const tableRows = []; const snp = await supabaseClient.from("schools").select("*"); snp.forEach(d => { tableRows.push([d.id, d.schoolName || "N/A", d.chairmanUid || "N/A"]); });
         doc.autoTable({ head: [["Node ID", "Node Name", "Commander UID"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [0, 240, 255], textColor: [5, 11, 20] } });
         const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, `Node_Directory_${Date.now()}.pdf`);
     } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
@@ -1630,7 +1630,7 @@ window.loadDeviceLogs = async () => {
         if (sid !== "ALL") query = query.eq("schoolId", sid);
         const { data: snapshot } = await query;
         window.currentDeviceLogs = [];
-        (snapshot || []).forEach(doc => {
+        (items || []).forEach(doc => {
             const log = { id: doc.id, ...doc };
             if (rid === "ALL" || log.role === rid) window.currentDeviceLogs.push(log);
         });
@@ -1696,7 +1696,7 @@ window.downloadDeviceLogsAsPDF = async () => {
 };
 
 window.downloadAllDeviceLogsAsPDF = async () => {
-    try { const sn = await supabaseClient.from("login_logs").select("*"); let allLogs = []; sn.forEach(d => allLogs.push(d.data())); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    try { const sn = await supabaseClient.from("login_logs").select("*"); let allLogs = []; sn.forEach(d => allLogs.push(d)); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
 window.killSession = async (uid) => { if (!uid || uid === "undefined") return; window.customConfirm("TERMINATE SESSION? USER WILL BE KICKED.", async () => { await supabaseClient.from("users").update({ forceLogout: true }).eq("id", uid); window.showToast("SESSION TERMINATED.", "#e11d48"); window.logAudit("Killed Session", uid); }); };
@@ -1704,7 +1704,7 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // ==========================================
 // 12. BROADCAST, INBOX & EMERGENCY TICKER
 // ==========================================
-window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d.data() })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await supabaseClient.from("direct_messages").delete().eq("id", mid); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
 window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: new Date().toISOString() }]); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
@@ -1747,8 +1747,8 @@ window.permanentlyDeleteBinItem = async (binId) => {
     window.customConfirm("PERMANENTLY DELETE THIS ITEM FROM STORAGE?", async () => {
         try {
             const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle();
-            if (binDoc.exists) {
-                const itemData = binDoc.data().data || {};
+            if (binDoc) {
+                const itemData = binDoc.data || {};
                 const urlsToCheck = [itemData.photoUrl, itemData.logoUrl, itemData.signatureUrl, itemData.imageUrl];
                 for (let url of urlsToCheck) {
                     if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
@@ -1775,7 +1775,7 @@ window.permanentlyDeleteBinItem = async (binId) => {
         }
     });
 };
-window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle(); if (binDoc.exists) { await supabaseClient.from(collection).upsert([{ id: docId, ...binDoc }]); await supabaseClient.from("recycle_bin").delete().eq("id", binId); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle(); if (binDoc) { await supabaseClient.from(collection).upsert([{ id: docId, ...binDoc }]); await supabaseClient.from("recycle_bin").delete().eq("id", binId); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
 // ==========================================
 // 14. ROLE BUILDER
@@ -1877,10 +1877,10 @@ window.sendAIMessage = async () => {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
     try {
-        const schoolsSnap = await supabaseClient.from("schools").select("*");
-        const schools = schoolsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const txSnap = await supabaseClient.from("transactions").select("*");
-        const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const { data: schoolsSnapData } = await supabaseClient.from("schools").select("*");
+        const schools = (schoolsSnapData || []).map(d => ({ id: d.id, ...d }));
+        const { data: txSnapData } = await supabaseClient.from("transactions").select("*");
+        const transactions = (txSnapData || []).map(d => ({ id: d.id, ...d }));
 
         const contextData = JSON.stringify({ schools, transactions });
 
@@ -1908,12 +1908,12 @@ window.generateGSTInvoice = async (schoolId) => {
     }
     window.showToast("FETCHING DATA...", "#3b82f6");
     try {
-        const sDoc = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
-        if (!sDoc.exists) return window.showToast("NODE NOT FOUND", "#e11d48");
-        const sData = sDoc.data();
+        const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
+        if (!sDoc) return window.showToast("NODE NOT FOUND", "#e11d48");
+        const sData = sDoc;
 
-        const uDoc = await supabaseClient.from("users").select("*").eq("id", sData.chairmanUid).maybeSingle();
-        const email = uDoc.exists ? uDoc.data().email : "unknown@domain.com";
+        const { data: uDoc } = await supabaseClient.from("users").select("*").eq("id", sData.chairmanUid).maybeSingle();
+        const email = uDoc ? uDoc.email : "unknown@domain.com";
         const tier = sData.subscriptionTier || 'Starter';
         const schoolName = sData.schoolName || 'Unknown School';
 
@@ -2245,9 +2245,9 @@ window.submitSchoolLogin = async () => {
         let userData = {};
         try {
             const docSnap = await supabaseClient.from("users").select("*").eq("id", cred.user.uid).maybeSingle();
-            if (docSnap.exists && docSnap.data().role === "chairman") {
+            if (docSnap && docSnap.role === "chairman") {
                 isChairman = true;
-                userData = docSnap.data();
+                userData = docSnap;
             }
         } catch (docErr) {
             console.error("docSnap read failed:", docErr);
@@ -2310,18 +2310,19 @@ window.submitSchoolLogin = async () => {
 };
 
 // 4. Pending Approvals Tab Logic
-window.loadPendingRegistrations = () => {
+window.loadPendingRegistrations = async () => {
     const tbody = document.getElementById("pending-approvals-body");
     if (!tbody) return;
-
-    supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
-        tbody.innerHTML = '';
-        if (snapshot.empty) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-coolGray">NO PENDING REQUESTS</td></tr>';
+    const { data } = await supabaseClient.from("pending_registrations").select("*");
+    const render = (items) => {
+        tbody.innerHTML = "";
+        if (!items || items.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>NO PENDING REQUESTS</td></tr>";
             return;
         }
 
-        (snapshot || []).forEach(doc => {
+
+        (items || []).forEach(doc => {
             const data = doc;
             const tr = document.createElement("tr");
             tr.innerHTML = `
@@ -2337,7 +2338,13 @@ window.loadPendingRegistrations = () => {
                 </td>
             `;
             tbody.appendChild(tr);
-        });
+        
+    };
+    render(data);
+    supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
+        window.loadPendingRegistrations();
+    }).subscribe();
+}
     });
 };
 
@@ -2346,9 +2353,9 @@ window.approveRegistrationAuto = async (docId) => {
         try {
             const docRef = docId;
             const { data: docSnap } = await supabaseClient.from(typeof docRef === "string" ? "unknown" : docRef.col).select("*").eq("id", typeof docRef === "string" ? docRef : docRef.id).maybeSingle();
-            if (!docSnap.exists) return;
+            if (!docSnap) return;
 
-            const data = docSnap.data();
+            const data = docSnap;
 
             // Generate Registration No
             const randomDigits = Math.floor(100000 + Math.random() * 900000);
@@ -2406,9 +2413,9 @@ window.approveRegistrationOnly = async (docId) => {
         try {
             const docRef = docId;
             const { data: docSnap } = await supabaseClient.from(typeof docRef === "string" ? "unknown" : docRef.col).select("*").eq("id", typeof docRef === "string" ? docRef : docRef.id).maybeSingle();
-            if (!docSnap.exists) return;
+            if (!docSnap) return;
 
-            const data = docSnap.data();
+            const data = docSnap;
 
             // Generate Registration No
             const randomDigits = Math.floor(100000 + Math.random() * 900000);
@@ -2482,7 +2489,7 @@ window.loadCommHubSchools = () => {
     if (!list) return;
     if (!stopCommSchoolListener) {
         stopCommSchoolListener = supabaseClient.channel("public:schools").on("postgres_changes", { event: "*", schema: "public", table: "schools" }, payload => {
-            commSchools = snapshot.docs.map(doc => {
+            commSchools = (snapshotData || []).map(doc => {
                 const data = doc;
                 return { id: doc.id, name: data.schoolName || data.name || 'Unnamed Node', logoUrl: data.logoUrl || '' };
             }).sort((a, b) => a.name.localeCompare(b.name));
@@ -2515,7 +2522,7 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
             }
 
             let messages = [];
-            (snapshot || []).forEach(doc => {
+            (items || []).forEach(doc => {
                 messages.push({ id: doc.id, ...doc });
             });
 
@@ -2591,8 +2598,8 @@ window.clearCommHistory = async () => {
     window.customConfirm("WIPE COMM HISTORY FOR THIS NODE?", async () => {
         try {
             
-            const docs = await supabaseClient.from("communications").select("*").eq("schoolId", currentCommSchoolId);
-            docs.forEach(d => batch.delete(d.ref));
+            const { data: docsData } = await supabaseClient.from("communications").select("*").eq("schoolId", currentCommSchoolId);
+            await supabaseClient.from("communications").delete().eq("schoolId", currentCommSchoolId);
             
             window.showToast("HISTORY WIPED", "#10b981");
         } catch (err) {
@@ -2612,10 +2619,7 @@ window.bulkDeletePasswordReqs = async () => {
     window.customConfirm(`DELETE ${checkboxes.length} TARGETS?`, async () => {
         try {
             
-            checkboxes.forEach(cb => {
-                const docRef = cb.dataset.id;
-                batch.delete(docRef);
-            });
+            for(let cb of checkboxes) { await supabaseClient.from("password_requests").delete().eq("id", cb.dataset.id); }
             
             window.showToast("BULK PURGE COMPLETE", "#10b981");
         } catch (err) {
@@ -2655,8 +2659,8 @@ window.loadTransferApprovals = async () => {
     const filter = document.getElementById("transfer-approval-filter")?.value || "Pending HQ Approval";
     if (tbody) tbody.innerHTML = `<tr><td colspan='8' class='text-center p-4 text-coolGray font-mono'>LOADING TRANSFERS...</td></tr>`;
     try {
-        const snapshot = await supabaseClient.from("student_transfers").select("*");
-        window.fetchedTransferApprovals = snapshot.docs.map(doc => {
+        const { data: snapshotData } = await supabaseClient.from("student_transfers").select("*");
+        window.fetchedTransferApprovals = (snapshotData || []).map(doc => {
             const transfer = { id: doc.id, ...doc };
             transfer.status = normalizeTransferStatus(transfer.status, transfer);
             return transfer;
@@ -2790,10 +2794,10 @@ document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
 
 window.loadGlobalAnalyticsDashboard = async () => {
     try {
-        const schoolsSnap = await supabaseClient.from("schools").select("*");
+        const { data: schoolsSnapData } = await supabaseClient.from("schools").select("*");
         const schoolNames = new Map();
         let active = 0, expired = 0;
-        schools(snap || []).forEach(doc => {
+        (schoolsSnapData || []).forEach(doc => {
             const data = doc;
             schoolNames.set(doc.id, data.schoolName || data.name || doc.id);
             if (data.licenseStatus === 'Active' || data.licenseStatus === 'active') active++;
@@ -2802,9 +2806,9 @@ window.loadGlobalAnalyticsDashboard = async () => {
         const statLicenses = document.getElementById("stat-licenses");
         if (statLicenses) statLicenses.innerText = `${active} / ${expired}`;
 
-        const studentsSnap = await supabaseClient.from("students").select("*");
+        const { data: studentsSnapData } = await supabaseClient.from("students").select("*");
         let studentCounts = {};
-        students(snap || []).forEach(doc => {
+        (studentsSnapData || []).forEach(doc => {
             const data = doc;
             if (data.schoolId) {
                 studentCounts[data.schoolId] = (studentCounts[data.schoolId] || 0) + 1;
@@ -2893,7 +2897,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
             });
         }
 
-        const txSnap = await supabaseClient.from("transactions").select("*").eq("type", "Fee");
+        const { data: txSnapData } = await supabaseClient.from("transactions").select("*").eq("type", "Fee");
         let monthlyRev = {};
         let now = new Date();
         for (let i = 5; i >= 0; i--) {
@@ -2902,7 +2906,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
             monthlyRev[mStr] = 0;
         }
 
-        tx(snap || []).forEach(doc => {
+        (txSnapData || []).forEach(doc => {
             const data = doc;
             const timestamp = timestampToMillis(data.date || data.timestamp || data.createdAt);
             if (!timestamp) return;
@@ -2990,10 +2994,10 @@ window.loadAttendanceSummary = async (targetDate) => {
     tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>Loading...</td></tr>";
 
     try {
-        const attSnap = await supabaseClient.from("attendance").select("*").eq("date", dateStr);
+        const { data: attSnapData } = await supabaseClient.from("attendance").select("*").eq("date", dateStr);
         let schoolAtt = {};
 
-        att(snap || []).forEach(doc => {
+        (attSnapData || []).forEach(doc => {
             let data = doc;
             if (!schoolAtt[data.schoolId]) schoolAtt[data.schoolId] = { present: 0, absent: 0, total: 0 };
 
@@ -3014,7 +3018,7 @@ window.loadAttendanceSummary = async (targetDate) => {
 
         for (let sid of Object.keys(schoolAtt)) {
             let sDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-            let sName = sDoc.exists ? sDoc.data().schoolName : sid;
+            let sName = sDoc ? sDoc.schoolName : sid;
             let att = schoolAtt[sid];
             let pct = att.total > 0 ? ((att.present / att.total) * 100).toFixed(1) : 0;
             let isLow = pct < 70;
@@ -3074,10 +3078,10 @@ window.loadGlobalNotifications = async () => {
     if (!tbody) return;
 
     try {
-        const snap = await supabaseClient.from("notifications").select("*").eq("sentBy", "master").order("sentAt", {ascending: desc === "asc"}).limit(50);
+        const { data: snapData } = await supabaseClient.from("notifications").select("*").eq("sentBy", "master").order("sentAt", {ascending: desc === "asc"}).limit(50);
         tbody.innerHTML = "";
 
-        if (snap.empty) {
+        if ((!snapData || snapData.length === 0)) {
             tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>No notifications sent yet.</td></tr>";
             return;
         }
@@ -3740,7 +3744,7 @@ function renderAdminMediaPreviews(data = {}) {
 async function refreshPublicMedia() {
     try {
         const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
-        const data = snap.exists ? snap.data() : {};
+        const data = snap ? snap : {};
         renderPublicHeroCarousel(data.banners || []);
         renderPublicAppSection(data.appMedia || {});
         renderAdminMediaPreviews(data);
@@ -3754,7 +3758,7 @@ async function refreshPublicMedia() {
 window.deleteHeroBanner = async (index) => {
     try {
         const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
-        const data = snap.exists ? snap.data() : {};
+        const data = snap ? snap : {};
         const banners = Array.isArray(data.banners) ? [...data.banners] : [];
         if (index < 0 || index >= banners.length) return;
         const targetUrl = banners[index];
@@ -3811,7 +3815,7 @@ window.deleteAppLogo = async () => {
     try {
         window.customConfirm("DELETE CURRENT APP LOGO?", async () => {
             const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
-            const data = snap.exists ? snap.data() : {};
+            const data = snap ? snap : {};
             const appMedia = { ...(data.appMedia || {}) };
             
             appMedia.logoUrl = "";
@@ -3827,7 +3831,7 @@ window.deleteAppLogo = async () => {
 window.deleteAppScreenshot = async (index) => {
     try {
         const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
-        const data = snap.exists ? snap.data() : {};
+        const data = snap ? snap : {};
         const appMedia = { ...(data.appMedia || {}) };
         const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
         if (index < 0 || index >= screenshots.length) return;
@@ -3849,7 +3853,7 @@ window.deleteAppApk = async () => {
     try {
         window.customConfirm("DELETE CURRENT APK FILE?", async () => {
             const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
-            const data = snap.exists ? snap.data() : {};
+            const data = snap ? snap : {};
             const appMedia = { ...(data.appMedia || {}) };
             
             appMedia.apkUrl = "";
