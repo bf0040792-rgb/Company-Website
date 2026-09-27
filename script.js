@@ -1010,7 +1010,7 @@ window.addCompanyExpense = async () => {
     try {
         await supabaseClient.from("company_expenses").insert([{
             type: type,
-            amount: Number(amount]),
+            amount: Number(amount),
             description: desc,
             createdAt: new Date().toISOString(),
             createdBy: superAdminUid
@@ -1503,7 +1503,7 @@ window.deployNewNode = async () => {
         const docRef = await supabaseClient.from("schools").insert([{
             schoolName: sName,
             tier: tier,
-            subNodes: parseInt(subs]) || 0,
+            subNodes: parseInt(subs) || 0,
             status: "active",
             createdAt: new Date().toISOString()
         });
@@ -1718,7 +1718,7 @@ window.listenToEmergencyTicker = () => { supabaseClient.channel("public:system_c
 // ==========================================
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
 // ==========================================
-window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(]), target: target.toUpperCase(), timestamp: new Date().toISOString() }); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: new Date().toISOString() }); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const snap = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: desc === "asc"}).limit(50); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
 window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const snap = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
