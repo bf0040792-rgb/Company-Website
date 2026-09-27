@@ -29,69 +29,9 @@ const applyConstraints = (builder, constraints = []) => constraints.reduce((q, c
     if (c.type === 'orderBy') return q.order(c.field, { ascending: c.dir !== 'desc' });
     return c.type === 'limit' ? q.limit(c.num) : q;
 }, builder);
-const makeDocRef = (col, id, extraFilter) => ({
-    _isDoc: true, col, id, extraFilter,
-    get: () => getDoc(makeDocRef(col, id, extraFilter)),
-    set: (data, options) => setDoc(makeDocRef(col, id, extraFilter), data, options),
-    update: data => updateDoc(makeDocRef(col, id, extraFilter), data),
-    delete: () => deleteDoc(makeDocRef(col, id, extraFilter)),
-    onSnapshot: callback => onSnapshot(makeDocRef(col, id, extraFilter), callback),
-    collection: childCollection => makeCollectionRef(childCollection, extraFilter ? [where(extraFilter.field, '==', extraFilter.val)] : [])
-});
-const makeCollectionRef = (col, constraints = []) => ({
-    _isCol: true, col, constraints,
-    where: (field, op, val) => makeCollectionRef(col, [...constraints, { type: 'where', field, op, val }]),
-    orderBy: (field, dir) => makeCollectionRef(col, [...constraints, { type: 'orderBy', field, dir }]),
-    limit: num => makeCollectionRef(col, [...constraints, { type: 'limit', num }]),
-    get: () => getDocs(makeCollectionRef(col, constraints)),
-    add: data => addDoc(makeCollectionRef(col, constraints), data),
-    doc: id => makeDocRef(col, id || crypto.randomUUID()),
-    onSnapshot: callback => onSnapshot(makeCollectionRef(col, constraints), callback)
-});
-const getAuth = () => ({
-    get currentUser() { return window.__supabaseCurrentUser || null; },
-        getIdToken: async () => {
-        let session = (await supabaseClient.auth.getSession()).data?.session;
-        if (!session) {
-            const localData = localStorage.getItem('sb-ynlcbpxcsnfxqrogizns-auth-token');
-            if (localData) {
-                try { session = JSON.parse(localData); } catch(e){}
-            }
-        }
-        if (!session || !session.access_token) throw new Error('No active Supabase session');
-        return session.access_token;
-    },
-    onAuthStateChanged: callback => {
-        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
-            window.__supabaseCurrentUser = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
-            if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
-                callback(window.__supabaseCurrentUser);
-            }
-        });
-        return subscription;
-    },
-    signInWithEmailAndPassword: (email, password) => signInWithEmailAndPassword(null, email, password),
-    createUserWithEmailAndPassword: (email, password) => createUserWithEmailAndPassword(null, email, password),
-    signOut: () => signOut(null),
-    setPersistence: () => Promise.resolve()
-});
-const onAuthStateChanged = (authInstance, callback) => authInstance.onAuthStateChanged(callback);
-const signInWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password }); if (error) throw error; window.__supabaseCurrentUser = { uid: data.user.id, email: data.user.email, id: data.user.id }; return { user: window.__supabaseCurrentUser }; };
-const createUserWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabaseClient.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user.id, email: data.user.email, id: data.user.id } }; };
-const signOut = async () => { window.__supabaseCurrentUser = null; return supabaseClient.supabaseClient.auth.signOut(); };
-const getFirestore = () => ({ collection: col => makeCollectionRef(col), batch: writeBatch, enablePersistence: () => Promise.resolve() });
-const doc = (db, col, id, ...path) => path[0] === 'feature_controls' ? makeDocRef('feature_controls', path[1], { field: 'schoolId', val: id }) : makeDocRef(col, id);
-const collection = (db, col) => makeCollectionRef(col);
-const query = (colRef, ...constraints) => makeCollectionRef(colRef.col, [...(colRef.constraints || []), ...constraints]);
-const where = (field, op, val) => ({ type: 'where', field, op, val });
-const orderBy = (field, dir) => ({ type: 'orderBy', field, dir });
-const limit = num => ({ type: 'limit', num });
-const serverTimestamp = () => new Date().toISOString();
-const deleteField = () => undefined;
-const DELETE_FIELD_SENTINEL = deleteField();
-const arrayUnionBuilder = values => ({ __arrayUnion: [values].flat().filter(Boolean) });
-const getDoc = async ref => { let q = supabaseClient.from(ref.col).select('*').eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { data, error } = await q.maybeSingle(); if (error || !data) return makeSnapshot(null, ref.id); return makeSnapshot(data, ref.id); };
-const getDocs = async ref => { const { data, error } = await applyConstraints(supabaseClient.from(ref.col).select('*'), ref.constraints); if (error) throw error; const docs = (data || []).map(row => makeSnapshot(row, row.id)); return { empty: !docs.length, size: docs.length, docs, forEach: callback => docs.forEach(callback) }; };
+
+ if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { data, error } = await q.maybeSingle(); if (error || !data) return makeSnapshot(null, ref.id); return makeSnapshot(data, ref.id); };
+ if (error) throw error; const docs = (data || []).map(row => makeSnapshot(row, row.id)); return { empty: !docs.length, size: docs.length, docs, forEach: callback => docs.forEach(callback) }; };
 const applyArrayUnions = async (ref, data) => {
     const unionEntries = Object.entries(data).filter(([, value]) => value && value.__arrayUnion);
     if (!unionEntries.length) return;
@@ -102,8 +42,7 @@ const applyArrayUnions = async (ref, data) => {
         data[key] = Array.from(merged);
     });
 };
-const setDoc = async (ref, data, options = {}) => {
-    const payload = { id: ref.id, ...data };
+
     if (ref.extraFilter) payload[ref.extraFilter.field] = ref.extraFilter.val;
     if (!options.merge) {
         const snap = await supabaseClient.from(ref.col).select('*').eq('id', ref.id).maybeSingle();
@@ -116,20 +55,19 @@ const setDoc = async (ref, data, options = {}) => {
     const { error } = await supabaseClient.from(ref.col).upsert(payload);
     if (error) throw error;
 };
-const updateDoc = async (ref, data) => { const clean = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)); await applyArrayUnions(ref, clean); let q = supabaseClient.from(ref.col).update(clean).eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { error } = await q; if (error) throw error; };
-const deleteDoc = async ref => { const { error } = await supabaseClient.from(ref.col).delete().eq('id', ref.id); if (error) throw error; };
-const addDoc = async (ref, data) => { const { data: row, error } = await supabaseClient.from(ref.col).insert(data).select().single(); if (error) throw error; return { id: row.id, ref: makeDocRef(ref.col, row.id) }; };
+ await applyArrayUnions(ref, clean); let q = supabaseClient.from(ref.col).update(clean).eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { error } = await q; if (error) throw error; };
+ if (error) throw error; };
+ if (error) throw error; return { id: row.id }; };
 const writeBatch = () => { const operations = []; return { set: (ref, data) => operations.push(() => setDoc(ref, data)), update: (ref, data) => operations.push(() => updateDoc(ref, data)), delete: ref => operations.push(() => deleteDoc(ref)), commit: async () => { for (const operation of operations) await operation(); } }; };
-const onSnapshot = (ref, callback) => {
-    const fetcher = ref._isDoc ? () => getDoc(ref) : () => getDocs(ref);
+
     const run = () => fetcher().then(callback).catch(console.error);
     run();
     const channel = supabaseClient.channel(`public:${ref.col}:${crypto.randomUUID()}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
     return () => supabaseClient.removeChannel(channel);
 };
 
-const auth = getAuth();
-const db = getFirestore();
+
+
 // Secondary auth uses an isolated Supabase client so chairman login/user creation
 // never replaces the primary developer session on the company portal.
 const secondarySupabase = window.supabase.createClient(supabaseUrl, supabaseKey, { auth: { storageKey: 'company-secondary-auth' } });
@@ -187,7 +125,7 @@ window.fetchedInspectStudents = [];
 window.currentDeviceLogs = [];
 let superAdminUid = "";
 let currentEditChairmanId = null;
-const PUBLIC_MEDIA_DOC = db.collection("system_config").doc("public_media");
+const PUBLIC_MEDIA_DOC = { col: "system_config", id: "public_media" };
 const readFileAsDataURL = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -379,7 +317,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
         if (signInError) throw signInError;
 
         try {
-            const failRef = db.collection("login_logs").doc(e.replace(/[^a-zA-Z0-9_@-]/g, "_"));
+            const failRef = e.replace(/[^a-zA-Z0-9_@-]/g, "_");
             const failDoc = await failRef.get();
             if (failDoc.exists) {
                 let lockTime = failDoc.data().lockTime || 0;
@@ -403,7 +341,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
         // Record Failure
         err.innerText = "Error: " + (error.message || "Invalid ID / Password");
         try {
-            const failRef = db.collection("login_logs").doc(e.replace(/[^a-zA-Z0-9_@-]/g, "_"));
+            const failRef = e.replace(/[^a-zA-Z0-9_@-]/g, "_");
             const failDoc = await failRef.get();
             let fails = (failDoc.exists ? (failDoc.data().fails || 0) : 0) + 1;
             let newLockTime = 0;
@@ -433,12 +371,12 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
     if (user) {
         try {
-            const ud = await db.collection("users").doc(user.uid).get();
+            const ud = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
             if (!ud.exists || ud.data().role === "developer") {
                 if (!ud.exists) {
                     // First Supabase login: self-provision the developer profile. If RLS blocks the write,
                     // still allow the session so the admin can create the profile from Supabase dashboard.
-                    try { await db.collection("users").doc(user.uid).set({ email: user.email, role: "developer", name: "Super Admin", status: "active" }); } catch (provisionErr) { console.warn('Developer profile self-provision failed (check users RLS):', provisionErr); }
+                    try { await supabaseClient.from("users").upsert([{id: user.uid, ...{ email: user.email, role: "developer", name: "Super Admin", status: "active" }}]); } catch (provisionErr) { console.warn('Developer profile self-provision failed (check users RLS):', provisionErr); }
                 }
                 superAdminUid = user.uid;
 
@@ -479,7 +417,6 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         landingPage.classList.remove("hidden-el");
         dashboardWrapper.classList.add("hidden-el");
     }
-    }
 });
 
 const logoutBtnEl = document.getElementById("logoutBtn");
@@ -501,7 +438,7 @@ window.unlockDashboard = () => {
 window.saveNewPin = async () => {
     const pin = document.getElementById("newPin").value;
     if (pin.length < 4) return window.showToast("PLEASE ENTER 4 DIGITS", "#e11d48");
-    try { await db.collection("users").doc(superAdminUid).set({ pin: pin }, { merge: true }); } catch (e) { window.showToast("PIN SAVE ERR: " + (e.message || e), "#e11d48"); console.error("Pin Error:", e); return; }
+    try { await supabaseClient.from("users").upsert([{id: superAdminUid, ...{ pin: pin }}]); } catch (e) { window.showToast("PIN SAVE ERR: " + (e.message || e), "#e11d48"); console.error("Pin Error:", e); return; }
     window.currentAppPin = pin;
     sessionStorage.setItem("pin_verified", "true");
     window.unlockDashboard();
@@ -600,7 +537,7 @@ window.fetchRegistrationDetails = async () => {
 
     try {
         const docId = regNo.replace(/\//g, "_");
-        const docSnap = await db.collection("accepted_registrations").doc(docId).get();
+        const docSnap = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
         if (!docSnap.exists) {
             window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
             return;
@@ -683,9 +620,9 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
 
 async function loadChairmen() {
     try {
-        const snp = await db.collection("users").get(); window.fetchedChairmen = []; let tS = 0;
+        const snp = await supabaseClient.from("users").select("*"); window.fetchedChairmen = []; let tS = 0;
         snp.forEach(d => { const dt = d.data(); if (dt.role === "chairman") { dt.id = d.id; window.fetchedChairmen.push(dt); } else if (dt.role === "staff") { tS++; } });
-        const stuS = await db.collection("students").get();
+        const stuS = await supabaseClient.from("students").select("*");
         document.getElementById("stat-schools").innerText = window.fetchedChairmen.length; document.getElementById("stat-staff").innerText = tS; document.getElementById("stat-students").innerText = stuS.size;
         window.filterChairmenList(); window.loadPasswordRequests();
     } catch (err) { }
@@ -727,7 +664,7 @@ window.openEditChairman = async (uid) => {
     document.getElementById("edit-schoolLogo").value = "";
 
     if (ch.schoolId) {
-        const sDoc = await db.collection("schools").doc(ch.schoolId).get();
+        const sDoc = await supabaseClient.from("schools").select("*").eq("id", ch.schoolId).maybeSingle();
         if (sDoc.exists) {
             document.getElementById("edit-maxStudents").value = sDoc.data().maxStudents || "";
             document.getElementById("edit-themeColor").value = sDoc.data().themeColor || "#00F0FF";
@@ -744,9 +681,9 @@ window.deleteSchoolLogoFromEdit = async () => {
     window.customConfirm("DELETE OLD LOGO PERMANENTLY?", async () => {
         try {
             
-            await db.collection("users").doc(uid).update({ logoUrl: "" });
+            await supabaseClient.from("users").update({ logoUrl: "" }).eq("id", uid);
             if (ch.schoolId) {
-                await db.collection("schools").doc(ch.schoolId).update({ logoUrl: "" });
+                await supabaseClient.from("schools").update({ logoUrl: "" }).eq("id", ch.schoolId);
             }
             ch.logoUrl = "";
             document.getElementById("edit-preview-logo").src = "https://via.placeholder.com/80";
@@ -782,8 +719,8 @@ window.saveChairmanEdit = async () => {
             if (!data.success) { btn.innerText = "WRITE CHANGES"; return window.showToast("❌ SERVER ERROR: " + data.error, "#e11d48"); }
         }
 
-        await db.collection("users").doc(uid).update({ name: newChairmanName, schoolName: newSchoolName, email: newEmail, logoUrl: finalLogoUrl });
-        if (ch.schoolId) { await db.collection("schools").doc(ch.schoolId).update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: maxStudents ? Number(maxStudents) : null, themeColor: themeColor }); }
+        await supabaseClient.from("users").update({ name: newChairmanName, schoolName: newSchoolName, email: newEmail, logoUrl: finalLogoUrl }).eq("id", uid);
+        if (ch.schoolId) { await supabaseClient.from("schools").update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: maxStudents ? Number(maxStudents).eq("id", ch.schoolId) : null, themeColor: themeColor }); }
 
         window.showToast("✅ DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
         window.closeCustomModal("edit-chairman-modal"); loadChairmen(); loadSchoolsForDropdown();
@@ -794,9 +731,9 @@ window.openLicenseModal = async (schoolId) => {
     if (!schoolId) return window.showToast("INVALID NODE ID", "#e11d48");
     document.getElementById("license-school-id").value = schoolId;
     try {
-        const doc = await db.collection("schools").doc(schoolId).get();
-        if (doc.exists && doc.data().licenseExpiry) {
-            document.getElementById("license-expiry-date").value = doc.data().licenseExpiry;
+        const doc = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
+        if (!!doc.data && doc.licenseExpiry) {
+            document.getElementById("license-expiry-date").value = doc.licenseExpiry;
         } else {
             document.getElementById("license-expiry-date").value = "";
         }
@@ -824,17 +761,17 @@ window.updateStatus = (uid, ns) => {
         document.getElementById("block-prompt-input").value = "";
         openCustomModal("block-prompt-modal");
         document.getElementById("block-prompt-confirm").onclick = async () => {
-            await db.collection("users").doc(uid).update({ status: ns, blockReason: document.getElementById("block-prompt-input").value || "Policy Violation" });
+            await supabaseClient.from("users").update({ status: ns, blockReason: document.getElementById("block-prompt-input").eq("id", uid).value || "Policy Violation" });
             window.closeCustomModal("block-prompt-modal"); loadChairmen(); window.logAudit("Blocked User", uid);
         };
     } else {
         window.customConfirm("UNBLOCK THIS ACCOUNT?", () => {
-            db.collection("users").doc(uid).update({ status: ns, blockReason: "" }).then(() => { window.showToast("✅ ACCOUNT UNBLOCKED!"); loadChairmen(); window.logAudit("Unblocked User", uid); });
+            supabaseClient.from("users").update({ status: ns, blockReason: "" }).eq("id", uid).then(() => { window.showToast("✅ ACCOUNT UNBLOCKED!"); loadChairmen(); window.logAudit("Unblocked User", uid); });
         });
     }
 };
 
-window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await db.collection("users").doc(uid).update({ shadowBan: state }); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); loadChairmen(); window.logAudit(state ? "Shadow Banned" : "Unbanned", uid); }); };
+window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await supabaseClient.from("users").update({ shadowBan: state }).eq("id", uid); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); loadChairmen(); window.logAudit(state ? "Shadow Banned" : "Unbanned", uid); }); };
 
 // Cascade Delete
 window.deleteChairman = (uid, sid) => {
@@ -842,20 +779,20 @@ window.deleteChairman = (uid, sid) => {
         try {
             window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
             if (uid) {
-                const uDoc = await db.collection("users").doc(uid).get();
+                const uDoc = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();
                 
-                await db.collection("users").doc(uid).delete();
+                await supabaseClient.from("users").delete().eq("id", uid);
             }
             if (sid && sid !== "undefined" && sid !== "null") {
-                const sDoc = await db.collection("schools").doc(sid).get();
+                const sDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
                 
-                await db.collection("schools").doc(sid).delete();
+                await supabaseClient.from("schools").delete().eq("id", sid);
 
-                const students = await db.collection("students").where("schoolId", "==", sid).get();
+                const students = await supabaseClient.from("students").select("*").eq("schoolId", sid);
                 for (const doc of students.docs) { const {error: err} = await supabaseClient.rpc('delete_student', { p_student_id: doc.id });  }
 
-                const staff = await db.collection("users").where("schoolId", "==", sid).where("role", "==", "staff").get();
-                for (const doc of staff.docs) {  await db.collection("users").doc(doc.id).delete(); }
+                const { data: staffData } = await supabaseClient.from("users").select("*").eq("schoolId", sid).eq("role", "staff"); const staff = { docs: staffData || [] };
+                for (const doc of staff.docs) {  await supabaseClient.from("users").delete().eq("id", doc.id); }
             }
             window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
         } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
@@ -880,7 +817,7 @@ if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", asyn
     const sid = e.target.value; const dd = document.getElementById("schoolInspectData");
     if (!sid) { dd.classList.add("hidden-el"); return; }
     try {
-        let ss = (sid === "ALL") ? await db.collection("students").get() : await db.collection("students").where("schoolId", "==", sid).get();
+        let ss = (sid === "ALL") ? await supabaseClient.from("students").select("*") : await supabaseClient.from("students").select("*").eq("schoolId", sid);
         window.fetchedInspectStudents = []; let sh = "";
         ss.forEach(d => {
             const dt = d.data(); dt.id = d.id; window.fetchedInspectStudents.push(dt);
@@ -918,7 +855,7 @@ window.showStudentDetail = (id) => {
 window.deleteInspectStudent = (id) => {
     window.customConfirm("DELETE THIS SUBJECT GLOBALLY?", async () => {
         try {
-            const stDoc = await db.collection("students").doc(id).get();
+            const stDoc = await supabaseClient.from("students").select("*").eq("id", id).maybeSingle();
             await supabaseClient.rpc('delete_student', { p_student_id: id });
             
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
@@ -933,13 +870,13 @@ window.searchStudentByAadhaar = async () => {
     resDiv.classList.add("hidden-el"); errP.classList.add("hidden-el");
     if (!input) return window.showToast("ENTER UID NUMBER", "#e11d48");
     try {
-        let sn = await db.collection("students").where("aadhaar", "==", input).get();
-        if (sn.empty) sn = await db.collection("students").where("aadhar", "==", input).get();
-        if (sn.empty) sn = await db.collection("students").where("aadhaarNumber", "==", input).get();
+        let sn = await supabaseClient.from("students").select("*").eq("aadhaar", input);
+        if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhar", input);
+        if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhaarNumber", input);
         if (sn.empty) { errP.classList.remove("hidden-el"); return; }
 
         let dt = sn.docs[0].data(); let sName = "UNKNOWN NODE";
-        if (dt.schoolId) { let scl = await db.collection("schools").doc(dt.schoolId).get(); if (scl.exists) sName = scl.data().schoolName || "UNKNOWN NODE"; }
+        if (dt.schoolId) { let scl = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl.exists) sName = scl.data().schoolName || "UNKNOWN NODE"; }
 
         document.getElementById("as-photo").src = dt.photoUrl || "https://via.placeholder.com/80";
         document.getElementById("as-name").innerText = dt.name || "N/A";
@@ -971,7 +908,7 @@ window.downloadAadhaarResultPDF = async () => {
 // ==========================================
 // 8. GLOBAL STAFF DIRECTORY
 // ==========================================
-window.loadAllStaff = async () => { try { const sp = await db.collection("users").where("role", "==", "staff").get(); window.fetchedGlobalStaffList = []; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAllStaff = async () => { try { const sp = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.filterStaffList = () => {
     const sid = document.getElementById("staffSchoolSelect").value; let ht = ""; let ls = window.fetchedGlobalStaffList;
     if (sid !== "ALL") { ls = ls.filter(s => s.schoolId === sid); }
@@ -988,7 +925,7 @@ window.filterStaffList = () => {
     document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>";
 };
 
-window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await db.collection("users").doc(uid).get();  await db.collection("users").doc(uid).delete(); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();  await supabaseClient.from("users").delete().eq("id", uid); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.showStaffDetail = (sId) => {
     const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if (!st) return;
     document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
@@ -1004,7 +941,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
     document.getElementById("msg-prompt-confirm").onclick = async () => {
         const m = document.getElementById("msg-prompt-input").value; if (!m) return;
         try {
-            await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: serverTimestamp() });
+            await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: new Date().toISOString() }]);
             window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
         } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
     };
@@ -1013,7 +950,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
 // ==========================================
 // 9. SCHOOL PAYMENTS & BILLING
 // ==========================================
-window.loadSchoolPayments = async () => { try { const sp = await db.collection("schools").get(); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadSchoolPayments = async () => { try { const sp = await supabaseClient.from("schools").select("*"); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d.data(); dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.filterPaymentList = () => {
     const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments;
     if (sid !== "ALL") { ls = ls.filter(s => s.id === sid); }
@@ -1038,12 +975,12 @@ window.saveSchoolPayment = async (sid) => {
         if (!fee || !bDate) return window.showToast("ENTER VALUE AND CYCLE", "#e11d48");
         const historyEntry = { fee: fee, date: bDate, savedAt: Date.now() };
         const nextDate = new Date(bDate); nextDate.setMonth(nextDate.getMonth() + 1); const nextDateString = nextDate.toISOString().split('T')[0];
-        await db.collection("schools").doc(sid).update({ appFee: fee, billingDate: nextDateString, paymentHistory: arrayUnionBuilder(historyEntry) });
+        await supabaseClient.from("schools").update({ appFee: fee, billingDate: nextDateString, paymentHistory: [historyEntry] /* NOTE: Need RPC for atomic array union */ });
         window.showToast("✅ LEDGER UPDATED!"); window.loadSchoolPayments();
     } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
-window.deletePaymentRecord = (sid, savedAt) => { window.customConfirm("PURGE LEDGER RECORD?", async () => { try { const s = window.fetchedSchoolPayments.find(x => x.id === sid); const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt); await db.collection("schools").doc(sid).update({ paymentHistory: updatedHistory }); window.showToast("✅ RECORD PURGED!"); s.paymentHistory = updatedHistory; window.viewSchoolBilling(sid); window.loadSchoolPayments(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.deletePaymentRecord = (sid, savedAt) => { window.customConfirm("PURGE LEDGER RECORD?", async () => { try { const s = window.fetchedSchoolPayments.find(x => x.id === sid); const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt); await supabaseClient.from("schools").update({ paymentHistory: updatedHistory }).eq("id", sid); window.showToast("✅ RECORD PURGED!"); s.paymentHistory = updatedHistory; window.viewSchoolBilling(sid); window.loadSchoolPayments(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.viewSchoolBilling = (sid) => {
     const s = window.fetchedSchoolPayments.find(x => x.id === sid); if (!s) return;
     document.getElementById("bill-school-name").innerHTML = `${s.schoolName.replace('\n', '<br>')} <br><span class="text-xs text-gray-500 font-mono tracking-widest">(${s.id})</span>`;
@@ -1095,29 +1032,29 @@ window.downloadAllPaymentsPDF = async () => {
 
 async function checkAndSendBillingAlerts() {
     try {
-        const sp = await db.collection("schools").get(); const nw = Date.now();
+        const sp = await supabaseClient.from("schools").select("*"); const nw = Date.now();
         sp.forEach(async (d) => {
             const dt = d.data();
             if (dt.billingDate && dt.appFee) {
                 const bD = new Date(dt.billingDate).getTime(); const dD = Math.floor((nw - bD) / (1000 * 60 * 60 * 24));
                 if (dD >= 30) {
                     if (!dt.paymentAlertSentAt) {
-                        const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
-                        cS.forEach(async (cD) => { await db.collection("direct_messages").doc().set({ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: serverTimestamp() }); });
-                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: nw });
+                        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
+                        cS.forEach(async (cD) => { await supabaseClient.from("direct_messages").insert([{ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: new Date().toISOString() }]); });
+                        await supabaseClient.from("schools").update({ paymentAlertSentAt: nw }).eq("id", d.id);
                     } else {
                         const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60);
                         if (hP >= 6 && !dt.paymentBlocked) {
-                            const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
-                            cS.forEach(async (cD) => { await db.collection("users").doc(cD.id).update({ status: "blocked", blockReason: "System Locked: Pending Financial Clearance." }); });
-                            await db.collection("schools").doc(d.id).update({ paymentBlocked: true });
+                            const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
+                            cS.forEach(async (cD) => { await supabaseClient.from("users").update({ status: "blocked", blockReason: "System Locked: Pending Financial Clearance." }).eq("id", cD.id); });
+                            await supabaseClient.from("schools").update({ paymentBlocked: true }).eq("id", d.id);
                         }
                     }
                 } else {
                     if (dt.paymentAlertSentAt || dt.paymentBlocked) {
-                        await db.collection("schools").doc(d.id).update({ paymentAlertSentAt: deleteField(), paymentBlocked: deleteField() });
-                        const cS = await db.collection("users").where("schoolId", "==", d.id).where("role", "==", "chairman").get();
-                        cS.forEach(async (cD) => { if (cD.data().blockReason && cD.data().blockReason.includes("Financial Clearance")) { await db.collection("users").doc(cD.id).update({ status: "active", blockReason: "" }); } });
+                        await supabaseClient.from("schools").update({ paymentAlertSentAt: null.eq("id", d.id), paymentBlocked: null });
+                        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
+                        cS.forEach(async (cD) => { if (cD.data().blockReason && cD.data().blockReason.includes("Financial Clearance")) { await supabaseClient.from("users").update({ status: "active", blockReason: "" }).eq("id", cD.id); } });
                     }
                 }
             }
@@ -1134,11 +1071,11 @@ window.addCompanyExpense = async () => {
     const desc = document.getElementById("expense-desc").value.trim();
     if (!amount || !desc) return window.showToast("FILL ALL FIELDS!", "#e11d48");
     try {
-        await db.collection("company_expenses").add({
+        await supabaseClient.from("company_expenses").insert([{
             type: type,
-            amount: Number(amount),
+            amount: Number(amount]),
             description: desc,
-            createdAt: serverTimestamp(),
+            createdAt: new Date().toISOString(),
             createdBy: superAdminUid
         });
         window.showToast("✅ EXPENSE RECORDED!");
@@ -1153,10 +1090,10 @@ window.addCompanyExpense = async () => {
 
 window.loadCompanyExpenses = async () => {
     try {
-        const snap = await db.collection("company_expenses").orderBy("createdAt", "desc").limit(50).get();
+        const snap = await supabaseClient.from("company_expenses").select("*").order("createdAt", {ascending: desc === "asc"}).limit(50);
         let html = "";
-        snap.forEach(doc => {
-            const d = doc.data();
+        (snap.data || []).forEach(doc => {
+            const d = doc;
             const date = d.createdAt ? new Date(d.createdAt.toMillis()).toLocaleDateString() : "N/A";
             html += `<tr class="hover:bg-slateSurface/50 transition">
                 <td class="p-4 text-coolGray tracking-widest">${date}</td>
@@ -1172,7 +1109,7 @@ window.loadCompanyExpenses = async () => {
 
 window.deleteExpense = (id) => {
     window.customConfirm("DELETE THIS EXPENSE?", async () => {
-        await db.collection("company_expenses").doc(id).delete();
+        await supabaseClient.from("company_expenses").delete().eq("id", id);
         window.showToast("✅ EXPENSE DELETED!");
         window.loadCompanyExpenses();
     });
@@ -1236,15 +1173,15 @@ window.loadPasswordRequests = () => {
 window.deletePasswordRequest = async (uid) => {
     window.customConfirm("DELETE KEY FROM SYSTEM?", async () => {
         try {
-            await db.collection("users").doc(uid).update({ plainPassword: deleteField(), suggestedPassword: deleteField() });
+            await supabaseClient.from("users").update({ plainPassword: null.eq("id", uid), suggestedPassword: null });
             window.showToast("KEY ERASED!");
             loadChairmen();
         } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
     });
 };
 window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
-window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ suggestedPassword: null, plainPassword: null }); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
-window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await db.collection("users").doc(uid).update({ suggestedPassword: null, plainPassword: null }); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
+window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
 async function loadSchoolsForDropdown() {
     const h = '<option value="ALL">-- GLOBAL NETWORK --</option>';
@@ -1252,7 +1189,7 @@ async function loadSchoolsForDropdown() {
     t.forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "featureSchoolSelect" || id === "masterNodeId") ? '<option value="">-- SELECT TARGET --</option>' : h; } });
 
     try {
-        const sp = await db.collection("schools").get();
+        const sp = await supabaseClient.from("schools").select("*");
         let requestsHtml = "";
 
         sp.forEach(d => {
@@ -1284,7 +1221,7 @@ async function loadSchoolsForDropdown() {
 window.approveSessionUpgrade = (schoolId) => {
     window.customConfirm("APPROVE SESSION UPGRADE FOR THIS NODE? The Chairman will be able to execute bulk promotions.", async () => {
         try {
-            await db.collection("schools").doc(schoolId).update({ sessionUpgradeStatus: "approved" });
+            await supabaseClient.from("schools").update({ sessionUpgradeStatus: "approved" }).eq("id", schoolId);
             window.showToast("✅ UPGRADE APPROVED!");
             window.logAudit("Approved Session Upgrade", schoolId);
             loadSchoolsForDropdown(); // Refresh table
@@ -1405,7 +1342,7 @@ document.addEventListener("DOMContentLoaded", applyGranularSubFeatureLocks);
 const FEATURE_SETTINGS_COLLECTION = "feature_controls";
 
 function getFeatureSettingsDocRef(schoolId) {
-    return db.collection("schools").doc(schoolId).collection(FEATURE_SETTINGS_COLLECTION).doc("settings");
+    return null;
 }
 
 function normalizeFeatureSettings(data) {
@@ -1479,7 +1416,7 @@ window.loadFeatureTogglesForSchool = async () => {
     setFeatureControlsBusy(true);
     try {
         const featureDoc = await getFeatureSettingsDocRef(sid).get();
-        const schoolDoc = featureDoc.exists ? null : await db.collection("schools").doc(sid).get();
+        const schoolDoc = featureDoc.exists ? null : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
         const featureData = featureDoc.exists ? featureDoc.data() : (schoolDoc?.exists ? schoolDoc.data() : {});
         companyFeatureSettings = normalizeFeatureSettings(featureData);
         renderFeatureGroup("school", "feature-toggles-container");
@@ -1525,7 +1462,7 @@ window.saveFeatureToggles = async (group, key, enabled) => {
             featureSettings: companyFeatureSettings,
             enabledModules,
             restrictedModules,
-            updatedAt: serverTimestamp(),
+            updatedAt: new Date().toISOString(),
             updatedBy: superAdminUid || "hq"
         }, { merge: true });
         window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
@@ -1545,12 +1482,12 @@ window.generateSystemBackup = async () => {
     try {
         if (sc === "ALL") {
             const cl = ["users", "schools", "students", "notices", "direct_messages", "login_logs", "audit_logs", "system_config", "global_roles", "pending_deletions", "recycle_bin"];
-            for (let c of cl) { bD[c] = []; const sn = await db.collection(c).get(); sn.forEach(d => bD[c].push({ id: d.id, ...d.data() })); }
+            for (let c of cl) { bD[c] = []; const { data: snData } = await supabaseClient.from(c).select("*"); const sn = snData || []; sn.forEach(d => bD[c].push({ id: d.id, ...d.data() })); }
         } else {
             bD.schoolId = sc; bD.users = []; bD.students = [];
-            const sD = await db.collection("schools").doc(sc).get(); if (sD.exists) bD.schoolData = sD.data();
-            const uS = await db.collection("users").where("schoolId", "==", sc).get(); uS.forEach(d => bD.users.push(d.data()));
-            const stS = await db.collection("students").where("schoolId", "==", sc).get(); stS.forEach(d => bD.students.push(d.data()));
+            const sD = await supabaseClient.from("schools").select("*").eq("id", sc).maybeSingle(); if (sD.exists) bD.schoolData = sD.data();
+            const uS = await supabaseClient.from("users").select("*").eq("schoolId", sc); uS.forEach(d => bD.users.push(d.data()));
+            const stS = await supabaseClient.from("students").select("*").eq("schoolId", sc); stS.forEach(d => bD.students.push(d.data()));
         }
         const jsonString = JSON.stringify(bD, null, 2); const blobObj = new Blob([jsonString], { type: "application/json" });
         const fileName = sc === "ALL" ? `Matrix_Dump_Global_${Date.now()}.json` : `Matrix_Dump_Node_${sc}_${Date.now()}.json`;
@@ -1573,9 +1510,9 @@ window.loadSchoolSecurityStatus = async () => {
     }
     document.getElementById("sec-status-msg").innerText = "SCANNING NODE STATUS...";
     try {
-        const cS = await db.collection("users").where("schoolId", "==", sI).where("role", "==", "chairman").get(); let cB = false; cS.forEach(d => { cB = d.data().status === "blocked"; }); document.getElementById("sec-chairman-toggle").checked = !cB; document.getElementById("sec-chairman-info").innerText = "SYNCED";
-        const sS = await db.collection("users").where("schoolId", "==", sI).where("role", "==", "staff").get(); let aS = false; sS.forEach(d => { if (d.data().status === "blocked") aS = true; }); document.getElementById("sec-staff-toggle").checked = !aS; document.getElementById("sec-staff-info").innerText = "SYNCED";
-        const scl = await db.collection("schools").doc(sI).get(); let stB = false; let gA = false, tA = false, rO = false; let mod = {};
+        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const cS = cSData || []; let cB = false; cS.forEach(d => { cB = d.data().status === "blocked"; }); document.getElementById("sec-chairman-toggle").checked = !cB; document.getElementById("sec-chairman-info").innerText = "SYNCED";
+        const { data: sSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sS = sSData || []; let aS = false; sS.forEach(d => { if (d.data().status === "blocked") aS = true; }); document.getElementById("sec-staff-toggle").checked = !aS; document.getElementById("sec-staff-info").innerText = "SYNCED";
+        const scl = await supabaseClient.from("schools").select("*").eq("id", sI).maybeSingle(); let stB = false; let gA = false, tA = false, rO = false; let mod = {};
         if (scl.exists) { stB = scl.data().studentsBlocked === true; gA = scl.data().geofenceActive; tA = scl.data().timeLockActive; rO = scl.data().readOnlyMode; mod = scl.data().modules || {}; }
         document.getElementById("sec-student-toggle").checked = !stB; document.getElementById("sec-student-info").innerText = stB ? "LOCKED" : "ACTIVE";
         document.getElementById("sec-geofence-toggle").checked = gA; document.getElementById("sec-timelock-toggle").checked = tA; document.getElementById("sec-readonly-toggle").checked = rO;
@@ -1587,14 +1524,14 @@ window.loadSchoolSecurityStatus = async () => {
 window.toggleSchoolUserBlock = async (ty) => {
     const sI = document.getElementById("secSchoolSelect").value; if (!sI) return;
     if (sI === "ALL") {
-        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const sn = await db.collection("users").where("role", "==", "chairman").get(); for (const d of sn.docs) { await db.collection("users").doc(d.id).update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }); } }
-        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const sn = await db.collection("users").where("role", "==", "staff").get(); for (const d of sn.docs) { await db.collection("users").doc(d.id).update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }); } }
-        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const sn = await db.collection("schools").get(); for (const d of sn.docs) { await db.collection("schools").doc(d.id).update({ studentsBlocked: !iA }); } }
+        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const sn = await supabaseClient.from("users").select("*").eq("role", "chairman"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const sn = await supabaseClient.from("users").select("*").eq("role", "staff"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const sn = await supabaseClient.from("schools").select("*"); for (const d of sn.docs) { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", d.id); } }
         return;
     }
-    if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; try { const sn = await db.collection("users").where("schoolId", "==", sI).where("role", "==", "chairman").get(); for (const d of sn.docs) { await db.collection("users").doc(d.id).update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
-    else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; try { const sn = await db.collection("users").where("schoolId", "==", sI).where("role", "==", "staff").get(); for (const d of sn.docs) { await db.collection("users").doc(d.id).update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
-    else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; try { await db.collection("schools").doc(sI).set({ studentsBlocked: !iA }, { merge: true }); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+    if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+    else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+    else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; try { await supabaseClient.from("schools").upsert([{id: sI, ...{ studentsBlocked: !iA }}]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
 };
 window.toggleAdvancedSecurity = async (type) => {
     const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return;
@@ -1602,23 +1539,23 @@ window.toggleAdvancedSecurity = async (type) => {
     if (type === 'geofence') { updateObj.geofenceActive = document.getElementById("sec-geofence-toggle").checked; msg = "GEOFENCE"; }
     if (type === 'timelock') { updateObj.timeLockActive = document.getElementById("sec-timelock-toggle").checked; msg = "TIME-LOCK"; }
     if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
-    try { await db.collection("schools").doc(sid).update(updateObj); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    try { await supabaseClient.from("schools").update(updateObj).eq("id", sid); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
-window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: serverTimestamp(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
 const csvExportBtnEl = document.getElementById("csvExportBtn");
 if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
     window.showToast("COMPILING DIRECTORY...", "#00F0FF");
     try {
         const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); doc.text("Global Node Directory", 14, 20);
-        const tableRows = []; const snp = await db.collection("schools").get(); snp.forEach(d => { tableRows.push([d.id, d.data().schoolName || "N/A", d.data().chairmanUid || "N/A"]); });
+        const tableRows = []; const snp = await supabaseClient.from("schools").select("*"); snp.forEach(d => { tableRows.push([d.id, d.data().schoolName || "N/A", d.data().chairmanUid || "N/A"]); });
         doc.autoTable({ head: [["Node ID", "Node Name", "Commander UID"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [0, 240, 255], textColor: [5, 11, 20] } });
         const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, `Node_Directory_${Date.now()}.pdf`);
     } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await db.collection("students").where("status", "==", "Pending").get(); let count = 0; for (const d of sn.docs) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await supabaseClient.from("students").select("*").eq("status", "Pending"); let count = 0; for (const d of sn.docs) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1626,19 +1563,19 @@ window.deployNewNode = async () => {
     const subs = document.getElementById("newNodeSubs").value;
     if (!sName || !tier) return window.showToast("REQUIRED FIELDS MISSING", "#e11d48");
     try {
-        const docRef = await db.collection("schools").add({
+        const docRef = await supabaseClient.from("schools").insert([{
             schoolName: sName,
             tier: tier,
-            subNodes: parseInt(subs) || 0,
+            subNodes: parseInt(subs]) || 0,
             status: "active",
-            createdAt: serverTimestamp()
+            createdAt: new Date().toISOString()
         });
         window.showToast("✅ NODE DEPLOYED: " + docRef.id);
         window.logAudit("Deployed New Node", sName);
     } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
-window.toggleServerShield = async () => { const btn = document.getElementById("serverShieldBtn"); if (btn.innerText.includes("TOGGLE")) { await db.collection("system_config").doc("shield").set({ active: true }); window.showToast("SERVER SHIELD ACTIVATED!"); window.logAudit("Activated Shield", "Global"); } };
+window.toggleServerShield = async () => { const btn = document.getElementById("serverShieldBtn"); if (btn.innerText.includes("TOGGLE")) { await supabaseClient.from("system_config").upsert([{id: "shield", ...{ active: true }}]); window.showToast("SERVER SHIELD ACTIVATED!"); window.logAudit("Activated Shield", "Global"); } };
 
 // ==========================================
 // 🛡️ GLOBAL BLACKLIST SYSTEM
@@ -1652,10 +1589,10 @@ window.loadGlobalBlacklist = async () => {
     const tbody = document.getElementById("blacklist-table-body");
     tbody.innerHTML = "<tr><td colspan='3' class='p-3 text-center'>Loading...</td></tr>";
     try {
-        const snap = await db.collection("global_blacklist").get();
+        const snap = await supabaseClient.from("global_blacklist").select("*");
         let html = "";
-        snap.forEach(doc => {
-            const d = doc.data();
+        (snap.data || []).forEach(doc => {
+            const d = doc;
             html += `<tr class="hover:bg-slateSurface/50">
                 <td class="p-3 uppercase font-bold text-purple-400">${d.type}</td>
                 <td class="p-3 text-white">${d.value}</td>
@@ -1677,13 +1614,13 @@ window.addBlacklistEntry = async () => {
     const btn = document.getElementById("add-blacklist-btn");
     btn.innerText = "WAIT...";
     try {
-        const q = await db.collection("global_blacklist").where("type", "==", type).where("value", "==", val).get();
+        const { data: qData } = await supabaseClient.from("global_blacklist").select("*").eq("type", type).eq("value", val); const q = { docs: qData || [] };
         if (!q.empty) { window.showToast("ALREADY BLACKLISTED", "#f59e0b"); btn.innerHTML = `<i class="fas fa-plus"></i> ADD`; return; }
 
-        await db.collection("global_blacklist").add({
+        await supabaseClient.from("global_blacklist").insert([{
             type: type,
             value: val,
-            createdAt: serverTimestamp()
+            createdAt: new Date().toISOString()
         });
         document.getElementById("blacklist-input").value = "";
         window.showToast("ADDED TO BLACKLIST", "#a855f7");
@@ -1695,7 +1632,7 @@ window.addBlacklistEntry = async () => {
 window.removeBlacklistEntry = async (id) => {
     window.customConfirm("Remove from Global Blacklist?", async () => {
         try {
-            await db.collection("global_blacklist").doc(id).delete();
+            await supabaseClient.from("global_blacklist").delete().eq("id", id);
             window.showToast("ENTRY REMOVED", "#10b981");
             window.loadGlobalBlacklist();
         } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
@@ -1753,12 +1690,12 @@ window.loadDeviceLogs = async () => {
     if (!table) return;
     table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-cyan-400 font-mono'><i class='fas fa-spinner fa-spin'></i> SCANNING TELEMETRY...</td></tr>";
     try {
-        let query = db.collection("login_logs");
+        let query = supabaseClient.from("login_logs").select("*");
         if (sid !== "ALL") query = query.where("schoolId", "==", sid);
         const snapshot = await query.get();
         window.currentDeviceLogs = [];
         snapshot.forEach(doc => {
-            const log = { id: doc.id, ...doc.data() };
+            const log = { id: doc.id, ...doc };
             if (rid === "ALL" || log.role === rid) window.currentDeviceLogs.push(log);
         });
         if (startInput && endInput) {
@@ -1823,43 +1760,43 @@ window.downloadDeviceLogsAsPDF = async () => {
 };
 
 window.downloadAllDeviceLogsAsPDF = async () => {
-    try { const sn = await db.collection("login_logs").get(); let allLogs = []; sn.forEach(d => allLogs.push(d.data())); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    try { const sn = await supabaseClient.from("login_logs").select("*"); let allLogs = []; sn.forEach(d => allLogs.push(d.data())); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
-window.killSession = async (uid) => { if (!uid || uid === "undefined") return; window.customConfirm("TERMINATE SESSION? USER WILL BE KICKED.", async () => { await db.collection("users").doc(uid).update({ forceLogout: true }); window.showToast("SESSION TERMINATED.", "#e11d48"); window.logAudit("Killed Session", uid); }); };
+window.killSession = async (uid) => { if (!uid || uid === "undefined") return; window.customConfirm("TERMINATE SESSION? USER WILL BE KICKED.", async () => { await supabaseClient.from("users").update({ forceLogout: true }).eq("id", uid); window.showToast("SESSION TERMINATED.", "#e11d48"); window.logAudit("Killed Session", uid); }); };
 
 // ==========================================
 // 12. BROADCAST, INBOX & EMERGENCY TICKER
 // ==========================================
-window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await db.collection("direct_messages").where("receiverType", "==", "developer").get(); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d.data() })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await db.collection("direct_messages").doc(mid).delete(); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
-window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await db.collection("direct_messages").doc().set({ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: serverTimestamp() }); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
+window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d.data() })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await supabaseClient.from("direct_messages").delete().eq("id", mid); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
+window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: new Date().toISOString() }]); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
 // Removed Broadcast Event Listeners for UI Redesign
 
-window.sendEmergencyTicker = async () => { const txt = document.getElementById("emergencyTickerInput").value.trim(); if (!txt) return; try { await db.collection("system_config").doc("ticker").set({ text: txt, active: true, timestamp: Date.now() }); window.showToast("OVERRIDE TRANSMITTED!", "#e11d48"); window.logAudit("Broadcasted Ticker", txt); document.getElementById("emergencyTickerInput").value = ""; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.clearEmergencyTicker = async () => { try { await db.collection("system_config").doc("ticker").update({ active: false }); window.showToast("OVERRIDE CLEARED."); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.listenToEmergencyTicker = () => { db.collection("system_config").doc("ticker").onSnapshot(doc => { if (doc.exists && doc.data().active) { document.getElementById("emergency-ticker").classList.remove("hidden-el"); document.getElementById("ticker-text").innerText = doc.data().text; } else { document.getElementById("emergency-ticker").classList.add("hidden-el"); } }); };
+window.sendEmergencyTicker = async () => { const txt = document.getElementById("emergencyTickerInput").value.trim(); if (!txt) return; try { await supabaseClient.from("system_config").upsert([{id: "ticker", ...{ text: txt, active: true, timestamp: Date.now(}]) }); window.showToast("OVERRIDE TRANSMITTED!", "#e11d48"); window.logAudit("Broadcasted Ticker", txt); document.getElementById("emergencyTickerInput").value = ""; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.clearEmergencyTicker = async () => { try { await supabaseClient.from("system_config").update({ active: false }).eq("id", "ticker"); window.showToast("OVERRIDE CLEARED."); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.listenToEmergencyTicker = () => { supabaseClient.channel("public:system_config").on("postgres_changes", { event: "*", schema: "public", table: "system_config", filter: "id=eq.ticker" }, payload => { let doc = payload.new; if (!doc) doc = {}; (doc => { if (!!doc.data && doc.active) { document.getElementById("emergency-ticker").classList.remove("hidden-el"); document.getElementById("ticker-text").innerText = doc.text; } else { document.getElementById("emergency-ticker").classList.add("hidden-el"); } }); };
 
 // ==========================================
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
 // ==========================================
-window.logAudit = async (action, target) => { try { await db.collection("audit_logs").add({ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: serverTimestamp() }); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const snap = await db.collection("audit_logs").orderBy("timestamp", "desc").limit(50).get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(]), target: target.toUpperCase(), timestamp: new Date().toISOString() }); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const snap = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: desc === "asc"}).limit(50); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
-window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const snap = await db.collection("pending_deletions").get(); let html = ""; snap.forEach(doc => { let d = doc.data(); let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const orgDoc = await db.collection(collection).doc(docRefId).get(); const batch = db.batch(); if (orgDoc.exists) { const binRef = db.collection("recycle_bin").doc(); batch.set(binRef, { originalCollection: collection, originalId: docRefId, data: orgDoc.data(), deletedAt: serverTimestamp() }); batch.delete(db.collection(collection).doc(docRefId)); } batch.delete(db.collection("pending_deletions").doc(docId)); await batch.commit(); window.showToast("DELETED & MOVED TO BIN.", "#10b981"); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
-window.rejectDeletion = async (docId) => { try { await db.collection("pending_deletions").doc(docId).delete(); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const snap = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const { data: orgDoc } = await supabaseClient.from(collection).select("*").eq("id", docRefId).maybeSingle();  if (orgDoc) { const binRef = crypto.randomUUID(); await supabaseClient.from("recycle_bin").insert([{ id: binRef, originalCollection: collection, originalId: docRefId, data: orgDoc, deletedAt: new Date().toISOString() }]); await supabaseClient.from(collection).delete().eq("id", docRefId); } await supabaseClient.from("pending_deletions").delete().eq("id", docId);  window.showToast("DELETED & MOVED TO BIN.", "#10b981"); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.rejectDeletion = async (docId) => { try { await supabaseClient.from("pending_deletions").delete().eq("id", docId); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
 window.loadRecycleBin = async () => {
     const tbody = document.getElementById("recycle-bin-body");
     const sid = document.getElementById("recycleSchoolSelect")?.value || "ALL";
     try {
-        let query = db.collection("recycle_bin").orderBy("deletedAt", "desc").limit(50);
+        let query = supabaseClient.from("recycle_bin").select("*").order("deletedAt", {ascending: false}).limit(50);
         const snap = await query.get();
         let html = "";
-        snap.forEach(doc => {
-            let d = doc.data();
+        (snap.data || []).forEach(doc => {
+            let d = doc;
             // Manual filtering since originalSchoolId might not be perfectly indexed
             if (sid !== "ALL" && d.data?.schoolId !== sid) return;
 
@@ -1873,7 +1810,7 @@ window.loadRecycleBin = async () => {
 window.permanentlyDeleteBinItem = async (binId) => {
     window.customConfirm("PERMANENTLY DELETE THIS ITEM FROM STORAGE?", async () => {
         try {
-            const binDoc = await db.collection("recycle_bin").doc(binId).get();
+            const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle();
             if (binDoc.exists) {
                 const itemData = binDoc.data().data || {};
                 const urlsToCheck = [itemData.photoUrl, itemData.logoUrl, itemData.signatureUrl, itemData.imageUrl];
@@ -1893,7 +1830,7 @@ window.permanentlyDeleteBinItem = async (binId) => {
                     }
                 }
             }
-            await db.collection("recycle_bin").doc(binId).delete();
+            await supabaseClient.from("recycle_bin").delete().eq("id", binId);
             window.showToast("PERMANENTLY DELETED!", "#10b981");
             window.loadRecycleBin();
             window.logAudit("Permanently Deleted Item", binId);
@@ -1902,13 +1839,13 @@ window.permanentlyDeleteBinItem = async (binId) => {
         }
     });
 };
-window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const binDoc = await db.collection("recycle_bin").doc(binId).get(); if (binDoc.exists) { await db.collection(collection).doc(docId).set(binDoc.data().data); await db.collection("recycle_bin").doc(binId).delete(); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle(); if (binDoc.exists) { await supabaseClient.from(collection).upsert([{ id: docId, ...binDoc }]); await supabaseClient.from("recycle_bin").delete().eq("id", binId); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
 // ==========================================
 // 14. ROLE BUILDER
 // ==========================================
   window.saveCustomRole = async () => { const rName = document.getElementById("customRoleName").value.trim(); if (!rName) return; const perms = Array.from(document.querySelectorAll(".role-perm")).filter(cb => cb.checked).map(cb => cb.value); try { const rId = rName.toLowerCase().replace(/ /g, "_"); const { error: rpcErr } = await supabaseClient.rpc("save_custom_role", { p_role_id: rId, p_name: rName, p_permissions: perms }); if (rpcErr) throw rpcErr; window.showToast("CUSTOM POLICY FORGED!"); document.getElementById("customRoleName").value = ""; Array.from(document.querySelectorAll(".role-perm")).forEach(c => c.checked = false); window.loadCustomRoles(); window.logAudit("Created Role", rName); } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const snap = await db.collection("global_roles").get(); let html = ""; snap.forEach(doc => { let d = doc.data(); html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const snap = await supabaseClient.from("global_roles").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
   window.deleteRole = async (rId) => { window.customConfirm("PURGE POLICY?", async () => { try { const { error } = await supabaseClient.rpc("delete_custom_role", { p_role_id: rId }); if (error) throw error; window.showToast("POLICY PURGED!"); window.loadCustomRoles(); } catch(e) { window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
 // ==========================================
@@ -1958,10 +1895,10 @@ window.loadTickets = async () => {
     const tbody = document.getElementById("ticketsTableBody");
     if (!tbody) return;
     try {
-        const snap = await db.collection("tickets").get();
+        const snap = await supabaseClient.from("tickets").select("*");
         let html = "";
-        snap.forEach(doc => {
-            const d = doc.data();
+        (snap.data || []).forEach(doc => {
+            const d = doc;
             html += `<tr class="hover:bg-slateSurface/50 transition border-l-2 ${d.status === 'Open' ? 'border-rose-500' : 'border-tealAccent'}">
                 <td class="p-4 font-mono font-bold text-white">${doc.id.substring(0, 8).toUpperCase()}</td>
                 <td class="p-4 text-coolLight">${d.schoolName || 'Unknown'}</td>
@@ -2004,9 +1941,9 @@ window.sendAIMessage = async () => {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
     try {
-        const schoolsSnap = await db.collection("schools").get();
+        const schoolsSnap = await supabaseClient.from("schools").select("*");
         const schools = schoolsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const txSnap = await db.collection("transactions").get();
+        const txSnap = await supabaseClient.from("transactions").select("*");
         const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         const contextData = JSON.stringify({ schools, transactions });
@@ -2035,11 +1972,11 @@ window.generateGSTInvoice = async (schoolId) => {
     }
     window.showToast("FETCHING DATA...", "#3b82f6");
     try {
-        const sDoc = await db.collection("schools").doc(schoolId).get();
+        const sDoc = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
         if (!sDoc.exists) return window.showToast("NODE NOT FOUND", "#e11d48");
         const sData = sDoc.data();
 
-        const uDoc = await db.collection("users").doc(sData.chairmanUid).get();
+        const uDoc = await supabaseClient.from("users").select("*").eq("id", sData.chairmanUid).maybeSingle();
         const email = uDoc.exists ? uDoc.data().email : "unknown@domain.com";
         const tier = sData.subscriptionTier || 'Starter';
         const schoolName = sData.schoolName || 'Unknown School';
@@ -2303,7 +2240,7 @@ window.submitSchoolRegistration = async () => {
             status: 'pending'
         };
 
-        await db.collection("pending_registrations").add(payload);
+        await supabaseClient.from("pending_registrations").insert([payload]);
 
         localStorage.setItem('last_registration_time', Date.now().toString()); window.showToast('REGISTRATION SUBMITTED FOR APPROVAL', '#10b981');
         window.closeCustomModal('registration-modal');
@@ -2371,7 +2308,7 @@ window.submitSchoolLogin = async () => {
         let isChairman = false;
         let userData = {};
         try {
-            const docSnap = await db.collection("users").doc(cred.user.uid).get();
+            const docSnap = await supabaseClient.from("users").select("*").eq("id", cred.user.uid).maybeSingle();
             if (docSnap.exists && docSnap.data().role === "chairman") {
                 isChairman = true;
                 userData = docSnap.data();
@@ -2394,7 +2331,7 @@ window.submitSchoolLogin = async () => {
                 } catch (e) { console.warn("IP fetch failed", e); }
                 const coordinates = await getBrowserCoordinates();
 
-                await db.collection("login_logs").add({
+                await supabaseClient.from("login_logs").insert([{
                     userId: cred.user.uid,
                     uid: cred.user.uid,
                     email: email,
@@ -2409,7 +2346,7 @@ window.submitSchoolLogin = async () => {
                     longitude: coordinates?.longitude ?? null,
                     locationAccuracy: coordinates?.accuracy ?? null,
                     locationSource: coordinates?.source || "ip-fallback",
-                    timestamp: serverTimestamp()
+                    timestamp: new Date().toISOString()
                 });
             } catch (logErr) {
                 console.log("Login log error:", logErr);
@@ -2441,7 +2378,7 @@ window.loadPendingRegistrations = () => {
     const tbody = document.getElementById("pending-approvals-body");
     if (!tbody) return;
 
-    db.collection("pending_registrations").onSnapshot(snapshot => {
+    supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
         tbody.innerHTML = '';
         if (snapshot.empty) {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-coolGray">NO PENDING REQUESTS</td></tr>';
@@ -2449,7 +2386,7 @@ window.loadPendingRegistrations = () => {
         }
 
         snapshot.forEach(doc => {
-            const data = doc.data();
+            const data = doc;
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td class="p-4"><img src="${data.logoUrl}" class="w-10 h-10 rounded-full border border-glassBorder object-cover"></td>
@@ -2471,7 +2408,7 @@ window.loadPendingRegistrations = () => {
 window.approveRegistrationAuto = async (docId) => {
     window.customConfirm("APPROVE THIS NODE DEPLOYMENT?", async () => {
         try {
-            const docRef = db.collection("pending_registrations").doc(docId);
+            const docRef = docId;
             const docSnap = await docRef.get();
             if (!docSnap.exists) return;
 
@@ -2531,7 +2468,7 @@ window.approveRegistrationAuto = async (docId) => {
 window.approveRegistrationOnly = async (docId) => {
     window.customConfirm("APPROVE REGISTRATION AND GENERATE REG/NO?", async () => {
         try {
-            const docRef = db.collection("pending_registrations").doc(docId);
+            const docRef = docId;
             const docSnap = await docRef.get();
             if (!docSnap.exists) return;
 
@@ -2542,7 +2479,7 @@ window.approveRegistrationOnly = async (docId) => {
             const regNo = `CORE/REG/EDU/${randomDigits}`;
 
             // Save to accepted_registrations
-            await db.collection("accepted_registrations").doc(regNo.replace(/\//g, "_")).set({
+            await supabaseClient.from("accepted_registrations").upsert([{ id: regNo.replace(/\//g, "_"),
                 ...data,
                 regNo: regNo,
                 acceptedAt: Date.now(),
@@ -2565,7 +2502,7 @@ window.approveRegistrationOnly = async (docId) => {
 window.rejectRegistration = async (docId) => {
     window.customConfirm("REJECT AND DELETE THIS DEPLOYMENT REQUEST?", async () => {
         try {
-            await db.collection("pending_registrations").doc(docId).delete();
+            await supabaseClient.from("pending_registrations").delete().eq("id", docId);
             window.showToast("REQUEST TERMINATED", "#10b981");
         } catch (err) {
             window.showToast("ERROR: " + err.message, "#e11d48");
@@ -2608,9 +2545,9 @@ window.loadCommHubSchools = () => {
     const list = document.getElementById("comm-school-list");
     if (!list) return;
     if (!stopCommSchoolListener) {
-        stopCommSchoolListener = db.collection("schools").onSnapshot(snapshot => {
+        stopCommSchoolListener = supabaseClient.channel("public:schools").on("postgres_changes", { event: "*", schema: "public", table: "schools" }, payload => {
             commSchools = snapshot.docs.map(doc => {
-                const data = doc.data();
+                const data = doc;
                 return { id: doc.id, name: data.schoolName || data.name || 'Unnamed Node', logoUrl: data.logoUrl || '' };
             }).sort((a, b) => a.name.localeCompare(b.name));
             renderCommSchools(document.getElementById("comm-search")?.value || "");
@@ -2634,9 +2571,7 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
     const historyBox = document.getElementById("comm-chat-history");
     if (!historyBox) return;
     if (stopCommMessageListener) stopCommMessageListener();
-    stopCommMessageListener = db.collection("communications")
-        .where("schoolId", "==", schoolId)
-        .onSnapshot(snapshot => {
+    stopCommMessageListener = supabaseClient.channel("public:communications").on("postgres_changes", { event: "*", schema: "public", table: "communications", filter: `schoolId=eq.${schoolId}` }, payload => {
             historyBox.innerHTML = '';
             if (snapshot.empty) {
                 historyBox.innerHTML = '<div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center"><i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i><br>End-to-End Encrypted Comms<br>No messages yet.</div>';
@@ -2645,7 +2580,7 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
 
             let messages = [];
             snapshot.forEach(doc => {
-                messages.push({ id: doc.id, ...doc.data() });
+                messages.push({ id: doc.id, ...doc });
             });
 
             messages.sort((a, b) => timestampToMillis(a.timestamp) - timestampToMillis(b.timestamp));
@@ -2701,12 +2636,12 @@ window.sendCommMessage = async () => {
     }
 
     try {
-        await db.collection("communications").add({
+        await supabaseClient.from("communications").insert([{
             schoolId: currentCommSchoolId,
             sender: 'master',
             text: text,
             attachmentUrl: attachmentUrl,
-            timestamp: serverTimestamp()
+            timestamp: new Date().toISOString()
         });
         input.value = '';
         fileInput.value = '';
@@ -2719,10 +2654,10 @@ window.clearCommHistory = async () => {
     if (!currentCommSchoolId) return;
     window.customConfirm("WIPE COMM HISTORY FOR THIS NODE?", async () => {
         try {
-            const batch = db.batch();
-            const docs = await db.collection("communications").where("schoolId", "==", currentCommSchoolId).get();
+            
+            const docs = await supabaseClient.from("communications").select("*").eq("schoolId", currentCommSchoolId);
             docs.forEach(d => batch.delete(d.ref));
-            await batch.commit();
+            
             window.showToast("HISTORY WIPED", "#10b981");
         } catch (err) {
             window.showToast("ERROR: " + err.message, "#e11d48");
@@ -2740,12 +2675,12 @@ window.bulkDeletePasswordReqs = async () => {
     }
     window.customConfirm(`DELETE ${checkboxes.length} TARGETS?`, async () => {
         try {
-            const batch = db.batch();
+            
             checkboxes.forEach(cb => {
-                const docRef = db.collection("password_requests").doc(cb.dataset.id);
+                const docRef = cb.dataset.id;
                 batch.delete(docRef);
             });
-            await batch.commit();
+            
             window.showToast("BULK PURGE COMPLETE", "#10b981");
         } catch (err) {
             window.showToast("ERROR: " + err.message, "#e11d48");
@@ -2784,9 +2719,9 @@ window.loadTransferApprovals = async () => {
     const filter = document.getElementById("transfer-approval-filter")?.value || "Pending HQ Approval";
     if (tbody) tbody.innerHTML = `<tr><td colspan='8' class='text-center p-4 text-coolGray font-mono'>LOADING TRANSFERS...</td></tr>`;
     try {
-        const snapshot = await db.collection("student_transfers").get();
+        const snapshot = await supabaseClient.from("student_transfers").select("*");
         window.fetchedTransferApprovals = snapshot.docs.map(doc => {
-            const transfer = { id: doc.id, ...doc.data() };
+            const transfer = { id: doc.id, ...doc };
             transfer.status = normalizeTransferStatus(transfer.status, transfer);
             return transfer;
         });
@@ -2837,10 +2772,10 @@ window.approveTransfer = async (transferId) => {
         try {
             const stages = tr.workflowStages || [];
             stages.forEach(s => { if (s.stage === "HQ Approval") { s.done = true; s.at = new Date().toISOString(); } });
-            await db.collection("student_transfers").doc(transferId).update({
+            await supabaseClient.from("student_transfers").update({
                 status: "Pending Target Accept",
                 workflowStage: 2,
-                hqApprovedAt: serverTimestamp(),
+                hqApprovedAt: new Date().toISOString().eq("id", transferId),
                 hqApprovedBy: superAdminUid || "hq",
                 workflowStages: stages
             });
@@ -2864,15 +2799,15 @@ window.hqRejectTransfer = async (transferId) => {
     try {
         const stages = tr.workflowStages || [];
         stages.forEach(s => { if (s.stage === "HQ Approval") { s.done = true; s.at = new Date().toISOString(); s.rejected = true; } });
-        const batch = db.batch();
-        batch.update(db.collection("student_transfers").doc(transferId), {
+        
+        await supabaseClient.from("student_transfers").update({
             status: "Rejected",
-            rejectedAt: serverTimestamp(),
+            rejectedAt: new Date().toISOString().eq("id", transferId),
             rejectedBy: superAdminUid || "hq",
             rejectReason: reason,
             workflowStages: stages
         });
-          await batch.commit();
+          
           if (tr.studentId) {
               const { error: rpcErr } = await supabaseClient.rpc("update_student_transfer", {
                   p_student_id: tr.studentId,
@@ -2919,11 +2854,11 @@ document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
 
 window.loadGlobalAnalyticsDashboard = async () => {
     try {
-        const schoolsSnap = await db.collection("schools").get();
+        const schoolsSnap = await supabaseClient.from("schools").select("*");
         const schoolNames = new Map();
         let active = 0, expired = 0;
         schoolsSnap.forEach(doc => {
-            const data = doc.data();
+            const data = doc;
             schoolNames.set(doc.id, data.schoolName || data.name || doc.id);
             if (data.licenseStatus === 'Active' || data.licenseStatus === 'active') active++;
             else expired++;
@@ -2931,10 +2866,10 @@ window.loadGlobalAnalyticsDashboard = async () => {
         const statLicenses = document.getElementById("stat-licenses");
         if (statLicenses) statLicenses.innerText = `${active} / ${expired}`;
 
-        const studentsSnap = await db.collection("students").get();
+        const studentsSnap = await supabaseClient.from("students").select("*");
         let studentCounts = {};
         studentsSnap.forEach(doc => {
-            const data = doc.data();
+            const data = doc;
             if (data.schoolId) {
                 studentCounts[data.schoolId] = (studentCounts[data.schoolId] || 0) + 1;
             }
@@ -3022,7 +2957,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
             });
         }
 
-        const txSnap = await db.collection("transactions").where("type", "==", "Fee").get();
+        const txSnap = await supabaseClient.from("transactions").select("*").eq("type", "Fee");
         let monthlyRev = {};
         let now = new Date();
         for (let i = 5; i >= 0; i--) {
@@ -3032,7 +2967,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
         }
 
         txSnap.forEach(doc => {
-            const data = doc.data();
+            const data = doc;
             const timestamp = timestampToMillis(data.date || data.timestamp || data.createdAt);
             if (!timestamp) return;
 
@@ -3119,11 +3054,11 @@ window.loadAttendanceSummary = async (targetDate) => {
     tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>Loading...</td></tr>";
 
     try {
-        const attSnap = await db.collection("attendance").where("date", "==", dateStr).get();
+        const attSnap = await supabaseClient.from("attendance").select("*").eq("date", dateStr);
         let schoolAtt = {};
 
         attSnap.forEach(doc => {
-            let data = doc.data();
+            let data = doc;
             if (!schoolAtt[data.schoolId]) schoolAtt[data.schoolId] = { present: 0, absent: 0, total: 0 };
 
             if (data.records && Array.isArray(data.records)) {
@@ -3142,7 +3077,7 @@ window.loadAttendanceSummary = async (targetDate) => {
         }
 
         for (let sid of Object.keys(schoolAtt)) {
-            let sDoc = await db.collection("schools").doc(sid).get();
+            let sDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
             let sName = sDoc.exists ? sDoc.data().schoolName : sid;
             let att = schoolAtt[sid];
             let pct = att.total > 0 ? ((att.present / att.total) * 100).toFixed(1) : 0;
@@ -3178,9 +3113,9 @@ window.sendGlobalNotification = async () => {
     }
 
     try {
-        await db.collection("notifications").add({
+        await supabaseClient.from("notifications").insert([{
             title, type, target, message,
-            sentAt: serverTimestamp(),
+            sentAt: new Date().toISOString(),
             sentBy: "master",
             isRead: false
         });
@@ -3203,7 +3138,7 @@ window.loadGlobalNotifications = async () => {
     if (!tbody) return;
 
     try {
-        const snap = await db.collection("notifications").where("sentBy", "==", "master").orderBy("sentAt", "desc").limit(50).get();
+        const snap = await supabaseClient.from("notifications").select("*").eq("sentBy", "master").order("sentAt", {ascending: desc === "asc"}).limit(50);
         tbody.innerHTML = "";
 
         if (snap.empty) {
@@ -3211,8 +3146,8 @@ window.loadGlobalNotifications = async () => {
             return;
         }
 
-        snap.forEach(doc => {
-            const data = doc.data();
+        (snap.data || []).forEach(doc => {
+            const data = doc;
             let dateStr = data.sentAt ? new Date(data.sentAt.toDate()).toLocaleString() : "Just now";
 
             let colorClass = "text-tealAccent";
@@ -3240,7 +3175,7 @@ window.loadGlobalNotifications = async () => {
 window.deleteNotification = async (id) => {
     if (confirm("Delete this notification?")) {
         try {
-            await db.collection("notifications").doc(id).delete();
+            await supabaseClient.from("notifications").delete().eq("id", id);
             window.loadGlobalNotifications();
             if (window.showToast) window.showToast("Notification deleted", "#10b981");
         } catch (e) {
@@ -3260,15 +3195,15 @@ window.loadSecurityLogs = async () => {
     const dateFilter = document.getElementById("secLogDate").value;
 
     try {
-        let query = db.collection("login_logs");
+        let query = supabaseClient.from("login_logs").select("*");
         const snap = await query.orderBy("timestamp", "desc").limit(100).get();
 
         tbody.innerHTML = "";
         alertsBox.innerHTML = "";
         let logs = [];
 
-        snap.forEach(doc => {
-            let data = Object.assign({ id: doc.id }, doc.data());
+        (snap.data || []).forEach(doc => {
+            let data = Object.assign({ id: doc.id }, doc);
             logs.push(data);
         });
 
@@ -4088,7 +4023,6 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
-
 
 
 
