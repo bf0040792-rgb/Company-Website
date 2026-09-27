@@ -13,70 +13,6 @@ window.handleDbError = (e) => {
 const supabaseUrl = 'https://ynlcbpxcsnfxqrogizns.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGNicHhjc25meHFyb2dpem5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MDMxNjMsImV4cCI6MjEwMzQ3OTE2M30.sx5iFeugOuLBt4pqt0-8_4VOGz1yWa7HQWl4NyGCWkE';
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-const toTimestamp = value => {
-    if (value && typeof value.toMillis === 'function') return value;
-    const date = value ? new Date(value) : new Date();
-    return { toMillis: () => date.getTime(), toDate: () => date };
-};
-const normalizeRow = row => {
-    if (!row || typeof row !== 'object') return row;
-    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value && (key.endsWith('At') || key === 'timestamp' || key === 'date') ? toTimestamp(value) : value]));
-};
-const makeSnapshot = (row, id) => row ? { get exists() { return true; }, data: () => normalizeRow(row), id: id || row.id } : { get exists() { return false; }, data: () => undefined, id };
-const applyConstraints = (builder, constraints = []) => constraints.reduce((q, c) => {
-    if (c.type === 'where') return c.op === '==' ? q.eq(c.field, c.val) : c.op === '!=' ? q.neq(c.field, c.val) : c.op === 'in' ? q.in(c.field, c.val) : q;
-    if (c.type === 'orderBy') return q.order(c.field, { ascending: c.dir !== 'desc' });
-    return c.type === 'limit' ? q.limit(c.num) : q;
-}, builder);
-
- if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { data, error } = await q.maybeSingle(); if (error || !data) return makeSnapshot(null, ref.id); return makeSnapshot(data, ref.id); };
- if (error) throw error; const docs = (data || []).map(row => makeSnapshot(row, row.id)); return { empty: !docs.length, size: docs.length, docs, forEach: callback => docs.forEach(callback) }; };
-const applyArrayUnions = async (ref, data) => {
-    const unionEntries = Object.entries(data).filter(([, value]) => value && value.__arrayUnion);
-    if (!unionEntries.length) return;
-    const snap = await getDoc(ref);
-    const current = snap.exists ? snap.data() : {};
-    unionEntries.forEach(([key, value]) => {
-        const merged = new Set([...(Array.isArray(current[key]) ? current[key] : []), ...value.__arrayUnion]);
-        data[key] = Array.from(merged);
-    });
-};
-
-    if (ref.extraFilter) payload[ref.extraFilter.field] = ref.extraFilter.val;
-    if (!options.merge) {
-        const snap = await supabaseClient.from(ref.col).select('*').eq('id', ref.id).maybeSingle();
-        if (!snap.data) {
-            const { error } = await supabaseClient.from(ref.col).insert(payload);
-            if (error) throw error;
-            return;
-        }
-    }
-    const { error } = await supabaseClient.from(ref.col).upsert(payload);
-    if (error) throw error;
-};
- await applyArrayUnions(ref, clean); let q = supabaseClient.from(ref.col).update(clean).eq('id', ref.id); if (ref.extraFilter) q = q.eq(ref.extraFilter.field, ref.extraFilter.val); const { error } = await q; if (error) throw error; };
- if (error) throw error; };
- if (error) throw error; return { id: row.id }; };
-const writeBatch = () => { const operations = []; return { set: (ref, data) => operations.push(() => setDoc(ref, data)), update: (ref, data) => operations.push(() => updateDoc(ref, data)), delete: ref => operations.push(() => deleteDoc(ref)), commit: async () => { for (const operation of operations) await operation(); } }; };
-
-    const run = () => fetcher().then(callback).catch(console.error);
-    run();
-    const channel = supabaseClient.channel(`public:${ref.col}:${crypto.randomUUID()}`).on('postgres_changes', { event: '*', schema: 'public', table: ref.col }, run).subscribe();
-    return () => supabaseClient.removeChannel(channel);
-};
-
-
-
-// Secondary auth uses an isolated Supabase client so chairman login/user creation
-// never replaces the primary developer session on the company portal.
-const secondarySupabase = window.supabase.createClient(supabaseUrl, supabaseKey, { auth: { storageKey: 'company-secondary-auth' } });
-const secondaryAuth = {
-    signInWithEmailAndPassword: async (email, password) => { const { data, error } = await secondarySupabase.auth.signInWithPassword({ email, password }); if (error) throw error; const user = { uid: data.user.id, email: data.user.email, id: data.user.id }; window.__supabaseSecondarySession = async () => (await secondarySupabase.auth.getSession()).data?.session; return { user }; },
-    
-    signOut: async () => { window.__supabaseSecondarySession = null; await secondarySupabase.supabaseClient.auth.signOut(); }
-};
-
 // ==========================================
 // 🛡️ GEO-FENCING LAYER
 // ==========================================
@@ -318,9 +254,9 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
 
         try {
             const failRef = e.replace(/[^a-zA-Z0-9_@-]/g, "_");
-            const failDoc = await failRef.get();
-            if (failDoc.exists) {
-                let lockTime = failDoc.data().lockTime || 0;
+            const { data: failDoc } = await supabaseClient.from("login_logs").select("*").eq("id", failRef).maybeSingle();
+            if (!!failDoc) {
+                let lockTime = failDoc.lockTime || 0;
                 if (Date.now() < lockTime) {
                     await supabaseClient.auth.signOut();
                     err.innerText = "ACCOUNT TEMPORARILY LOCKED. PLEASE WAIT.";
@@ -331,7 +267,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
                 }
             }
             // Clear fails on success
-            await failRef.set({ fails: 0, lockTime: 0 }, { merge: true });
+            await supabaseClient.from("login_logs").upsert([{id: failRef, fails: 0, lockTime: 0}]);
         } catch (logErr) {
             console.error("Login logs access failed:", logErr);
         }
@@ -342,8 +278,8 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
         err.innerText = "Error: " + (error.message || "Invalid ID / Password");
         try {
             const failRef = e.replace(/[^a-zA-Z0-9_@-]/g, "_");
-            const failDoc = await failRef.get();
-            let fails = (failDoc.exists ? (failDoc.data().fails || 0) : 0) + 1;
+            const { data: failDoc } = await supabaseClient.from("login_logs").select("*").eq("id", failRef).maybeSingle();
+            let fails = (!!failDoc ? (failDoc.fails || 0) : 0) + 1;
             let newLockTime = 0;
 
             if (fails >= 3) {
@@ -355,7 +291,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
                 window.logAudit(`Failed Login - User: ${e}`, "Security");
             }
 
-            await failRef.set({ fails: fails, lockTime: newLockTime }, { merge: true });
+            await supabaseClient.from("login_logs").upsert([{id: failRef, fails: fails, lockTime: newLockTime}]);
         } catch (logErr) {
             console.error("Login log read/write failed, bypassing:", logErr);
         }
@@ -1415,7 +1351,7 @@ window.loadFeatureTogglesForSchool = async () => {
 
     setFeatureControlsBusy(true);
     try {
-        const featureDoc = await getFeatureSettingsDocRef(sid).get();
+        const featureDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
         const schoolDoc = featureDoc.exists ? null : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
         const featureData = featureDoc.exists ? featureDoc.data() : (schoolDoc?.exists ? schoolDoc.data() : {});
         companyFeatureSettings = normalizeFeatureSettings(featureData);
@@ -1458,7 +1394,7 @@ window.saveFeatureToggles = async (group, key, enabled) => {
     try {
         const enabledModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state !== false).map(([moduleKey]) => moduleKey);
         const restrictedModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state === false).map(([moduleKey]) => moduleKey);
-        await getFeatureSettingsDocRef(sid).set({
+        await supabaseClient.from("schools").update({
             featureSettings: companyFeatureSettings,
             enabledModules,
             restrictedModules,
@@ -1541,7 +1477,7 @@ window.toggleAdvancedSecurity = async (type) => {
     if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
     try { await supabaseClient.from("schools").update(updateObj).eq("id", sid); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
-window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await getFeatureSettingsDocRef(sid).set({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await supabaseClient.from("schools").update({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
 const csvExportBtnEl = document.getElementById("csvExportBtn");
 if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
@@ -1692,9 +1628,9 @@ window.loadDeviceLogs = async () => {
     try {
         let query = supabaseClient.from("login_logs").select("*");
         if (sid !== "ALL") query = query.where("schoolId", "==", sid);
-        const snapshot = await query.get();
+        const { data: snapshot } = await query;
         window.currentDeviceLogs = [];
-        snapshot.forEach(doc => {
+        (snapshot || []).forEach(doc => {
             const log = { id: doc.id, ...doc };
             if (rid === "ALL" || log.role === rid) window.currentDeviceLogs.push(log);
         });
@@ -1793,7 +1729,7 @@ window.loadRecycleBin = async () => {
     const sid = document.getElementById("recycleSchoolSelect")?.value || "ALL";
     try {
         let query = supabaseClient.from("recycle_bin").select("*").order("deletedAt", {ascending: false}).limit(50);
-        const snap = await query.get();
+        const { data: snapData } = await query; const snap = snapData || [];
         let html = "";
         (snap.data || []).forEach(doc => {
             let d = doc;
@@ -2385,7 +2321,7 @@ window.loadPendingRegistrations = () => {
             return;
         }
 
-        snapshot.forEach(doc => {
+        (snapshot || []).forEach(doc => {
             const data = doc;
             const tr = document.createElement("tr");
             tr.innerHTML = `
@@ -2409,7 +2345,7 @@ window.approveRegistrationAuto = async (docId) => {
     window.customConfirm("APPROVE THIS NODE DEPLOYMENT?", async () => {
         try {
             const docRef = docId;
-            const docSnap = await docRef.get();
+            const { data: docSnap } = await supabaseClient.from(typeof docRef === "string" ? "unknown" : docRef.col).select("*").eq("id", typeof docRef === "string" ? docRef : docRef.id).maybeSingle();
             if (!docSnap.exists) return;
 
             const data = docSnap.data();
@@ -2469,7 +2405,7 @@ window.approveRegistrationOnly = async (docId) => {
     window.customConfirm("APPROVE REGISTRATION AND GENERATE REG/NO?", async () => {
         try {
             const docRef = docId;
-            const docSnap = await docRef.get();
+            const { data: docSnap } = await supabaseClient.from(typeof docRef === "string" ? "unknown" : docRef.col).select("*").eq("id", typeof docRef === "string" ? docRef : docRef.id).maybeSingle();
             if (!docSnap.exists) return;
 
             const data = docSnap.data();
@@ -2579,7 +2515,7 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
             }
 
             let messages = [];
-            snapshot.forEach(doc => {
+            (snapshot || []).forEach(doc => {
                 messages.push({ id: doc.id, ...doc });
             });
 
@@ -2857,7 +2793,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
         const schoolsSnap = await supabaseClient.from("schools").select("*");
         const schoolNames = new Map();
         let active = 0, expired = 0;
-        schoolsSnap.forEach(doc => {
+        schools(snap || []).forEach(doc => {
             const data = doc;
             schoolNames.set(doc.id, data.schoolName || data.name || doc.id);
             if (data.licenseStatus === 'Active' || data.licenseStatus === 'active') active++;
@@ -2868,7 +2804,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
 
         const studentsSnap = await supabaseClient.from("students").select("*");
         let studentCounts = {};
-        studentsSnap.forEach(doc => {
+        students(snap || []).forEach(doc => {
             const data = doc;
             if (data.schoolId) {
                 studentCounts[data.schoolId] = (studentCounts[data.schoolId] || 0) + 1;
@@ -2966,7 +2902,7 @@ window.loadGlobalAnalyticsDashboard = async () => {
             monthlyRev[mStr] = 0;
         }
 
-        txSnap.forEach(doc => {
+        tx(snap || []).forEach(doc => {
             const data = doc;
             const timestamp = timestampToMillis(data.date || data.timestamp || data.createdAt);
             if (!timestamp) return;
@@ -3057,7 +2993,7 @@ window.loadAttendanceSummary = async (targetDate) => {
         const attSnap = await supabaseClient.from("attendance").select("*").eq("date", dateStr);
         let schoolAtt = {};
 
-        attSnap.forEach(doc => {
+        att(snap || []).forEach(doc => {
             let data = doc;
             if (!schoolAtt[data.schoolId]) schoolAtt[data.schoolId] = { present: 0, absent: 0, total: 0 };
 
@@ -3196,7 +3132,7 @@ window.loadSecurityLogs = async () => {
 
     try {
         let query = supabaseClient.from("login_logs").select("*");
-        const snap = await query.orderBy("timestamp", "desc").limit(100).get();
+        const { data: snapData } = await query.order("timestamp", {ascending: false}).limit(100); const snap = snapData || [];
 
         tbody.innerHTML = "";
         alertsBox.innerHTML = "";
@@ -3803,7 +3739,7 @@ function renderAdminMediaPreviews(data = {}) {
 
 async function refreshPublicMedia() {
     try {
-        const snap = await PUBLIC_MEDIA_DOC.get();
+        const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
         const data = snap.exists ? snap.data() : {};
         renderPublicHeroCarousel(data.banners || []);
         renderPublicAppSection(data.appMedia || {});
@@ -3817,7 +3753,7 @@ async function refreshPublicMedia() {
 
 window.deleteHeroBanner = async (index) => {
     try {
-        const snap = await PUBLIC_MEDIA_DOC.get();
+        const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
         const data = snap.exists ? snap.data() : {};
         const banners = Array.isArray(data.banners) ? [...data.banners] : [];
         if (index < 0 || index >= banners.length) return;
@@ -3833,7 +3769,7 @@ window.deleteHeroBanner = async (index) => {
                 console.error("Backend Cloudinary delete failed", e);
             }
             banners.splice(index, 1);
-            await PUBLIC_MEDIA_DOC.set({ banners, updatedAt: Date.now() }, { merge: true });
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ banners, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
             await refreshPublicMedia();
             window.showToast("HERO BANNER DELETED", "#10b981");
         });
@@ -3874,12 +3810,12 @@ window.saveHeroBanners = async () => {
 window.deleteAppLogo = async () => {
     try {
         window.customConfirm("DELETE CURRENT APP LOGO?", async () => {
-            const snap = await PUBLIC_MEDIA_DOC.get();
+            const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
             const data = snap.exists ? snap.data() : {};
             const appMedia = { ...(data.appMedia || {}) };
             
             appMedia.logoUrl = "";
-            await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ appMedia, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
             await refreshPublicMedia();
             window.showToast("APP LOGO DELETED", "#10b981");
         });
@@ -3890,7 +3826,7 @@ window.deleteAppLogo = async () => {
 
 window.deleteAppScreenshot = async (index) => {
     try {
-        const snap = await PUBLIC_MEDIA_DOC.get();
+        const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
         const data = snap.exists ? snap.data() : {};
         const appMedia = { ...(data.appMedia || {}) };
         const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
@@ -3900,7 +3836,7 @@ window.deleteAppScreenshot = async (index) => {
             
             screenshots.splice(index, 1);
             appMedia.screenshots = screenshots;
-            await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ appMedia, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
             await refreshPublicMedia();
             window.showToast("SCREENSHOT DELETED", "#10b981");
         });
@@ -3912,13 +3848,13 @@ window.deleteAppScreenshot = async (index) => {
 window.deleteAppApk = async () => {
     try {
         window.customConfirm("DELETE CURRENT APK FILE?", async () => {
-            const snap = await PUBLIC_MEDIA_DOC.get();
+            const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
             const data = snap.exists ? snap.data() : {};
             const appMedia = { ...(data.appMedia || {}) };
             
             appMedia.apkUrl = "";
             appMedia.apkName = "";
-            await PUBLIC_MEDIA_DOC.set({ appMedia, updatedAt: Date.now() }, { merge: true });
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ appMedia, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
             await refreshPublicMedia();
             window.showToast("APK DELETED", "#10b981");
         });
@@ -4023,7 +3959,6 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
-
 
 
 
