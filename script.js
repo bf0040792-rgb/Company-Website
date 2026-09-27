@@ -353,6 +353,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         landingPage.classList.remove("hidden-el");
         dashboardWrapper.classList.add("hidden-el");
     }
+    }
 });
 
 const logoutBtnEl = document.getElementById("logoutBtn");
