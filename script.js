@@ -62,9 +62,11 @@ const getAuth = () => ({
         return session.access_token;
     },
     onAuthStateChanged: callback => {
-        const subscription = supabaseClient.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
             window.__supabaseCurrentUser = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
-            callback(window.__supabaseCurrentUser);
+            if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
+                callback(window.__supabaseCurrentUser);
+            }
         });
         return subscription;
     },
@@ -76,7 +78,7 @@ const getAuth = () => ({
 const onAuthStateChanged = (authInstance, callback) => authInstance.onAuthStateChanged(callback);
 const signInWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password }); if (error) throw error; window.__supabaseCurrentUser = { uid: data.user.id, email: data.user.email, id: data.user.id }; return { user: window.__supabaseCurrentUser }; };
 const createUserWithEmailAndPassword = async (authInstance, email, password) => { const { data, error } = await supabaseClient.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user.id, email: data.user.email, id: data.user.id } }; };
-const signOut = async () => { window.__supabaseCurrentUser = null; return supabaseClient.auth.signOut(); };
+const signOut = async () => { window.__supabaseCurrentUser = null; return supabaseClient.supabaseClient.auth.signOut(); };
 const getFirestore = () => ({ collection: col => makeCollectionRef(col), batch: writeBatch, enablePersistence: () => Promise.resolve() });
 const doc = (db, col, id, ...path) => path[0] === 'feature_controls' ? makeDocRef('feature_controls', path[1], { field: 'schoolId', val: id }) : makeDocRef(col, id);
 const collection = (db, col) => makeCollectionRef(col);
@@ -133,8 +135,8 @@ const db = getFirestore();
 const secondarySupabase = window.supabase.createClient(supabaseUrl, supabaseKey, { auth: { storageKey: 'company-secondary-auth' } });
 const secondaryAuth = {
     signInWithEmailAndPassword: async (email, password) => { const { data, error } = await secondarySupabase.auth.signInWithPassword({ email, password }); if (error) throw error; const user = { uid: data.user.id, email: data.user.email, id: data.user.id }; window.__supabaseSecondarySession = async () => (await secondarySupabase.auth.getSession()).data?.session; return { user }; },
-    createUserWithEmailAndPassword: async (email, password) => { const { data, error } = await secondarySupabase.auth.signUp({ email, password }); if (error) throw error; return { user: { uid: data.user?.id || '', email: data.user?.email || email, id: data.user?.id || '' } }; },
-    signOut: async () => { window.__supabaseSecondarySession = null; await secondarySupabase.auth.signOut(); }
+    
+    signOut: async () => { window.__supabaseSecondarySession = null; await secondarySupabase.supabaseClient.auth.signOut(); }
 };
 
 // ==========================================
@@ -373,7 +375,8 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
     // Anti-Brute Force Logic (3-Strike Rule)
     try {
         // Persistence managed by Supabase
-        await auth.signInWithEmailAndPassword(e, p);
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({ email: e, password: p });
+        if (signInError) throw signInError;
 
         try {
             const failRef = db.collection("login_logs").doc(e.replace(/[^a-zA-Z0-9_@-]/g, "_"));
@@ -381,7 +384,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
             if (failDoc.exists) {
                 let lockTime = failDoc.data().lockTime || 0;
                 if (Date.now() < lockTime) {
-                    await auth.signOut();
+                    await supabaseClient.auth.signOut();
                     err.innerText = "ACCOUNT TEMPORARILY LOCKED. PLEASE WAIT.";
                     err.classList.remove('hidden-el');
                     b.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
@@ -425,7 +428,9 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
     }
 });
 
-auth.onAuthStateChanged(async (user) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    const user = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
+    if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
     if (user) {
         try {
             const ud = await db.collection("users").doc(user.uid).get();
@@ -467,7 +472,7 @@ auth.onAuthStateChanged(async (user) => {
                 loadChairmen(); loadSchoolsForDropdown(); loadAllStaff(); loadSchoolPayments(); checkAndSendBillingAlerts(); loadInboxMessages();
                 window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
 
-            } else { await auth.signOut(); window.showToast("ACCESS DENIED. ROOT ONLY.", "#e11d48"); }
+            } else { await supabaseClient.auth.signOut(); window.showToast("ACCESS DENIED. ROOT ONLY.", "#e11d48"); }
         } catch (error) { window.showToast("DB ERR: " + (error.message || error), "#e11d48"); console.error(error); }
     } else {
         document.getElementById("auth-overlay").classList.add("hidden-el");
@@ -477,8 +482,8 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 const logoutBtnEl = document.getElementById("logoutBtn");
-if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => { sessionStorage.removeItem("pin_verified"); auth.signOut().then(() => location.reload()); });
-window.logoutFromPin = () => { sessionStorage.removeItem("pin_verified"); auth.signOut().then(() => location.reload()); };
+if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); });
+window.logoutFromPin = () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); };
 
 window.unlockDashboard = () => {
     pinWrapper.classList.add("hidden-el");
@@ -640,8 +645,10 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
         }
 
         b.innerText = "PROVISIONING ID...";
-        const uC = await secondaryAuth.createUserWithEmailAndPassword(em, pA);
-        const nuId = uC.user.uid; const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+        const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+        const { data: authUserId, error: authErr } = await supabaseClient.rpc("create_chairman_auth_user", { p_email: em, p_password: pA, p_name: pN, p_school_id: sId });
+        if (authErr) { window.showToast("AUTH CREATION FAILED: " + authErr.message, "#e11d48"); b.innerText = "DEPLOY NODE"; return; }
+        const nuId = authUserId;
 
         let extraSchoolData = {};
         if (window.fetchedRegFullData) {
@@ -670,7 +677,7 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
         window.fetchedRegLogoData = null; window.fetchedRegFullData = null;
         if (document.getElementById("watermarkUrl")) document.getElementById("watermarkUrl").value = "";
         loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff();
-    } catch (err) { window.showToast("ERROR: " + err.message, "#e11d48"); } finally { await secondaryAuth.signOut().catch(e => { }); b.innerText = "DEPLOY NODE"; }
+    } catch (err) { window.showToast("ERROR: " + err.message, "#e11d48"); } finally { b.innerText = "DEPLOY NODE"; }
 });
 
 async function loadChairmen() {
@@ -2473,20 +2480,20 @@ window.approveRegistrationAuto = async (docId) => {
             const randomDigits = Math.floor(100000 + Math.random() * 900000);
             const regNo = `CORE/REG/EDU/${randomDigits}`;
 
-            // 1. Create SecondaryAuth user
-            let userRecord;
-            try {
-                userRecord = await secondaryAuth.createUserWithEmailAndPassword(data.email, data.password);
-            } catch (err) {
-                window.showToast("AUTH CREATION FAILED: " + err.message, "#e11d48");
-                return;
-            }
+            // 1. Create Chairman Auth user securely via RPC
+            const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+            const { data: authUserId, error: authErr } = await supabaseClient.rpc("create_chairman_auth_user", {
+                p_email: data.email,
+                p_password: data.password,
+                p_name: data.principalName || "Chairman",
+                p_school_id: sId
+            });
+            if (authErr) { window.showToast("AUTH CREATION FAILED: " + authErr.message, "#e11d48"); return; }
 
             // 2. Provision Node via RPC
-            const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
             const { error: rpcErr } = await supabaseClient.rpc("deploy_tenant_node", {
                 p_school_id: sId,
-                p_chairman_uid: userRecord.user.uid,
+                p_chairman_uid: authUserId,
                 p_school_name: data.schoolName,
                 p_chairman_name: data.principalName,
                 p_email: data.email,
@@ -3905,7 +3912,7 @@ window.saveHeroBanners = async () => {
     if (!files.length) return window.showToast("SELECT HERO BANNER IMAGES", "#e11d48");
     try {
         window.showToast("UPLOADING HERO BANNERS VIA SECURE BACKEND...", "#f59e0b");
-        const idToken = await auth.getIdToken();
+        const idToken = await (await supabaseClient.auth.getSession()).data.session?.access_token;
         const formData = new FormData();
         files.forEach(file => formData.append('banners', file));
 
@@ -3992,7 +3999,7 @@ window.saveAppMedia = async () => {
     if (!logoFile && !apkFile && (!screenshotFiles || screenshotFiles.length === 0)) return window.showToast("UPLOAD LOGO, APK, OR SCREENSHOTS", "#e11d48");
     try {
         window.showToast("UPLOADING APP MEDIA VIA SECURE BACKEND...", "#f59e0b");
-        const idToken = await auth.getIdToken();
+        const idToken = await (await supabaseClient.auth.getSession()).data.session?.access_token;
         const formData = new FormData();
         if (apkFile) formData.append('apk', apkFile);
         if (logoFile) formData.append('logo', logoFile);
