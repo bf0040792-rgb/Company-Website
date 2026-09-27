@@ -51,7 +51,7 @@ document.getElementById('themeToggle').addEventListener('change', (e) => {
     }
 });
 
-db.enablePersistence({ synchronizeTabs: true }).catch(function (err) { console.log("Cache Error: ", err); });
+
 
 // Global State Variables
 window.fetchedChairmen = [];
@@ -1627,7 +1627,7 @@ window.loadDeviceLogs = async () => {
     table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-cyan-400 font-mono'><i class='fas fa-spinner fa-spin'></i> SCANNING TELEMETRY...</td></tr>";
     try {
         let query = supabaseClient.from("login_logs").select("*");
-        if (sid !== "ALL") query = query.where("schoolId", "==", sid);
+        if (sid !== "ALL") query = query.eq("schoolId", sid);
         const { data: snapshot } = await query;
         window.currentDeviceLogs = [];
         (snapshot || []).forEach(doc => {
