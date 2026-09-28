@@ -363,6 +363,7 @@ async function bootstrapDashboard(user) {
         window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
 
     } catch (err) {
+        document.getElementById("auth-overlay")?.classList.add("hidden-el");
         console.error("Dashboard Bootstrap Error:", err);
         window.showToast("DASHBOARD LOAD ERROR: " + (err.message || err), "#e11d48");
     }
@@ -374,7 +375,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
         hideLoginModal();
         const loginBtn = document.getElementById("doLoginBtn");
         if (loginBtn) {
-            loginBtn.innerHTML = <i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE;
+            loginBtn.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
             if (window.lucide) lucide.createIcons();
         }
         document.getElementById("auth-overlay").classList.add("hidden-el");
@@ -387,6 +388,19 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
         setTimeout(() => bootstrapDashboard(user), 0);
     }
 });
+
+// Failsafe: Ensure auth-overlay never blocks the user indefinitely
+setTimeout(() => {
+    const overlay = document.getElementById("auth-overlay");
+    if (overlay && !overlay.classList.contains("hidden-el")) {
+        const dashboard = document.getElementById("dashboard-wrapper");
+        if (dashboard && dashboard.classList.contains("hidden-el")) {
+            overlay.classList.add("hidden-el");
+            const landing = document.getElementById("landing-page");
+            if (landing) landing.classList.remove("hidden-el");
+        }
+    }
+}, 3000);
 const logoutBtnEl = document.getElementById("logoutBtn");
 if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); });
 window.logoutFromPin = () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); };
@@ -680,7 +694,7 @@ window.saveChairmanEdit = async () => {
             }
         }
         if (newEmail !== ch.email) {
-            const sessionData = await supabase.auth.getSession();
+            const sessionData = await supabaseClient.auth.getSession();
             const token = sessionData.data.session?.access_token;
             const response = await fetch("https://school-backend-zlgy.onrender.com/changeEmail", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newEmail: newEmail }) });
             const data = await response.json();
@@ -1008,7 +1022,7 @@ async function checkAndSendBillingAlerts() {
                 if (dD >= 30) {
                     if (!dt.paymentAlertSentAt) {
                         const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
-                        (cS || []).forEach(async (cD) => { await supabaseClient.from("direct_messages").insert([{ senderId: auth.currentUser.uid, schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: new Date().toISOString() }]); });
+                        (cS || []).forEach(async (cD) => { await supabaseClient.from("direct_messages").insert([{ senderId: (superAdminUid || 'system'), schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: new Date().toISOString() }]); });
                         await supabaseClient.from("schools").update({ paymentAlertSentAt: nw }).eq("id", d.id);
                     } else {
                         const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60);
@@ -1148,8 +1162,8 @@ window.deletePasswordRequest = async (uid) => {
     });
 };
 window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
-window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
-window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabase.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
+window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
 async function loadSchoolsForDropdown() {
     const h = '<option value="ALL">-- GLOBAL NETWORK --</option>';
@@ -1798,7 +1812,7 @@ window.permanentlyDeleteBinItem = async (binId) => {
                 for (let url of urlsToCheck) {
                     if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
                         try {
-                            const sessionData = await supabase.auth.getSession();
+                            const sessionData = await supabaseClient.auth.getSession();
                             const token = sessionData.data.session?.access_token;
                             await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
                                 method: 'POST',
@@ -2283,26 +2297,33 @@ window.submitSchoolLogin = async () => {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AUTHENTICATING...';
     btn.disabled = true;
 
+    let tempAuthClient = null;
     try {
-        const cred = await secondaryAuth.signInWithEmailAndPassword(email, pwd);
+        tempAuthClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false
+            }
+        });
+        const { data: cred, error: authErr } = await tempAuthClient.auth.signInWithPassword({ email: email, password: pwd });
+        if (authErr) throw authErr;
 
+        const userId = cred?.user?.id;
         let isChairman = false;
         let userData = {};
         try {
-            const { data: docSnap } = await supabaseClient.from("users").select("*").eq("id", cred.user.uid).maybeSingle();
+            const { data: docSnap } = await supabaseClient.from("users").select("*").eq("id", userId).maybeSingle();
             if (docSnap && docSnap.role === "chairman") {
                 isChairman = true;
                 userData = docSnap;
             }
         } catch (docErr) {
             console.error("docSnap read failed:", docErr);
-            // Graceful handling: Since secondaryAuth succeeded but primary db blocked unauthenticated read,
-            // we bypass role check here and let the Chairman portal verify them securely.
             isChairman = true;
         }
 
         if (isChairman) {
-            // Login remains available when IP or browser geolocation cannot be resolved.
             try {
                 let ipAddress = "Unknown";
                 try {
@@ -2313,8 +2334,8 @@ window.submitSchoolLogin = async () => {
                 const coordinates = await getBrowserCoordinates();
 
                 await supabaseClient.from("login_logs").insert([{
-                    userId: cred.user.uid,
-                    uid: cred.user.uid,
+                    userId: userId,
+                    uid: userId,
                     email: email,
                     name: userData.name || 'Chairman',
                     role: "chairman",
@@ -2344,9 +2365,9 @@ window.submitSchoolLogin = async () => {
         } else {
             window.showToast("ACCESS DENIED: NOT A CHAIRMAN NODE", "#e11d48");
         }
-        await secondaryAuth.signOut();
+        if (tempAuthClient) await tempAuthClient.auth.signOut();
     } catch (err) {
-        console.error("secondaryAuth login failed:", err);
+        console.error("School login failed:", err);
         window.showToast("LOGIN FAILED: " + (err.message || "INVALID CREDENTIALS"), "#e11d48");
     } finally {
         btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> AUTHENTICATE';
