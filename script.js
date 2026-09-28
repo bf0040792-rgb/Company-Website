@@ -1506,7 +1506,7 @@ window.deployNewNode = async () => {
             subNodes: parseInt(subs) || 0,
             status: "active",
             createdAt: new Date().toISOString()
-        });
+        }]);
         window.showToast("✅ NODE DEPLOYED: " + docRef.id);
         window.logAudit("Deployed New Node", sName);
     } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
@@ -1558,7 +1558,7 @@ window.addBlacklistEntry = async () => {
             type: type,
             value: val,
             createdAt: new Date().toISOString()
-        });
+        }]);
         document.getElementById("blacklist-input").value = "";
         window.showToast("ADDED TO BLACKLIST", "#a855f7");
         window.loadGlobalBlacklist();
@@ -2284,7 +2284,7 @@ window.submitSchoolLogin = async () => {
                     locationAccuracy: coordinates?.accuracy ?? null,
                     locationSource: coordinates?.source || "ip-fallback",
                     timestamp: new Date().toISOString()
-                });
+                }]);
             } catch (logErr) {
                 console.log("Login log error:", logErr);
             }
@@ -2428,7 +2428,7 @@ window.approveRegistrationOnly = async (docId) => {
                 regNo: regNo,
                 acceptedAt: Date.now(),
                 status: "approved_not_deployed"
-            });
+            }]);
 
             // Delete from pending
             await docRef.delete();
@@ -2586,7 +2586,7 @@ window.sendCommMessage = async () => {
             text: text,
             attachmentUrl: attachmentUrl,
             timestamp: new Date().toISOString()
-        });
+        }]);
         input.value = '';
         fileInput.value = '';
     } catch (err) {
@@ -3059,7 +3059,7 @@ window.sendGlobalNotification = async () => {
             sentAt: new Date().toISOString(),
             sentBy: "master",
             isRead: false
-        });
+        }]);
 
         document.getElementById("notifTitle").value = "";
         document.getElementById("notifMessage").value = "";
