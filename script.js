@@ -1354,7 +1354,7 @@ window.loadFeatureTogglesForSchool = async () => {
     try {
         const featureDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
         const schoolDoc = featureDoc ? null : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-        const featureData = featureDoc ? featureDoc : (schoolDoc? ? schoolDoc : {});
+        const featureData = featureDoc ? featureDoc : (schoolDoc ? schoolDoc : {});
         companyFeatureSettings = normalizeFeatureSettings(featureData);
         renderFeatureGroup("school", "feature-toggles-container");
         renderFeatureGroup("student", "feature-student-toggles-container");
