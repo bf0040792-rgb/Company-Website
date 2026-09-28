@@ -23,7 +23,7 @@ window.addEventListener('unhandledrejection', (e) => {
 // Override console.error to catch manual logs
 const originalConsoleError = console.error;
 console.error = function(...args) {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    const msg = args.map(a => a instanceof Error ? (a.stack || a.message) : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
     logErrorToUI('Console Error: ' + msg, '', 0, 0, new Error(msg));
     originalConsoleError.apply(console, args);
 };

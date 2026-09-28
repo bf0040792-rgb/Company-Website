@@ -1029,7 +1029,7 @@ window.loadCompanyExpenses = async () => {
     try {
         const { data: snap } = await supabaseClient.from("company_expenses").select("*").order("createdAt", {ascending: false}).limit(50);
         let html = "";
-        (snap.data || []).forEach(doc => {
+        (snap || []).forEach(doc => {
             const d = doc;
             const date = d.createdAt ? new Date(d.createdAt.toMillis()).toLocaleDateString() : "N/A";
             html += `<tr class="hover:bg-slateSurface/50 transition">
@@ -1528,7 +1528,7 @@ window.loadGlobalBlacklist = async () => {
     try {
         const { data: snap } = await supabaseClient.from("global_blacklist").select("*");
         let html = "";
-        (snap.data || []).forEach(doc => {
+        (snap || []).forEach(doc => {
             const d = doc;
             html += `<tr class="hover:bg-slateSurface/50">
                 <td class="p-3 uppercase font-bold text-purple-400">${d.type}</td>
@@ -1732,9 +1732,9 @@ window.listenToEmergencyTicker = () => {
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
 // ==========================================
 window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: new Date().toISOString() }]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const { data: snap } = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: false}).limit(50); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const { data: snap } = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: false}).limit(50); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
-window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const { data: snap } = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const { data: snap } = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const { data: orgDoc } = await supabaseClient.from(collection).select("*").eq("id", docRefId).maybeSingle();  if (orgDoc) { const binRef = crypto.randomUUID(); await supabaseClient.from("recycle_bin").insert([{ id: binRef, originalCollection: collection, originalId: docRefId, data: orgDoc, deletedAt: new Date().toISOString() }]); await supabaseClient.from(collection).delete().eq("id", docRefId); } await supabaseClient.from("pending_deletions").delete().eq("id", docId);  window.showToast("DELETED & MOVED TO BIN.", "#10b981"); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.rejectDeletion = async (docId) => { try { await supabaseClient.from("pending_deletions").delete().eq("id", docId); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
@@ -1745,7 +1745,7 @@ window.loadRecycleBin = async () => {
         let query = supabaseClient.from("recycle_bin").select("*").order("deletedAt", {ascending: false}).limit(50);
         const { data: snapData } = await query; const snap = snapData || [];
         let html = "";
-        (snap.data || []).forEach(doc => {
+        (snap || []).forEach(doc => {
             let d = doc;
             // Manual filtering since originalSchoolId might not be perfectly indexed
             if (sid !== "ALL" && d.data?.schoolId !== sid) return;
@@ -1795,7 +1795,7 @@ window.restoreItem = async (binId, collection, docId) => { window.customConfirm(
 // 14. ROLE BUILDER
 // ==========================================
   window.saveCustomRole = async () => { const rName = document.getElementById("customRoleName").value.trim(); if (!rName) return; const perms = Array.from(document.querySelectorAll(".role-perm")).filter(cb => cb.checked).map(cb => cb.value); try { const rId = rName.toLowerCase().replace(/ /g, "_"); const { error: rpcErr } = await supabaseClient.rpc("save_custom_role", { p_role_id: rId, p_name: rName, p_permissions: perms }); if (rpcErr) throw rpcErr; window.showToast("CUSTOM POLICY FORGED!"); document.getElementById("customRoleName").value = ""; Array.from(document.querySelectorAll(".role-perm")).forEach(c => c.checked = false); window.loadCustomRoles(); window.logAudit("Created Role", rName); } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const { data: snap } = await supabaseClient.from("global_roles").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const { data: snap } = await supabaseClient.from("global_roles").select("*"); let html = ""; (snap || []).forEach(doc => { let d = doc; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
   window.deleteRole = async (rId) => { window.customConfirm("PURGE POLICY?", async () => { try { const { error } = await supabaseClient.rpc("delete_custom_role", { p_role_id: rId }); if (error) throw error; window.showToast("POLICY PURGED!"); window.loadCustomRoles(); } catch(e) { window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
 // ==========================================
@@ -1847,7 +1847,7 @@ window.loadTickets = async () => {
     try {
         const { data: snap } = await supabaseClient.from("tickets").select("*");
         let html = "";
-        (snap.data || []).forEach(doc => {
+        (snap || []).forEach(doc => {
             const d = doc;
             html += `<tr class="hover:bg-slateSurface/50 transition border-l-2 ${d.status === 'Open' ? 'border-rose-500' : 'border-tealAccent'}">
                 <td class="p-4 font-mono font-bold text-white">${doc.id.substring(0, 8).toUpperCase()}</td>
@@ -3098,7 +3098,7 @@ window.loadGlobalNotifications = async () => {
             return;
         }
 
-        (snap.data || []).forEach(doc => {
+        (snap || []).forEach(doc => {
             const data = doc;
             let dateStr = data.sentAt ? new Date(data.sentAt.toDate()).toLocaleString() : "Just now";
 
@@ -3154,7 +3154,7 @@ window.loadSecurityLogs = async () => {
         alertsBox.innerHTML = "";
         let logs = [];
 
-        (snap.data || []).forEach(doc => {
+        (snap || []).forEach(doc => {
             let data = Object.assign({ id: doc.id }, doc);
             logs.push(data);
         });
