@@ -307,7 +307,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
     if (user) {
         try {
-            const ud = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
+            const { data: ud } = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
             if (!ud || ud.role === "developer") {
                 if (!ud) {
                     // First Supabase login: self-provision the developer profile. If RLS blocks the write,
@@ -474,7 +474,7 @@ window.fetchRegistrationDetails = async () => {
 
     try {
         const docId = regNo.replace(/\//g, "_");
-        const docSnap = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
+        const { data: docSnap } = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
         if (!docSnap) {
             window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
             return;
@@ -557,9 +557,9 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
 
 async function loadChairmen() {
     try {
-        const snp = await supabaseClient.from("users").select("*"); window.fetchedChairmen = []; let tS = 0;
+        const { data: snp } = await supabaseClient.from("users").select("*"); window.fetchedChairmen = []; let tS = 0;
         snp.forEach(d => { const dt = d; if (dt.role === "chairman") { dt.id = d.id; window.fetchedChairmen.push(dt); } else if (dt.role === "staff") { tS++; } });
-        const stuS = await supabaseClient.from("students").select("*");
+        const { data: stuS } = await supabaseClient.from("students").select("*");
         document.getElementById("stat-schools").innerText = window.fetchedChairmen.length; document.getElementById("stat-staff").innerText = tS; document.getElementById("stat-students").innerText = stuS.size;
         window.filterChairmenList(); window.loadPasswordRequests();
     } catch (err) { }
@@ -668,7 +668,7 @@ window.openLicenseModal = async (schoolId) => {
     if (!schoolId) return window.showToast("INVALID NODE ID", "#e11d48");
     document.getElementById("license-school-id").value = schoolId;
     try {
-        const doc = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
+        const { data: doc } = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
         if (!!doc.data && doc.licenseExpiry) {
             document.getElementById("license-expiry-date").value = doc.licenseExpiry;
         } else {
@@ -725,7 +725,7 @@ window.deleteChairman = (uid, sid) => {
                 
                 await supabaseClient.from("schools").delete().eq("id", sid);
 
-                const students = await supabaseClient.from("students").select("*").eq("schoolId", sid);
+                const { data: students } = await supabaseClient.from("students").select("*").eq("schoolId", sid);
                 for (const doc of students.docs) { const {error: err} = await supabaseClient.rpc('delete_student', { p_student_id: doc.id });  }
 
                 const { data: staffData } = await supabaseClient.from("users").select("*").eq("schoolId", sid).eq("role", "staff"); const staff = { docs: staffData || [] };
@@ -792,7 +792,7 @@ window.showStudentDetail = (id) => {
 window.deleteInspectStudent = (id) => {
     window.customConfirm("DELETE THIS SUBJECT GLOBALLY?", async () => {
         try {
-            const stDoc = await supabaseClient.from("students").select("*").eq("id", id).maybeSingle();
+            const { data: stDoc } = await supabaseClient.from("students").select("*").eq("id", id).maybeSingle();
             await supabaseClient.rpc('delete_student', { p_student_id: id });
             
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
@@ -807,13 +807,13 @@ window.searchStudentByAadhaar = async () => {
     resDiv.classList.add("hidden-el"); errP.classList.add("hidden-el");
     if (!input) return window.showToast("ENTER UID NUMBER", "#e11d48");
     try {
-        let sn = await supabaseClient.from("students").select("*").eq("aadhaar", input);
+        let { data: sn } = await supabaseClient.from("students").select("*").eq("aadhaar", input);
         if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhar", input);
         if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhaarNumber", input);
         if (sn.empty) { errP.classList.remove("hidden-el"); return; }
 
         let dt = sn.docs[0]; let sName = "UNKNOWN NODE";
-        if (dt.schoolId) { let scl = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl) sName = scl.schoolName || "UNKNOWN NODE"; }
+        if (dt.schoolId) { let { data: scl } = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl) sName = scl.schoolName || "UNKNOWN NODE"; }
 
         document.getElementById("as-photo").src = dt.photoUrl || "https://via.placeholder.com/80";
         document.getElementById("as-name").innerText = dt.name || "N/A";
@@ -845,7 +845,7 @@ window.downloadAadhaarResultPDF = async () => {
 // ==========================================
 // 8. GLOBAL STAFF DIRECTORY
 // ==========================================
-window.loadAllStaff = async () => { try { const sp = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; sp.forEach(d => { const dt = d; dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAllStaff = async () => { try { const { data: sp } = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; sp.forEach(d => { const dt = d; dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.filterStaffList = () => {
     const sid = document.getElementById("staffSchoolSelect").value; let ht = ""; let ls = window.fetchedGlobalStaffList;
     if (sid !== "ALL") { ls = ls.filter(s => s.schoolId === sid); }
@@ -862,7 +862,7 @@ window.filterStaffList = () => {
     document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>";
 };
 
-window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const stDoc = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();  await supabaseClient.from("users").delete().eq("id", uid); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const { data: stDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();  await supabaseClient.from("users").delete().eq("id", uid); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.showStaffDetail = (sId) => {
     const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if (!st) return;
     document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
@@ -887,7 +887,7 @@ window.sendDirectMessage = (rid, sid, typ) => {
 // ==========================================
 // 9. SCHOOL PAYMENTS & BILLING
 // ==========================================
-window.loadSchoolPayments = async () => { try { const sp = await supabaseClient.from("schools").select("*"); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d; dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadSchoolPayments = async () => { try { const { data: sp } = await supabaseClient.from("schools").select("*"); window.fetchedSchoolPayments = []; let tR = 0; sp.forEach(d => { const dt = d; dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.filterPaymentList = () => {
     const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments;
     if (sid !== "ALL") { ls = ls.filter(s => s.id === sid); }
@@ -969,7 +969,7 @@ window.downloadAllPaymentsPDF = async () => {
 
 async function checkAndSendBillingAlerts() {
     try {
-        const sp = await supabaseClient.from("schools").select("*"); const nw = Date.now();
+        const { data: sp } = await supabaseClient.from("schools").select("*"); const nw = Date.now();
         sp.forEach(async (d) => {
             const dt = d;
             if (dt.billingDate && dt.appFee) {
@@ -1027,7 +1027,7 @@ window.addCompanyExpense = async () => {
 
 window.loadCompanyExpenses = async () => {
     try {
-        const snap = await supabaseClient.from("company_expenses").select("*").order("createdAt", {ascending: desc === "asc"}).limit(50);
+        const { data: snap } = await supabaseClient.from("company_expenses").select("*").order("createdAt", {ascending: desc === "asc"}).limit(50);
         let html = "";
         (snap.data || []).forEach(doc => {
             const d = doc;
@@ -1126,7 +1126,7 @@ async function loadSchoolsForDropdown() {
     t.forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "featureSchoolSelect" || id === "masterNodeId") ? '<option value="">-- SELECT TARGET --</option>' : h; } });
 
     try {
-        const sp = await supabaseClient.from("schools").select("*");
+        const { data: sp } = await supabaseClient.from("schools").select("*");
         let requestsHtml = "";
 
         sp.forEach(d => {
@@ -1352,8 +1352,8 @@ window.loadFeatureTogglesForSchool = async () => {
 
     setFeatureControlsBusy(true);
     try {
-        const featureDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-        const schoolDoc = featureDoc ? null : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+        const { data: featureDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+        const { data: schoolDoc } = featureDoc ? { data: null } : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
         const featureData = featureDoc ? featureDoc : (schoolDoc ? schoolDoc : {});
         companyFeatureSettings = normalizeFeatureSettings(featureData);
         renderFeatureGroup("school", "feature-toggles-container");
@@ -1422,9 +1422,9 @@ window.generateSystemBackup = async () => {
             for (let c of cl) { bD[c] = []; const { data: snData } = await supabaseClient.from(c).select("*"); const sn = snData || []; sn.forEach(d => bD[c].push({ id: d.id, ...d })); }
         } else {
             bD.schoolId = sc; bD.users = []; bD.students = [];
-            const sD = await supabaseClient.from("schools").select("*").eq("id", sc).maybeSingle(); if (sD) bD.schoolData = sD;
-            const uS = await supabaseClient.from("users").select("*").eq("schoolId", sc); uS.forEach(d => bD.users.push(d));
-            const stS = await supabaseClient.from("students").select("*").eq("schoolId", sc); stS.forEach(d => bD.students.push(d));
+            const { data: sD } = await supabaseClient.from("schools").select("*").eq("id", sc).maybeSingle(); if (sD) bD.schoolData = sD;
+            const { data: uS } = await supabaseClient.from("users").select("*").eq("schoolId", sc); uS.forEach(d => bD.users.push(d));
+            const { data: stS } = await supabaseClient.from("students").select("*").eq("schoolId", sc); stS.forEach(d => bD.students.push(d));
         }
         const jsonString = JSON.stringify(bD, null, 2); const blobObj = new Blob([jsonString], { type: "application/json" });
         const fileName = sc === "ALL" ? `Matrix_Dump_Global_${Date.now()}.json` : `Matrix_Dump_Node_${sc}_${Date.now()}.json`;
@@ -1449,7 +1449,7 @@ window.loadSchoolSecurityStatus = async () => {
     try {
         const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const cS = cSData || []; let cB = false; cS.forEach(d => { cB = d.status === "blocked"; }); document.getElementById("sec-chairman-toggle").checked = !cB; document.getElementById("sec-chairman-info").innerText = "SYNCED";
         const { data: sSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sS = sSData || []; let aS = false; sS.forEach(d => { if (d.status === "blocked") aS = true; }); document.getElementById("sec-staff-toggle").checked = !aS; document.getElementById("sec-staff-info").innerText = "SYNCED";
-        const scl = await supabaseClient.from("schools").select("*").eq("id", sI).maybeSingle(); let stB = false; let gA = false, tA = false, rO = false; let mod = {};
+        const { data: scl } = await supabaseClient.from("schools").select("*").eq("id", sI).maybeSingle(); let stB = false; let gA = false, tA = false, rO = false; let mod = {};
         if (scl) { stB = scl.studentsBlocked === true; gA = scl.geofenceActive; tA = scl.timeLockActive; rO = scl.readOnlyMode; mod = scl.modules || {}; }
         document.getElementById("sec-student-toggle").checked = !stB; document.getElementById("sec-student-info").innerText = stB ? "LOCKED" : "ACTIVE";
         document.getElementById("sec-geofence-toggle").checked = gA; document.getElementById("sec-timelock-toggle").checked = tA; document.getElementById("sec-readonly-toggle").checked = rO;
@@ -1461,9 +1461,9 @@ window.loadSchoolSecurityStatus = async () => {
 window.toggleSchoolUserBlock = async (ty) => {
     const sI = document.getElementById("secSchoolSelect").value; if (!sI) return;
     if (sI === "ALL") {
-        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const sn = await supabaseClient.from("users").select("*").eq("role", "chairman"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
-        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const sn = await supabaseClient.from("users").select("*").eq("role", "staff"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
-        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const sn = await supabaseClient.from("schools").select("*"); for (const d of sn.docs) { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", d.id); } }
+        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("*").eq("role", "chairman"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("*").eq("role", "staff"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const { data: sn } = await supabaseClient.from("schools").select("*"); for (const d of sn.docs) { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", d.id); } }
         return;
     }
     if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
@@ -1485,14 +1485,14 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
     window.showToast("COMPILING DIRECTORY...", "#00F0FF");
     try {
         const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); doc.text("Global Node Directory", 14, 20);
-        const tableRows = []; const snp = await supabaseClient.from("schools").select("*"); snp.forEach(d => { tableRows.push([d.id, d.schoolName || "N/A", d.chairmanUid || "N/A"]); });
+        const tableRows = []; const { data: snp } = await supabaseClient.from("schools").select("*"); snp.forEach(d => { tableRows.push([d.id, d.schoolName || "N/A", d.chairmanUid || "N/A"]); });
         doc.autoTable({ head: [["Node ID", "Node Name", "Commander UID"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [0, 240, 255], textColor: [5, 11, 20] } });
         const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, `Node_Directory_${Date.now()}.pdf`);
     } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const sn = await supabaseClient.from("students").select("*").eq("status", "Pending"); let count = 0; for (const d of sn.docs) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const { data: sn } = await supabaseClient.from("students").select("*").eq("status", "Pending"); let count = 0; for (const d of sn.docs) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -1500,13 +1500,13 @@ window.deployNewNode = async () => {
     const subs = document.getElementById("newNodeSubs").value;
     if (!sName || !tier) return window.showToast("REQUIRED FIELDS MISSING", "#e11d48");
     try {
-        const docRef = await supabaseClient.from("schools").insert([{
+        const { data: docRef } = await supabaseClient.from("schools").insert([{ 
             schoolName: sName,
             tier: tier,
             subNodes: parseInt(subs) || 0,
             status: "active",
             createdAt: new Date().toISOString()
-        }]);
+        }]).select().single();
         window.showToast("✅ NODE DEPLOYED: " + docRef.id);
         window.logAudit("Deployed New Node", sName);
     } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
@@ -1526,7 +1526,7 @@ window.loadGlobalBlacklist = async () => {
     const tbody = document.getElementById("blacklist-table-body");
     tbody.innerHTML = "<tr><td colspan='3' class='p-3 text-center'>Loading...</td></tr>";
     try {
-        const snap = await supabaseClient.from("global_blacklist").select("*");
+        const { data: snap } = await supabaseClient.from("global_blacklist").select("*");
         let html = "";
         (snap.data || []).forEach(doc => {
             const d = doc;
@@ -1697,7 +1697,7 @@ window.downloadDeviceLogsAsPDF = async () => {
 };
 
 window.downloadAllDeviceLogsAsPDF = async () => {
-    try { const sn = await supabaseClient.from("login_logs").select("*"); let allLogs = []; sn.forEach(d => allLogs.push(d)); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    try { const { data: sn } = await supabaseClient.from("login_logs").select("*"); let allLogs = []; sn.forEach(d => allLogs.push(d)); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
 window.killSession = async (uid) => { if (!uid || uid === "undefined") return; window.customConfirm("TERMINATE SESSION? USER WILL BE KICKED.", async () => { await supabaseClient.from("users").update({ forceLogout: true }).eq("id", uid); window.showToast("SESSION TERMINATED.", "#e11d48"); window.logAudit("Killed Session", uid); }); };
@@ -1705,7 +1705,7 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // ==========================================
 // 12. BROADCAST, INBOX & EMERGENCY TICKER
 // ==========================================
-window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const sn = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); try { const { data: sn } = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; sn.forEach(d => m.push({ id: d.id, ...d })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await supabaseClient.from("direct_messages").delete().eq("id", mid); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
 window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: new Date().toISOString() }]); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
@@ -1731,9 +1731,9 @@ window.listenToEmergencyTicker = () => {
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
 // ==========================================
 window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: new Date().toISOString() }]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const snap = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: desc === "asc"}).limit(50); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const { data: snap } = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: desc === "asc"}).limit(50); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
-window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const snap = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const { data: snap } = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const { data: orgDoc } = await supabaseClient.from(collection).select("*").eq("id", docRefId).maybeSingle();  if (orgDoc) { const binRef = crypto.randomUUID(); await supabaseClient.from("recycle_bin").insert([{ id: binRef, originalCollection: collection, originalId: docRefId, data: orgDoc, deletedAt: new Date().toISOString() }]); await supabaseClient.from(collection).delete().eq("id", docRefId); } await supabaseClient.from("pending_deletions").delete().eq("id", docId);  window.showToast("DELETED & MOVED TO BIN.", "#10b981"); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.rejectDeletion = async (docId) => { try { await supabaseClient.from("pending_deletions").delete().eq("id", docId); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
@@ -1759,7 +1759,7 @@ window.loadRecycleBin = async () => {
 window.permanentlyDeleteBinItem = async (binId) => {
     window.customConfirm("PERMANENTLY DELETE THIS ITEM FROM STORAGE?", async () => {
         try {
-            const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle();
+            const { data: binDoc } = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle();
             if (binDoc) {
                 const itemData = binDoc.data || {};
                 const urlsToCheck = [itemData.photoUrl, itemData.logoUrl, itemData.signatureUrl, itemData.imageUrl];
@@ -1788,13 +1788,13 @@ window.permanentlyDeleteBinItem = async (binId) => {
         }
     });
 };
-window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const binDoc = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle(); if (binDoc) { await supabaseClient.from(collection).upsert([{ id: docId, ...binDoc }]); await supabaseClient.from("recycle_bin").delete().eq("id", binId); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const { data: binDoc } = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle(); if (binDoc) { await supabaseClient.from(collection).upsert([{ id: docId, ...binDoc }]); await supabaseClient.from("recycle_bin").delete().eq("id", binId); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
 // ==========================================
 // 14. ROLE BUILDER
 // ==========================================
   window.saveCustomRole = async () => { const rName = document.getElementById("customRoleName").value.trim(); if (!rName) return; const perms = Array.from(document.querySelectorAll(".role-perm")).filter(cb => cb.checked).map(cb => cb.value); try { const rId = rName.toLowerCase().replace(/ /g, "_"); const { error: rpcErr } = await supabaseClient.rpc("save_custom_role", { p_role_id: rId, p_name: rName, p_permissions: perms }); if (rpcErr) throw rpcErr; window.showToast("CUSTOM POLICY FORGED!"); document.getElementById("customRoleName").value = ""; Array.from(document.querySelectorAll(".role-perm")).forEach(c => c.checked = false); window.loadCustomRoles(); window.logAudit("Created Role", rName); } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const snap = await supabaseClient.from("global_roles").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const { data: snap } = await supabaseClient.from("global_roles").select("*"); let html = ""; (snap.data || []).forEach(doc => { let d = doc; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
   window.deleteRole = async (rId) => { window.customConfirm("PURGE POLICY?", async () => { try { const { error } = await supabaseClient.rpc("delete_custom_role", { p_role_id: rId }); if (error) throw error; window.showToast("POLICY PURGED!"); window.loadCustomRoles(); } catch(e) { window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
 // ==========================================
@@ -1844,7 +1844,7 @@ window.loadTickets = async () => {
     const tbody = document.getElementById("ticketsTableBody");
     if (!tbody) return;
     try {
-        const snap = await supabaseClient.from("tickets").select("*");
+        const { data: snap } = await supabaseClient.from("tickets").select("*");
         let html = "";
         (snap.data || []).forEach(doc => {
             const d = doc;
@@ -2257,7 +2257,7 @@ window.submitSchoolLogin = async () => {
         let isChairman = false;
         let userData = {};
         try {
-            const docSnap = await supabaseClient.from("users").select("*").eq("id", cred.user.uid).maybeSingle();
+            const { data: docSnap } = await supabaseClient.from("users").select("*").eq("id", cred.user.uid).maybeSingle();
             if (docSnap && docSnap.role === "chairman") {
                 isChairman = true;
                 userData = docSnap;
@@ -3028,7 +3028,7 @@ window.loadAttendanceSummary = async (targetDate) => {
         }
 
         for (let sid of Object.keys(schoolAtt)) {
-            let sDoc = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+            let { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
             let sName = sDoc ? sDoc.schoolName : sid;
             let att = schoolAtt[sid];
             let pct = att.total > 0 ? ((att.present / att.total) * 100).toFixed(1) : 0;
@@ -3754,7 +3754,7 @@ function renderAdminMediaPreviews(data = {}) {
 
 async function refreshPublicMedia() {
     try {
-        const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
         const data = snap ? snap : {};
         renderPublicHeroCarousel(data.banners || []);
         renderPublicAppSection(data.appMedia || {});
@@ -3768,7 +3768,7 @@ async function refreshPublicMedia() {
 
 window.deleteHeroBanner = async (index) => {
     try {
-        const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
         const data = snap ? snap : {};
         const banners = Array.isArray(data.banners) ? [...data.banners] : [];
         if (index < 0 || index >= banners.length) return;
@@ -3825,7 +3825,7 @@ window.saveHeroBanners = async () => {
 window.deleteAppLogo = async () => {
     try {
         window.customConfirm("DELETE CURRENT APP LOGO?", async () => {
-            const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+            const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
             const data = snap ? snap : {};
             const appMedia = { ...(data.appMedia || {}) };
             
@@ -3841,7 +3841,7 @@ window.deleteAppLogo = async () => {
 
 window.deleteAppScreenshot = async (index) => {
     try {
-        const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
         const data = snap ? snap : {};
         const appMedia = { ...(data.appMedia || {}) };
         const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
@@ -3863,7 +3863,7 @@ window.deleteAppScreenshot = async (index) => {
 window.deleteAppApk = async () => {
     try {
         window.customConfirm("DELETE CURRENT APK FILE?", async () => {
-            const snap = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+            const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
             const data = snap ? snap : {};
             const appMedia = { ...(data.appMedia || {}) };
             
