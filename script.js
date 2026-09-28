@@ -308,7 +308,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (user) {
         try {
             const { data: ud } = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
-            if (!ud || ud.role === "developer") {
+            if (!ud || ["developer", "admin", "superadmin", "root"].includes(ud.role?.toLowerCase())) {
                 if (!ud) {
                     // First Supabase login: self-provision the developer profile. If RLS blocks the write,
                     // still allow the session so the admin can create the profile from Supabase dashboard.
@@ -346,9 +346,11 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 loadChairmen(); loadSchoolsForDropdown(); loadAllStaff(); loadSchoolPayments(); checkAndSendBillingAlerts(); loadInboxMessages();
                 window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
 
-            } else { await supabaseClient.auth.signOut(); window.showToast("ACCESS DENIED. ROOT ONLY.", "#e11d48"); }
+            } else { await supabaseClient.auth.signOut(); window.showToast("ACCESS DENIED. ROLE: " + (ud?.role || "UNKNOWN"), "#e11d48"); hideLoginModal(); document.getElementById("doLoginBtn").innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`; lucide.createIcons(); }
         } catch (error) { window.showToast("DB ERR: " + (error.message || error), "#e11d48"); console.error(error); }
     } else {
+        hideLoginModal();
+        document.getElementById("doLoginBtn").innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`; lucide.createIcons();
         document.getElementById("auth-overlay").classList.add("hidden-el");
         landingPage.classList.remove("hidden-el");
         dashboardWrapper.classList.add("hidden-el");
