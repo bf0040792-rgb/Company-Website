@@ -302,7 +302,7 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
     }
 });
 
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => { console.log("AUTH STATE CHANGE TRIGGERED! EVENT:", event, "SESSION:", session ? "EXISTS" : "NULL");
     const user = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
     if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
     if (user) {
@@ -351,8 +351,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     } else {
         hideLoginModal();
         document.getElementById("doLoginBtn").innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`; lucide.createIcons();
-        document.getElementById("auth-overlay").classList.add("hidden-el");
-        landingPage.classList.remove("hidden-el");
+        window.showToast("UI RESET TO LANDING PAGE. EVENT: " + event, "#e11d48"); document.getElementById("auth-overlay").classList.add("hidden-el"); landingPage.classList.remove("hidden-el");
         dashboardWrapper.classList.add("hidden-el");
     }
     }
