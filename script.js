@@ -2355,9 +2355,12 @@ window.loadPendingRegistrations = async () => {
         });
     };
     render(data);
-    supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
-        window.loadPendingRegistrations();
-    }).subscribe();
+    if (!window.pendingRegSubscribed) {
+        window.pendingRegSubscribed = true;
+        supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
+            window.loadPendingRegistrations();
+        }).subscribe();
+    }
 };
 
 window.approveRegistrationAuto = async (docId) => {
@@ -2525,7 +2528,7 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
 
     const historyBox = document.getElementById("comm-chat-history");
     if (!historyBox) return;
-    if (stopCommMessageListener) stopCommMessageListener();
+    if (stopCommMessageListener) { stopCommMessageListener.unsubscribe(); }
     stopCommMessageListener = supabaseClient.channel("public:communications").on("postgres_changes", { event: "*", schema: "public", table: "communications", filter: `schoolId=eq.${schoolId}` }, payload => {
             historyBox.innerHTML = '';
             if (snapshot.empty) {
