@@ -1711,9 +1711,21 @@ window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-promp
 
 // Removed Broadcast Event Listeners for UI Redesign
 
-window.sendEmergencyTicker = async () => { const txt = document.getElementById("emergencyTickerInput").value.trim(); if (!txt) return; try { await supabaseClient.from("system_config").upsert([{id: "ticker", ...{ text: txt, active: true, timestamp: Date.now(}]) }); window.showToast("OVERRIDE TRANSMITTED!", "#e11d48"); window.logAudit("Broadcasted Ticker", txt); document.getElementById("emergencyTickerInput").value = ""; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.sendEmergencyTicker = async () => { const txt = document.getElementById("emergencyTickerInput").value.trim(); if (!txt) return; try { await supabaseClient.from("system_config").upsert([{id: "ticker", text: txt, active: true, timestamp: Date.now()}]); window.showToast("OVERRIDE TRANSMITTED!", "#e11d48"); window.logAudit("Broadcasted Ticker", txt); document.getElementById("emergencyTickerInput").value = ""; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.clearEmergencyTicker = async () => { try { await supabaseClient.from("system_config").update({ active: false }).eq("id", "ticker"); window.showToast("OVERRIDE CLEARED."); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.listenToEmergencyTicker = () => { supabaseClient.channel("public:system_config").on("postgres_changes", { event: "*", schema: "public", table: "system_config", filter: "id=eq.ticker" }, payload => { let doc = payload.new; if (!doc) doc = {}; (doc => { if (!!doc.data && doc.active) { document.getElementById("emergency-ticker").classList.remove("hidden-el"); document.getElementById("ticker-text").innerText = doc.text; } else { document.getElementById("emergency-ticker").classList.add("hidden-el"); } }); };
+window.listenToEmergencyTicker = () => { 
+    supabaseClient.channel("public:system_config")
+        .on("postgres_changes", { event: "*", schema: "public", table: "system_config", filter: "id=eq.ticker" }, payload => { 
+            let doc = payload.new; 
+            if (!doc) doc = {}; 
+            if (doc.active) { 
+                document.getElementById("emergency-ticker").classList.remove("hidden-el"); 
+                document.getElementById("ticker-text").innerText = doc.text; 
+            } else { 
+                document.getElementById("emergency-ticker").classList.add("hidden-el"); 
+            } 
+        }).subscribe(); 
+};
 
 // ==========================================
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
@@ -2339,14 +2351,12 @@ window.loadPendingRegistrations = async () => {
                 </td>
             `;
             tbody.appendChild(tr);
-        
+        });
     };
     render(data);
     supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
         window.loadPendingRegistrations();
     }).subscribe();
-}
-    });
 };
 
 window.approveRegistrationAuto = async (docId) => {
