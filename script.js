@@ -12,7 +12,14 @@ window.handleDbError = (e) => {
 
 const supabaseUrl = 'https://ynlcbpxcsnfxqrogizns.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGNicHhjc25meHFyb2dpem5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MDMxNjMsImV4cCI6MjEwMzQ3OTE2M30.sx5iFeugOuLBt4pqt0-8_4VOGz1yWa7HQWl4NyGCWkE';
-const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce'
+    }
+});
 // ==========================================
 // 🛡️ GEO-FENCING LAYER
 // ==========================================
@@ -302,61 +309,84 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
     }
 });
 
-supabaseClient.auth.onAuthStateChange(async (event, session) => { console.log("AUTH STATE CHANGE TRIGGERED! EVENT:", event, "SESSION:", session ? "EXISTS" : "NULL");
-    const user = session?.user ? { uid: session.user.id, email: session.user.email, id: session.user.id } : null;
-    if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT") {
-    if (user) {
-        try {
-            const { data: ud } = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
-            if (!ud || ["developer", "admin", "superadmin", "root"].includes(ud.role?.toLowerCase())) {
-                if (!ud) {
-                    // First Supabase login: self-provision the developer profile. If RLS blocks the write,
-                    // still allow the session so the admin can create the profile from Supabase dashboard.
-                    try { await supabaseClient.from("users").upsert([{id: user.uid, ...{ email: user.email, role: "developer", name: "Super Admin", status: "active" }}]); } catch (provisionErr) { console.warn('Developer profile self-provision failed (check users RLS):', provisionErr); }
-                }
-                superAdminUid = user.uid;
+async function bootstrapDashboard(user) {
+    try {
+        superAdminUid = user.uid;
+        const { data: ud, error: udErr } = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
+        if (udErr) console.warn("Could not query user profile:", udErr.message);
 
-                document.getElementById("auth-overlay").classList.add("hidden-el");
-                landingPage.classList.add("hidden-el");
-                hideLoginModal();
+        const role = ud?.role?.toLowerCase();
+        const isAllowed = !ud || ["developer", "admin", "superadmin", "root"].includes(role);
 
-                // PIN Logic
-                let devData = ud ? ud : {};
-                if (sessionStorage.getItem("pin_verified") === "true") {
-                    window.unlockDashboard();
-                } else {
-                    pinWrapper.classList.remove("hidden-el");
-                    pinWrapper.style.display = "flex";
-                    if (devData.pin) {
-                        document.getElementById("enter-pin-box").classList.remove("hidden-el");
-                        document.getElementById("create-pin-box").classList.add("hidden-el");
-                        window.currentAppPin = devData.pin;
-                    } else {
-                        document.getElementById("create-pin-box").classList.remove("hidden-el");
-                        document.getElementById("enter-pin-box").classList.add("hidden-el");
-                    }
-                }
+        if (!isAllowed) {
+            await supabaseClient.auth.signOut();
+            window.showToast("ACCESS DENIED. ROLE: " + (ud?.role || "UNKNOWN"), "#e11d48");
+            hideLoginModal();
+            return;
+        }
 
-                document.getElementById("adminEmail").innerText = user.email;
-                document.getElementById("role-footer").innerText = "SYSTEM STATUS: ROOT AUTHORIZED | SECURE CONNECTION ESTABLISHED";
-                document.getElementById("role-footer").style.background = "#00F0FF"; // Neon Cyan
-                document.getElementById("role-footer").style.color = "#050b14"; // Dark text
+        if (!ud) {
+            try { await supabaseClient.from("users").upsert([{id: user.uid, email: user.email, role: "developer", name: "Super Admin", status: "active"}]); } catch (pErr) { console.warn('Self-provisioning deferred:', pErr); }
+        }
 
-                // Load Dashboard Data
-                loadChairmen(); loadSchoolsForDropdown(); loadAllStaff(); loadSchoolPayments(); checkAndSendBillingAlerts(); loadInboxMessages();
-                window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
-
-            } else { await supabaseClient.auth.signOut(); window.showToast("ACCESS DENIED. ROLE: " + (ud?.role || "UNKNOWN"), "#e11d48"); hideLoginModal(); document.getElementById("doLoginBtn").innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`; lucide.createIcons(); }
-        } catch (error) { window.showToast("DB ERR: " + (error.message || error), "#e11d48"); console.error(error); }
-    } else {
+        document.getElementById("auth-overlay").classList.add("hidden-el");
+        landingPage.classList.add("hidden-el");
         hideLoginModal();
-        document.getElementById("doLoginBtn").innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`; lucide.createIcons();
-        window.showToast("UI RESET TO LANDING PAGE. EVENT: " + event, "#e11d48"); document.getElementById("auth-overlay").classList.add("hidden-el"); landingPage.classList.remove("hidden-el");
-        dashboardWrapper.classList.add("hidden-el");
+
+        let devData = ud || {};
+        if (sessionStorage.getItem("pin_verified") === "true") {
+            window.unlockDashboard();
+        } else {
+            pinWrapper.classList.remove("hidden-el");
+            pinWrapper.style.display = "flex";
+            if (devData.pin) {
+                document.getElementById("enter-pin-box").classList.remove("hidden-el");
+                document.getElementById("create-pin-box").classList.add("hidden-el");
+                window.currentAppPin = devData.pin;
+            } else {
+                document.getElementById("create-pin-box").classList.remove("hidden-el");
+                document.getElementById("enter-pin-box").classList.add("hidden-el");
+            }
+        }
+
+        const adminEmailEl = document.getElementById("adminEmail");
+        if (adminEmailEl) adminEmailEl.innerText = user.email;
+
+        const roleFooterEl = document.getElementById("role-footer");
+        if (roleFooterEl) {
+            roleFooterEl.innerText = "SYSTEM STATUS: ROOT AUTHORIZED | SECURE CONNECTION ESTABLISHED";
+            roleFooterEl.style.background = "#00F0FF";
+            roleFooterEl.style.color = "#050b14";
+        }
+
+        loadChairmen(); loadSchoolsForDropdown(); loadAllStaff(); loadSchoolPayments(); checkAndSendBillingAlerts(); loadInboxMessages();
+        window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
+
+    } catch (err) {
+        console.error("Dashboard Bootstrap Error:", err);
+        window.showToast("DASHBOARD LOAD ERROR: " + (err.message || err), "#e11d48");
     }
+}
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+    console.log("AUTH STATE CHANGE TRIGGERED! EVENT:", event, "SESSION:", session ? "EXISTS" : "NULL");
+    if (event === "SIGNED_OUT" || !session?.user) {
+        hideLoginModal();
+        const loginBtn = document.getElementById("doLoginBtn");
+        if (loginBtn) {
+            loginBtn.innerHTML = <i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE;
+            if (window.lucide) lucide.createIcons();
+        }
+        document.getElementById("auth-overlay").classList.add("hidden-el");
+        landingPage.classList.remove("hidden-el");
+        dashboardWrapper.classList.add("hidden-el");
+        return;
+    }
+    if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        const user = { uid: session.user.id, email: session.user.email, id: session.user.id };
+        setTimeout(() => bootstrapDashboard(user), 0);
     }
 });
-
 const logoutBtnEl = document.getElementById("logoutBtn");
 if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); });
 window.logoutFromPin = () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); };
