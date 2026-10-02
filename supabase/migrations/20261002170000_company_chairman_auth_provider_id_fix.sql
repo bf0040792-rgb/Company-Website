@@ -130,6 +130,10 @@ begin
   -- The identities.email column is intentionally omitted from the column
   -- list: on current Supabase projects it is a generated column derived
   -- from identity_data ->> 'email', which is supplied below.
+  -- identities.id is inserted as a uuid-typed value (no ::text cast): it
+  -- matches current schemas where the column is uuid, and on legacy schemas
+  -- where the column is text PostgreSQL applies the uuid -> text assignment
+  -- cast automatically.
   insert into auth.identities (
     id,
     user_id,
@@ -140,7 +144,7 @@ begin
     created_at,
     updated_at
   ) values (
-    gen_random_uuid()::text,
+    gen_random_uuid(),
     v_uid,
     jsonb_build_object('sub', v_uid::text, 'email', v_email),
     'email',
