@@ -1532,64 +1532,10 @@
                             </div>
                         </section>
 
-                        <section class="mb-6 rounded-xl border border-purple-500/20 bg-slateBase/40 p-4 md:p-5">
-                            <h4 class="text-xs font-mono font-bold text-purple-300 uppercase tracking-widest mb-2">Academic session</h4>
-                            <p class="text-[11px] text-coolLight mb-4">Saved to <code>academic_sessions</code> and referenced by the institution’s initial academic configuration.</p>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div><label for="academicSessionName" class="text-[10px] font-mono text-purple-200/80 uppercase block mb-1">Session name *</label><input id="academicSessionName" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="2026-27" required></div>
-                                <div><label for="academicSessionStart" class="text-[10px] font-mono text-purple-200/80 uppercase block mb-1">Start date</label><input id="academicSessionStart" type="date" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
-                                <div><label for="academicSessionEnd" class="text-[10px] font-mono text-purple-200/80 uppercase block mb-1">End date</label><input id="academicSessionEnd" type="date" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
-                            </div>
-                        </section>
-
-                        <section id="school-academic-config" class="mb-6 rounded-xl border border-cyan-500/20 bg-slateBase/40 p-4 md:p-5">
-                            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
-                                <div><h4 class="text-xs font-mono font-bold text-cyan-300 uppercase tracking-widest">School academic setup</h4><p class="text-[11px] text-coolLight mt-1">Classes 1–12 are selected by default; early years are available as optional levels.</p></div>
-                            </div>
-                            <div id="school-class-list" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="Nursery"> Nursery</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="LKG"> LKG</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="UKG"> UKG</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="1st" checked> Class 1</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="2nd" checked> Class 2</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="3rd" checked> Class 3</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="4th" checked> Class 4</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="5th" checked> Class 5</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="6th" checked> Class 6</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="7th" checked> Class 7</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="8th" checked> Class 8</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="9th" checked> Class 9</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="10th" checked> Class 10</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="11th" checked> Class 11</label>
-                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="12th" checked> Class 12</label>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label for="schoolSectionNames" class="text-[10px] font-mono text-cyan-200/80 uppercase block mb-1">Sections per class</label><input id="schoolSectionNames" class="input-premium w-full px-3 py-2 rounded-lg text-white" value="A, B" placeholder="A, B, C"></div>
-                                <div><label for="schoolSubjects" class="text-[10px] font-mono text-cyan-200/80 uppercase block mb-1">Subjects (comma-separated)</label><input id="schoolSubjects" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="English, Mathematics, Science"></div>
-                            </div>
-                        </section>
-
-                        <section id="college-academic-config" class="hidden-el mb-6 rounded-xl border border-fuchsia-500/20 bg-slateBase/40 p-4 md:p-5">
-                            <h4 class="text-xs font-mono font-bold text-fuchsia-300 uppercase tracking-widest">College structure</h4>
-                            <p class="text-[11px] text-coolLight mt-1 mb-4">Creates the reference architecture: Institution → Department → Program/Course → Semester/Year → Section. Department and program codes are unique within this institution.</p>
-                            <div class="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
-                                <div><label for="newDepartmentName" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Department name</label><input id="newDepartmentName" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="Computer Applications"></div>
-                                <div><label for="newDepartmentCode" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Department code</label><input id="newDepartmentCode" class="input-premium w-full px-3 py-2 rounded-lg text-white uppercase" placeholder="CA"></div>
-                                <button type="button" onclick="window.addInstitutionDepartmentDraft()" class="px-4 py-2.5 bg-fuchsia-600/20 border border-fuchsia-400 text-fuchsia-200 hover:bg-fuchsia-500 hover:text-white rounded-lg font-mono text-xs font-bold"><i class="fas fa-plus"></i> ADD DEPARTMENT</button>
-                            </div>
-                            <div id="institution-department-drafts" class="mt-3 space-y-2"></div>
-                            <div class="border-t border-glassBorder my-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-end">
-                                <div><label for="newProgramDepartment" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Department</label><select id="newProgramDepartment" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="">Add a department first</option></select></div>
-                                <div><label for="newProgramName" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Program / course name</label><input id="newProgramName" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="Bachelor of Computer Applications"></div>
-                                <div><label for="newProgramCode" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Program code</label><input id="newProgramCode" class="input-premium w-full px-3 py-2 rounded-lg text-white uppercase" placeholder="BCA"></div>
-                                <div><label for="newProgramLevelType" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Level system</label><select id="newProgramLevelType" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="semester">Semester</option><option value="year">Year</option><option value="trimester">Trimester</option><option value="custom">Custom levels</option></select></div>
-                                <div><label for="newProgramDuration" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Number of levels</label><input id="newProgramDuration" type="number" min="1" max="30" value="6" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
-                                <div><label for="newProgramSections" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Sections per level</label><input id="newProgramSections" value="A, B" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="A, B"></div>
-                                <div class="md:col-span-2 xl:col-span-3"><button type="button" onclick="window.addInstitutionProgramDraft()" class="w-full px-4 py-2.5 bg-indigo-600/20 border border-indigo-400 text-indigo-200 hover:bg-indigo-500 hover:text-white rounded-lg font-mono text-xs font-bold"><i class="fas fa-plus"></i> ADD PROGRAM / COURSE</button></div>
-                            </div>
-                            <div id="institution-program-drafts" class="mt-3 space-y-2"></div>
-                        </section>
+                        <div class="mb-6 rounded-xl border border-purple-500/20 bg-slateBase/40 p-4 md:p-5">
+                            <h4 class="text-xs font-mono font-bold text-purple-300 uppercase tracking-widest mb-2">Institution-side academic setup</h4>
+                            <p class="text-[11px] text-coolLight">Company provisions the institution identity, basic settings, and initial Chairman/Principal login. The institution creates its own academic structure from its Chairman/Principal portal, including College departments, HODs, and staff. Those records use this same Institution ID.</p>
+                        </div>
 
                         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
                             <button type="button" id="createChairmanBtn" class="flex-1 px-6 py-3 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)] transition"><i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN</button>

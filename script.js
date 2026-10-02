@@ -561,16 +561,10 @@ window.fetchRegistrationDetails = async () => {
 
 const normalizeInstitutionType = value => String(value || "school").trim().toLowerCase() === "college" ? "college" : "school";
 const institutionEsc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
-const splitInstitutionList = value => String(value || "").split(/[\n,;]/).map(item => item.trim()).filter(Boolean).filter((item, index, all) => all.findIndex(candidate => candidate.toLowerCase() === item.toLowerCase()) === index);
-const defaultAcademicSessionName = () => {
-    const year = new Date().getFullYear();
-    return `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
-};
 const makeInstitutionId = () => {
     const randomPart = window.crypto?.randomUUID ? window.crypto.randomUUID().replace(/-/g, "").slice(0, 12) : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     return `INS-${randomPart.toUpperCase()}`;
 };
-let institutionDepartmentDrafts = [];
 window.editingInstitutionId = null;
 window.currentInstitutionEditRecord = null;
 
@@ -581,8 +575,6 @@ window.generateInstitutionId = () => {
 
 window.toggleInstitutionSetupFields = () => {
     const isCollege = normalizeInstitutionType(document.getElementById("institutionType")?.value) === "college";
-    document.getElementById("school-academic-config")?.classList.toggle("hidden-el", isCollege);
-    document.getElementById("college-academic-config")?.classList.toggle("hidden-el", !isCollege);
     document.getElementById("provision-school-segment-wrap")?.classList.toggle("hidden-el", isCollege);
 };
 
@@ -596,161 +588,6 @@ window.toggleRegistrationInstitutionType = () => {
         if (type === "college") segmentSelect.value = "";
     }
 };
-
-function renderInstitutionAcademicDrafts() {
-    const deptBox = document.getElementById("institution-department-drafts");
-    const programBox = document.getElementById("institution-program-drafts");
-    const departmentSelect = document.getElementById("newProgramDepartment");
-    if (departmentSelect) {
-        departmentSelect.innerHTML = institutionDepartmentDrafts.length
-            ? institutionDepartmentDrafts.map(dept => `<option value="${institutionEsc(dept.key)}">${institutionEsc(dept.name)} (${institutionEsc(dept.code)})</option>`).join("")
-            : '<option value="">Add a department first</option>';
-    }
-    if (deptBox) {
-        deptBox.innerHTML = institutionDepartmentDrafts.length ? institutionDepartmentDrafts.map(dept => `
-            <div class="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 items-center rounded-lg border border-glassBorder bg-slateSurface/40 p-3">
-                <input aria-label="Department name" data-department-name="${institutionEsc(dept.key)}" value="${institutionEsc(dept.name)}" class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs">
-                <input aria-label="Department code" data-department-code="${institutionEsc(dept.key)}" value="${institutionEsc(dept.code)}" ${dept.id ? "readonly" : ""} class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs uppercase">
-                ${dept.id ? '<span class="text-[10px] text-coolGray text-center">Existing row · retained on save</span>' : `<button type="button" data-remove-department="${institutionEsc(dept.key)}" class="px-3 py-2 text-rose-300 border border-rose-500/40 rounded-lg text-xs" aria-label="Remove draft department"><i class="fas fa-trash"></i></button>`}
-            </div>`).join("") : '<p class="text-[11px] text-coolGray py-2">No departments added yet.</p>';
-        deptBox.querySelectorAll("[data-department-name]").forEach(input => input.addEventListener("input", event => {
-            const dept = institutionDepartmentDrafts.find(item => item.key === event.currentTarget.dataset.departmentName);
-            if (dept) dept.name = event.currentTarget.value;
-        }));
-        deptBox.querySelectorAll("[data-department-code]").forEach(input => input.addEventListener("input", event => {
-            const dept = institutionDepartmentDrafts.find(item => item.key === event.currentTarget.dataset.departmentCode);
-            if (dept) { dept.code = event.currentTarget.value.toUpperCase(); event.currentTarget.value = dept.code; }
-        }));
-        deptBox.querySelectorAll("[data-remove-department]").forEach(button => button.addEventListener("click", event => {
-            const department = institutionDepartmentDrafts.find(item => item.key === event.currentTarget.dataset.removeDepartment);
-            if (department?.id) return;
-            institutionDepartmentDrafts = institutionDepartmentDrafts.filter(item => item.key !== event.currentTarget.dataset.removeDepartment);
-            renderInstitutionAcademicDrafts();
-        }));
-    }
-    if (programBox) {
-        const programs = institutionDepartmentDrafts.flatMap(dept => (dept.programs || []).map(program => ({ ...program, departmentKey: dept.key, departmentName: dept.name, departmentCode: dept.code })));
-        programBox.innerHTML = programs.length ? programs.map(program => `
-            <div class="rounded-lg border border-glassBorder bg-slateSurface/40 p-3">
-                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-                    <input aria-label="Program name" data-program-name="${institutionEsc(program.key)}" value="${institutionEsc(program.name)}" class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs">
-                    <input aria-label="Program code" data-program-code="${institutionEsc(program.key)}" value="${institutionEsc(program.code)}" ${program.id ? "readonly" : ""} class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs uppercase">
-                    <select aria-label="Program level type" data-program-level-type="${institutionEsc(program.key)}" ${Number(program.levelCount) > 0 ? "disabled" : ""} class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs">
-                        <option value="semester" ${program.levelType === "semester" ? "selected" : ""}>Semester · ${Number(program.duration) || 0}</option>
-                        <option value="year" ${program.levelType === "year" ? "selected" : ""}>Year · ${Number(program.duration) || 0}</option>
-                        <option value="trimester" ${program.levelType === "trimester" ? "selected" : ""}>Trimester · ${Number(program.duration) || 0}</option>
-                        <option value="custom" ${program.levelType === "custom" ? "selected" : ""}>Custom · ${Number(program.duration) || 0}</option>
-                    </select>
-                    <div class="flex gap-2"><input aria-label="Program level count" data-program-duration="${institutionEsc(program.key)}" type="number" min="${Math.max(1, Number(program.levelCount) || 1)}" max="30" value="${Number(program.duration) || 1}" class="input-premium w-24 px-3 py-2 rounded-lg text-white text-xs"><input aria-label="Sections for program" data-program-sections="${institutionEsc(program.key)}" value="${institutionEsc((program.sections || []).join(", "))}" class="input-premium min-w-0 flex-1 px-3 py-2 rounded-lg text-white text-xs"></div>
-                </div>
-                <div class="flex items-center justify-between gap-3 mt-2 text-[10px] text-coolGray"><span>${institutionEsc(program.departmentName)} (${institutionEsc(program.departmentCode)})</span>${program.id ? '<span>Existing academic levels are retained.</span>' : `<button type="button" data-remove-program="${institutionEsc(program.key)}" class="text-rose-300 hover:text-white">Remove draft</button>`}</div>
-            </div>`).join("") : '<p class="text-[11px] text-coolGray py-2">Add a program/course after adding a department.</p>';
-        programBox.querySelectorAll("[data-program-name]").forEach(input => input.addEventListener("input", event => updateDraftProgram(event.currentTarget.dataset.programName, "name", event.currentTarget.value)));
-        programBox.querySelectorAll("[data-program-code]").forEach(input => input.addEventListener("input", event => { event.currentTarget.value = event.currentTarget.value.toUpperCase(); updateDraftProgram(event.currentTarget.dataset.programCode, "code", event.currentTarget.value); }));
-        programBox.querySelectorAll("[data-program-level-type]").forEach(input => input.addEventListener("change", event => updateDraftProgram(event.currentTarget.dataset.programLevelType, "levelType", event.currentTarget.value)));
-        programBox.querySelectorAll("[data-program-duration]").forEach(input => input.addEventListener("input", event => updateDraftProgram(event.currentTarget.dataset.programDuration, "duration", Number(event.currentTarget.value))));
-        programBox.querySelectorAll("[data-program-sections]").forEach(input => input.addEventListener("input", event => updateDraftProgram(event.currentTarget.dataset.programSections, "sections", splitInstitutionList(event.currentTarget.value))));
-        programBox.querySelectorAll("[data-remove-program]").forEach(button => button.addEventListener("click", event => {
-            const programKey = event.currentTarget.dataset.removeProgram;
-            const program = institutionDepartmentDrafts.flatMap(dept => dept.programs || []).find(item => item.key === programKey);
-            if (program?.id) return;
-            institutionDepartmentDrafts.forEach(dept => { dept.programs = (dept.programs || []).filter(item => item.key !== programKey); });
-            renderInstitutionAcademicDrafts();
-        }));
-    }
-}
-
-function updateDraftProgram(key, field, value) {
-    for (const dept of institutionDepartmentDrafts) {
-        const program = (dept.programs || []).find(item => item.key === key);
-        if (program) { program[field] = value; break; }
-    }
-}
-
-window.addInstitutionDepartmentDraft = () => {
-    const nameInput = document.getElementById("newDepartmentName");
-    const codeInput = document.getElementById("newDepartmentCode");
-    const name = nameInput?.value.trim() || "";
-    const code = codeInput?.value.trim().toUpperCase() || "";
-    if (!name || !code) return window.showToast("ENTER A DEPARTMENT NAME AND CODE", "#e11d48");
-    if (institutionDepartmentDrafts.some(dept => dept.code.toLowerCase() === code.toLowerCase())) {
-        return window.showToast("DEPARTMENT CODE ALREADY EXISTS IN THIS INSTITUTION", "#e11d48");
-    }
-    institutionDepartmentDrafts.push({ key: makeInstitutionId(), name, code, programs: [] });
-    nameInput.value = "";
-    codeInput.value = "";
-    renderInstitutionAcademicDrafts();
-};
-
-window.addInstitutionProgramDraft = () => {
-    const departmentKey = document.getElementById("newProgramDepartment")?.value;
-    const name = document.getElementById("newProgramName")?.value.trim() || "";
-    const code = document.getElementById("newProgramCode")?.value.trim().toUpperCase() || "";
-    const levelType = document.getElementById("newProgramLevelType")?.value || "semester";
-    const duration = Number(document.getElementById("newProgramDuration")?.value || 0);
-    const sections = splitInstitutionList(document.getElementById("newProgramSections")?.value || "");
-    const department = institutionDepartmentDrafts.find(item => item.key === departmentKey);
-    if (!department) return window.showToast("ADD OR SELECT A DEPARTMENT FIRST", "#e11d48");
-    if (!name || !code) return window.showToast("ENTER A PROGRAM NAME AND CODE", "#e11d48");
-    if (!Number.isInteger(duration) || duration < 1 || duration > 30) return window.showToast("PROGRAM LEVEL COUNT MUST BE 1–30", "#e11d48");
-    if (institutionDepartmentDrafts.some(dept => dept.programs.some(program => program.code.toLowerCase() === code.toLowerCase()))) {
-        return window.showToast("PROGRAM CODE ALREADY EXISTS IN THIS INSTITUTION", "#e11d48");
-    }
-    department.programs.push({ key: makeInstitutionId(), name, code, levelType, duration, sections });
-    document.getElementById("newProgramName").value = "";
-    document.getElementById("newProgramCode").value = "";
-    renderInstitutionAcademicDrafts();
-};
-
-function buildInstitutionAcademicConfig(type) {
-    const sessionName = document.getElementById("academicSessionName")?.value.trim() || "";
-    if (!sessionName) throw new Error("Enter an academic session name.");
-    const startDate = document.getElementById("academicSessionStart")?.value || null;
-    const endDate = document.getElementById("academicSessionEnd")?.value || null;
-    if (startDate && endDate && endDate < startDate) throw new Error("Academic session end date must be on or after its start date.");
-    const config = {
-        version: 1,
-        mode: type,
-        academicSession: { name: sessionName, startDate, endDate, isCurrent: true }
-    };
-    if (type === "school") {
-        const classes = Array.from(document.querySelectorAll(".institution-class-option:checked"), input => input.value);
-        if (!classes.length) throw new Error("Select at least one school class.");
-        config.school = {
-            classes,
-            sections: splitInstitutionList(document.getElementById("schoolSectionNames")?.value || ""),
-            subjects: splitInstitutionList(document.getElementById("schoolSubjects")?.value || "")
-        };
-    } else {
-        const departments = institutionDepartmentDrafts.map(dept => ({
-            name: dept.name.trim(),
-            code: dept.code.trim().toUpperCase(),
-            programs: (dept.programs || []).map(program => ({
-                name: program.name.trim(),
-                code: program.code.trim().toUpperCase(),
-                levelType: program.levelType,
-                duration: Number(program.duration),
-                sections: Array.isArray(program.sections) ? program.sections : splitInstitutionList(program.sections)
-            }))
-        }));
-        if (!departments.length) throw new Error("Add at least one college department and program/course.");
-        if (departments.some(dept => !dept.name || !dept.code || !dept.programs.length)) throw new Error("Each college department needs a name, code, and at least one program/course.");
-        const programCodes = departments.flatMap(dept => dept.programs.map(program => program.code.toLowerCase()));
-        if (new Set(programCodes).size !== programCodes.length) throw new Error("Program codes must be unique within the institution.");
-        const departmentCodes = departments.map(dept => dept.code.toLowerCase());
-        if (new Set(departmentCodes).size !== departmentCodes.length) throw new Error("Department codes must be unique within the institution.");
-        departments.forEach(dept => dept.programs.forEach(program => {
-            if (!program.name || !program.code || !Number.isInteger(program.duration) || program.duration < 1 || program.duration > 30) {
-                throw new Error(`Check the name, code, and level count for ${program.code || "each program"}.`);
-            }
-            if (Number(program.levelCount) > program.duration) {
-                throw new Error(`${program.code} already has ${program.levelCount} academic levels; the count cannot be reduced.`);
-            }
-        }));
-        config.college = { departments };
-    }
-    return config;
-}
 
 function buildInstitutionProfile() {
     const contactEmail = document.getElementById("provisionContactEmail")?.value.trim()
@@ -784,7 +621,7 @@ async function ensureCompanyInstitutionSetupReady() {
     if (data !== true) throw new Error("The signed-in Company account is not authorized to provision institutions.");
 }
 
-async function configureCompanyInstitution({ schoolId, name, type, code, logoUrl, branding, academicConfig, profile, themeColor, admissionOpen }) {
+async function configureCompanyInstitution({ schoolId, name, type, code, logoUrl, branding, profile, themeColor, admissionOpen }) {
     return supabaseClient.rpc("company_configure_institution", {
         p_school_id: schoolId,
         p_school_name: name,
@@ -792,7 +629,6 @@ async function configureCompanyInstitution({ schoolId, name, type, code, logoUrl
         p_institution_code: code || null,
         p_logo_url: logoUrl || null,
         p_branding: branding,
-        p_academic_config: academicConfig,
         p_profile: profile,
         p_theme_color: themeColor,
         p_admission_open: admissionOpen
@@ -811,17 +647,13 @@ window.startNewInstitution = (navigate = true) => {
     set("provisionAffiliationNo", ""); set("provisionSchoolSegment", "K-12 (Pre-K to 12)"); set("provisionBoard", "");
     set("provisionCountry", ""); set("provisionState", ""); set("provisionDistrict", ""); set("provisionPincode", ""); set("provisionAddress", "");
     set("chairmanName", ""); set("chairmanEmail", ""); set("chairmanPassword", ""); set("assignedRole", "Chairman"); set("subscriptionTier", "Starter"); set("watermarkUrl", "");
-    set("academicSessionName", defaultAcademicSessionName()); set("academicSessionStart", ""); set("academicSessionEnd", "");
-    set("schoolSectionNames", "A, B"); set("schoolSubjects", ""); set("newDepartmentName", ""); set("newDepartmentCode", "");
-    set("newProgramName", ""); set("newProgramCode", ""); set("newProgramLevelType", "semester"); set("newProgramDuration", "6"); set("newProgramSections", "A, B"); set("masterNodeId", "");
+    set("masterNodeId", "");
     set("provisionThemeColor", "#1e3c72"); set("provisionSecondaryColor", "#ffffff");
     const file = document.getElementById("schoolLogo"); if (file) file.value = "";
     const admissions = document.getElementById("provisionAdmissionOpen"); if (admissions) admissions.checked = true;
     const branch = document.getElementById("isSubNode"); if (branch) branch.checked = false;
     document.getElementById("masterNodeId")?.classList.add("hidden-el");
     document.getElementById("fetchRegNo").value = "";
-    document.querySelectorAll(".institution-class-option").forEach(input => { input.checked = /^(?:\d+)(?:st|nd|rd|th)$/i.test(input.value); });
-    institutionDepartmentDrafts = [];
     window.fetchedRegLogoData = null;
     window.fetchedRegFullData = null;
     document.getElementById("provision-chairman-fields")?.classList.remove("hidden-el");
@@ -831,7 +663,6 @@ window.startNewInstitution = (navigate = true) => {
     document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN';
     document.getElementById("institution-provision-feedback").textContent = "";
     window.toggleInstitutionSetupFields();
-    renderInstitutionAcademicDrafts();
     if (navigate) window.openCompanyTab("tab-manage");
 };
 
@@ -861,10 +692,6 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
     if (!schoolName) return window.showToast("INSTITUTION NAME IS REQUIRED", "#e11d48");
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(schoolId)) return window.showToast("INSTITUTION ID MUST BE 3–64 CHARACTERS (LETTERS, NUMBERS, _ OR -)", "#e11d48");
     if (!isEditing && (!chairmanName || !chairmanEmail || !password)) return window.showToast("INITIAL CHAIRMAN NAME, EMAIL, AND PASSWORD ARE REQUIRED", "#e11d48");
-
-    let academicConfig;
-    try { academicConfig = buildInstitutionAcademicConfig(type); }
-    catch (error) { return window.showToast(error.message, "#e11d48"); }
 
     const profile = buildInstitutionProfile();
     const tier = document.getElementById("subscriptionTier")?.value || "Starter";
@@ -907,7 +734,6 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
                 institution_type: type,
                 institution_code: institutionCode || null,
                 branding,
-                academic_config: academicConfig,
                 admissionOpen,
                 themeColor
             };
@@ -936,7 +762,6 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
             code: institutionCode,
             logoUrl,
             branding,
-            academicConfig,
             profile,
             themeColor,
             admissionOpen
@@ -953,7 +778,7 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
         console.error("Institution provisioning failed:", error);
         if (deployed && !isEditing) {
             // Preserve the created ID and switch to edit mode so a transient
-            // metadata/academic RPC failure can be retried without deploying a
+            // institution-metadata RPC failure can be retried without deploying a
             // second Auth user or a second institution.
             window.editingInstitutionId = schoolId;
             window.currentInstitutionEditRecord = { id: schoolId, schoolName, institution_type: type, institution_code: institutionCode, logoUrl: window.currentInstitutionEditRecord?.logoUrl || window.fetchedRegLogoData || "" };
@@ -1057,7 +882,6 @@ window.openInstitutionEditor = async (schoolId) => {
 
     window.editingInstitutionId = school.id;
     window.currentInstitutionEditRecord = school;
-    const config = school.academic_config && typeof school.academic_config === "object" ? school.academic_config : {};
     const branding = school.branding && typeof school.branding === "object" ? school.branding : {};
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ""; };
     set("institutionId", school.id);
@@ -1082,41 +906,16 @@ window.openInstitutionEditor = async (schoolId) => {
     const admission = document.getElementById("provisionAdmissionOpen");
     if (admission) admission.checked = school.admissionOpen !== false;
 
-    const session = config.academicSession || {};
-    set("academicSessionName", session.name || defaultAcademicSessionName());
-    set("academicSessionStart", session.startDate || "");
-    set("academicSessionEnd", session.endDate || "");
-    const schoolConfig = config.school || {};
-    const configuredClasses = new Set(Array.isArray(schoolConfig.classes) && schoolConfig.classes.length ? schoolConfig.classes : ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]);
-    document.querySelectorAll(".institution-class-option").forEach(input => { input.checked = configuredClasses.has(input.value); });
-    set("schoolSectionNames", Array.isArray(schoolConfig.sections) ? schoolConfig.sections.join(", ") : "");
-    const subjects = Array.isArray(schoolConfig.subjects) ? schoolConfig.subjects : Array.isArray(school.examSubjects) ? school.examSubjects : [];
-    set("schoolSubjects", subjects.join(", "));
-
-    const collegeConfig = config.college || {};
-    institutionDepartmentDrafts = Array.isArray(collegeConfig.departments) ? collegeConfig.departments.map(dept => ({
-        id: dept.id || null,
-        key: makeInstitutionId(), name: dept.name || "", code: dept.code || "",
-        programs: (Array.isArray(dept.programs) ? dept.programs : []).map(program => ({
-            id: program.id || null,
-            key: makeInstitutionId(), name: program.name || "", code: program.code || "",
-            levelType: program.levelType || "semester", duration: Number(program.duration) || 1,
-            levelCount: Number(program.levelCount) || 0,
-            sections: Array.isArray(program.sections) ? program.sections : []
-        }))
-    })) : [];
-
     document.getElementById("institutionId").disabled = true;
     document.getElementById("institutionType").disabled = true;
     document.getElementById("provision-chairman-fields")?.classList.add("hidden-el");
     document.getElementById("cancelInstitutionEditBtn")?.classList.remove("hidden-el");
     document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-sliders text-cyan-300"></i> Edit Institution Configuration';
-    document.getElementById("institution-form-subtitle").innerHTML = `Editing <code>${institutionEsc(school.id)}</code>. The institution ID and type are stable tenant identity; existing academic records are retained.`;
+    document.getElementById("institution-form-subtitle").innerHTML = `Editing <code>${institutionEsc(school.id)}</code>. The ID and type are stable tenant identity; academic structure is managed from the institution's own portal.`;
     document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-save mr-2"></i> SAVE INSTITUTION CONFIGURATION';
-    document.getElementById("institution-provision-feedback").textContent = "Existing departments, programs, levels, and sections are updated by stable codes or retained; omitted rows are never deleted.";
+    document.getElementById("institution-provision-feedback").textContent = "Institution metadata only. Departments, HODs, and staff are managed from the institution's own Chairman/Principal portal.";
     document.getElementById("schoolLogo").value = "";
     window.toggleInstitutionSetupFields();
-    renderInstitutionAcademicDrafts();
     window.openCompanyTab("tab-manage");
 };
 
@@ -2947,25 +2746,6 @@ window.loadPendingRegistrations = async () => {
     }
 };
 
-function defaultAcademicConfigForType(type) {
-    const normalizedType = normalizeInstitutionType(type);
-    const config = {
-        version: 1,
-        mode: normalizedType,
-        academicSession: { name: defaultAcademicSessionName(), startDate: null, endDate: null, isCurrent: true }
-    };
-    if (normalizedType === "school") {
-        config.school = {
-            classes: ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"],
-            sections: ["A", "B"],
-            subjects: []
-        };
-    } else {
-        config.college = { departments: [] };
-    }
-    return config;
-}
-
 window.approveRegistrationAuto = async (docId) => {
     window.customConfirm("APPROVE AND DEPLOY THIS INSTITUTION?", async () => {
         try {
@@ -3003,7 +2783,6 @@ window.approveRegistrationAuto = async (docId) => {
                 secondaryColor: "#ffffff",
                 chairmanRole: "Principal"
             };
-            const academicConfig = defaultAcademicConfigForType(type);
             const branding = { primaryColor: "#1e3c72", secondaryColor: "#ffffff" };
 
             const { data: chairmanUid, error: authError } = await supabaseClient.rpc("create_chairman_auth_user", {
@@ -3031,7 +2810,6 @@ window.approveRegistrationAuto = async (docId) => {
                     institution_type: type,
                     institution_code: data.institution_code || null,
                     branding,
-                    academic_config: academicConfig,
                     admissionOpen: true,
                     themeColor: "#1e3c72"
                 }
@@ -3045,7 +2823,6 @@ window.approveRegistrationAuto = async (docId) => {
                 code: data.institution_code || "",
                 logoUrl: data.logoUrl || "",
                 branding,
-                academicConfig,
                 profile,
                 themeColor: "#1e3c72",
                 admissionOpen: true
