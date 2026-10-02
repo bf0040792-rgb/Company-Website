@@ -891,9 +891,15 @@
                     </select>
                 </div>
                 
-                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">School Type *</label>
-                    <select id="reg-school-type" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required>
-                        <option value="">Select Type</option>
+                <div><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">Institution Portal Type *</label>
+                    <select id="reg-institution-type" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm" required onchange="window.toggleRegistrationInstitutionType()">
+                        <option value="school">School</option>
+                        <option value="college">College</option>
+                    </select>
+                </div>
+                <div id="registration-school-segment"><label class="text-[10px] font-mono text-fuchsia-400 uppercase tracking-widest mb-1 block">School Segment</label>
+                    <select id="reg-school-type" class="input-premium w-full px-3 py-2 rounded-lg text-white text-sm">
+                        <option value="">Select Segment</option>
                         <option value="Primary (Pre-K to 5)">Primary (Pre-K to 5)</option>
                         <option value="Middle (6 to 8)">Middle (6 to 8)</option>
                         <option value="High School (9 to 10)">High School (9 to 10)</option>
@@ -1102,8 +1108,10 @@
                             class="fas fa-right-left text-fuchsia-400 w-5 text-center"></i> Transfer Approvals</button>
                     <button
                         class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-manage"><i class="fas fa-server text-indigo-400 w-5 text-center"></i> Registration
-                        new school</button>
+                        data-target="tab-manage"><i class="fas fa-server text-indigo-400 w-5 text-center"></i> Create Institution</button>
+                    <button
+                        class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
+                        data-target="tab-institutions"><i class="fas fa-building-columns text-cyan-400 w-5 text-center"></i> Institutions</button>
                     <button
                         class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
                         data-target="tab-school-id"><i class="fas fa-id-card text-fuchsia-400 w-5 text-center"></i> School
@@ -1426,81 +1434,191 @@
                 </div>
 
                 <div id="tab-manage" class="tab-content hidden-el space-y-8">
-                    <div
-                        class="glass-card p-6 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)] relative">
-                        <div
-                            class="absolute top-0 left-0 w-1 h-full bg-tealAccent shadow-[0_0_10px_rgba(0,240,255,0.8)]">
+                    <div class="glass-card p-6 md:p-8 rounded-2xl border border-tealAccent/30 shadow-[0_0_20px_rgba(0,240,255,0.1)] relative">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-tealAccent shadow-[0_0_10px_rgba(0,240,255,0.8)]"></div>
+                        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+                            <div>
+                                <h3 id="institution-form-heading" class="text-xl font-display font-bold text-white flex items-center gap-2"><i class="fas fa-building text-tealAccent"></i> Create Institution</h3>
+                                <p id="institution-form-subtitle" class="text-xs text-coolLight mt-2 max-w-3xl">One institution ID is used for <code>schools.id</code>, the Chairman and staff <code>schoolId</code>, and every tenant-scoped row. Choose the portal type before saving.</p>
+                            </div>
+                            <button type="button" onclick="window.startNewInstitution()" class="px-4 py-2 bg-slateSurface border border-glassBorder hover:border-tealAccent text-coolLight hover:text-white rounded-lg font-mono text-xs font-bold transition"><i class="fas fa-rotate-left"></i> NEW FORM</button>
                         </div>
-                        <h3 class="text-lg font-display font-bold text-white mb-4 flex items-center gap-2"><i
-                                class="fas fa-plus-hexagon text-tealAccent"></i> Provision New Node</h3>
-                        
-                        <div class="flex gap-2 mb-6 p-4 bg-slateSurface/50 rounded-xl border border-glassBorder items-end max-w-2xl">
+
+                        <div class="flex flex-col sm:flex-row sm:items-end gap-3 mb-6 p-4 bg-slateSurface/50 rounded-xl border border-glassBorder">
                             <div class="flex-1">
-                                <label class="text-[10px] font-mono text-tealAccent uppercase block mb-1">Fetch from Registration No (Optional)</label>
+                                <label for="fetchRegNo" class="text-[10px] font-mono text-tealAccent uppercase block mb-1">Fetch approved registration details (optional)</label>
                                 <input type="text" id="fetchRegNo" placeholder="CORE/REG/EDU/..." class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono">
                             </div>
-                            <button onclick="window.fetchRegistrationDetails()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-mono text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition"><i class="fas fa-search"></i> FETCH</button>
+                            <button type="button" onclick="window.fetchRegistrationDetails()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-mono text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition"><i class="fas fa-search"></i> FETCH</button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Entity
-                                    Logo</label><input type="file" id="schoolLogo" accept="image/*"
-                                    class="text-xs text-white font-mono"></div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Node
-                                    Identifier</label><input type="text" id="schoolName"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Commander
-                                    Name</label><input type="text" id="chairmanName"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Auth
-                                    Email</label><input type="email" id="chairmanEmail"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Initial
-                                    Key</label><input type="text" id="chairmanPassword"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"></div>
 
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Assigned
-                                    Role</label>
-                                <select id="assignedRole"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono">
-                                    <option value="Chairman">Chairman</option>
-                                    <option value="Principal">Principal</option>
-                                </select>
+                        <section class="mb-6 rounded-xl border border-tealAccent/20 bg-slateBase/40 p-4 md:p-5">
+                            <h4 class="text-xs font-mono font-bold text-tealAccent uppercase tracking-widest mb-4">Institution identity</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div class="md:col-span-2 xl:col-span-1">
+                                    <label for="institutionId" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Institution ID *</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="institutionId" maxlength="64" autocomplete="off" class="input-premium min-w-0 flex-1 px-3 py-2 rounded-lg text-white font-mono" placeholder="INS-..." required>
+                                        <button type="button" onclick="window.generateInstitutionId()" class="shrink-0 px-3 py-2 bg-slateSurface border border-tealAccent/40 hover:bg-tealAccent/10 text-tealAccent rounded-lg text-xs font-mono" aria-label="Generate a new institution ID"><i class="fas fa-wand-magic-sparkles"></i> Generate</button>
+                                    </div>
+                                    <p class="text-[10px] text-coolGray mt-1">Stable tenant key; cannot be changed after creation.</p>
+                                </div>
+                                <div>
+                                    <label for="institutionType" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Institution type *</label>
+                                    <select id="institutionType" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono" onchange="window.toggleInstitutionSetupFields()" required>
+                                        <option value="school">School</option>
+                                        <option value="college">College</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="institutionCode" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Institution code</label>
+                                    <input type="text" id="institutionCode" maxlength="64" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono" placeholder="Optional public code">
+                                </div>
+                                <div>
+                                    <label for="schoolName" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Institution name *</label>
+                                    <input type="text" id="schoolName" class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono" required>
+                                </div>
+                                <div>
+                                    <label for="schoolLogo" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Institution logo</label>
+                                    <input type="file" id="schoolLogo" accept="image/*" class="input-premium w-full px-3 py-2 rounded-lg text-white text-xs">
+                                </div>
+                                <div class="flex items-end gap-3">
+                                    <div class="flex-1">
+                                        <label for="provisionThemeColor" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Primary brand color</label>
+                                        <input type="color" id="provisionThemeColor" value="#1e3c72" class="w-full h-[42px] rounded-lg cursor-pointer bg-slateBase border border-glassBorder">
+                                    </div>
+                                    <div class="flex-1">
+                                        <label for="provisionSecondaryColor" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Secondary color</label>
+                                        <input type="color" id="provisionSecondaryColor" value="#ffffff" class="w-full h-[42px] rounded-lg cursor-pointer bg-slateBase border border-glassBorder">
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3 rounded-lg border border-glassBorder bg-slateSurface/40 px-4 py-3">
+                                    <input type="checkbox" id="provisionAdmissionOpen" class="input-checkbox" checked>
+                                    <label for="provisionAdmissionOpen" class="text-xs text-coolLight">Admissions open</label>
+                                </div>
                             </div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Tier</label>
-                                <select id="subscriptionTier"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono">
-                                    <option value="Starter">Starter</option>
-                                    <option value="Professional">Professional</option>
-                                    <option value="Enterprise">Enterprise</option>
-                                </select>
+                        </section>
+
+                        <section class="mb-6 rounded-xl border border-indigo-500/20 bg-slateBase/40 p-4 md:p-5">
+                            <h4 class="text-xs font-mono font-bold text-indigo-300 uppercase tracking-widest mb-4">Contact & location</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div><label for="provisionPhone" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Phone</label><input id="provisionPhone" type="tel" class="input-premium w-full px-3 py-2 rounded-lg text-white" autocomplete="tel"></div>
+                                <div><label for="provisionAltPhone" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Alternate phone</label><input id="provisionAltPhone" type="tel" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="provisionContactEmail" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Institution contact email</label><input id="provisionContactEmail" type="email" class="input-premium w-full px-3 py-2 rounded-lg text-white" autocomplete="email"></div>
+                                <div><label for="provisionWebsite" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Website</label><input id="provisionWebsite" type="url" placeholder="https://" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="provisionAffiliationNo" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Affiliation / registration no.</label><input id="provisionAffiliationNo" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div id="provision-school-segment-wrap"><label for="provisionSchoolSegment" class="text-[10px] font-mono text-coolLight uppercase block mb-1">School segment</label><select id="provisionSchoolSegment" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="">Select segment</option><option>Primary (Pre-K to 5)</option><option>Middle (6 to 8)</option><option>High School (9 to 10)</option><option>Higher Secondary (11 to 12)</option><option>K-12 (Pre-K to 12)</option></select></div>
+                                <div id="provision-board-wrap"><label for="provisionBoard" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Board / accreditor</label><select id="provisionBoard" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="">Select board</option><option>CBSE</option><option>ICSE</option><option>State Board</option><option>International</option><option>Other</option></select></div>
+                                <div><label for="provisionCountry" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Country</label><input id="provisionCountry" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="provisionState" class="text-[10px] font-mono text-coolLight uppercase block mb-1">State / province</label><input id="provisionState" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="provisionDistrict" class="text-[10px] font-mono text-coolLight uppercase block mb-1">District</label><input id="provisionDistrict" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="provisionPincode" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Postal code</label><input id="provisionPincode" class="input-premium w-full px-3 py-2 rounded-lg text-white" inputmode="numeric"></div>
+                                <div class="md:col-span-2 xl:col-span-3"><label for="provisionAddress" class="text-[10px] font-mono text-coolLight uppercase block mb-1">Full address</label><textarea id="provisionAddress" rows="2" class="input-premium w-full px-3 py-2 rounded-lg text-white resize-y"></textarea></div>
                             </div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1 flex items-center gap-1"><input
-                                        type="checkbox" id="isSubNode"
-                                        onchange="document.getElementById('masterNodeId').style.display = this.checked ? 'block' : 'none'">
-                                    Is Branch?</label>
-                                <select id="masterNodeId"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono hidden-el"
-                                    style="display:none;">
-                                    <option value="">Select Master Node...</option>
-                                </select>
+                        </section>
+
+                        <section id="provision-chairman-fields" class="mb-6 rounded-xl border border-amber-500/20 bg-slateBase/40 p-4 md:p-5">
+                            <h4 class="text-xs font-mono font-bold text-amber-300 uppercase tracking-widest mb-4">Initial Chairman account</h4>
+                            <p class="text-[11px] text-coolLight mb-4">The Chairman account is created for the same Institution ID. Its database role remains <code>chairman</code>; the assignment below sets the portal display role.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div><label for="chairmanName" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Chairman / principal name *</label><input type="text" id="chairmanName" class="input-premium w-full px-3 py-2 rounded-lg text-white" required></div>
+                                <div><label for="chairmanEmail" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Login email *</label><input type="email" id="chairmanEmail" class="input-premium w-full px-3 py-2 rounded-lg text-white" required></div>
+                                <div><label for="chairmanPassword" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Initial password *</label><input type="password" id="chairmanPassword" class="input-premium w-full px-3 py-2 rounded-lg text-white" autocomplete="new-password" required></div>
+                                <div><label for="assignedRole" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Display role</label><select id="assignedRole" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="Chairman">Chairman</option><option value="Principal">Principal</option></select></div>
+                                <div><label for="subscriptionTier" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Subscription tier</label><select id="subscriptionTier" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="Starter">Starter</option><option value="Professional">Professional</option><option value="Enterprise">Enterprise</option></select></div>
+                                <div><label for="watermarkUrl" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Watermark URL</label><input type="url" id="watermarkUrl" placeholder="Optional URL" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div class="flex items-center gap-3"><input type="checkbox" id="isSubNode" class="input-checkbox" onchange="document.getElementById('masterNodeId').classList.toggle('hidden-el', !this.checked)"><label for="isSubNode" class="text-xs text-coolLight">Deploy as a branch</label></div>
+                                <div><label for="masterNodeId" class="text-[10px] font-mono text-amber-300/80 uppercase block mb-1">Parent institution</label><select id="masterNodeId" class="input-premium w-full px-3 py-2 rounded-lg text-white hidden-el"><option value="">Select parent institution</option></select></div>
                             </div>
-                            <div class="col-span-1"><label
-                                    class="text-[10px] font-mono text-tealAccent/70 uppercase block mb-1">Watermark
-                                    URL</label><input type="text" id="watermarkUrl"
-                                    class="input-premium w-full px-3 py-2 rounded-lg text-white font-mono"
-                                    placeholder="Optional URL"></div>
+                        </section>
+
+                        <section class="mb-6 rounded-xl border border-purple-500/20 bg-slateBase/40 p-4 md:p-5">
+                            <h4 class="text-xs font-mono font-bold text-purple-300 uppercase tracking-widest mb-2">Academic session</h4>
+                            <p class="text-[11px] text-coolLight mb-4">Saved to <code>academic_sessions</code> and referenced by the institution’s initial academic configuration.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div><label for="academicSessionName" class="text-[10px] font-mono text-purple-200/80 uppercase block mb-1">Session name *</label><input id="academicSessionName" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="2026-27" required></div>
+                                <div><label for="academicSessionStart" class="text-[10px] font-mono text-purple-200/80 uppercase block mb-1">Start date</label><input id="academicSessionStart" type="date" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="academicSessionEnd" class="text-[10px] font-mono text-purple-200/80 uppercase block mb-1">End date</label><input id="academicSessionEnd" type="date" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                            </div>
+                        </section>
+
+                        <section id="school-academic-config" class="mb-6 rounded-xl border border-cyan-500/20 bg-slateBase/40 p-4 md:p-5">
+                            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                                <div><h4 class="text-xs font-mono font-bold text-cyan-300 uppercase tracking-widest">School academic setup</h4><p class="text-[11px] text-coolLight mt-1">Classes 1–12 are selected by default; early years are available as optional levels.</p></div>
+                            </div>
+                            <div id="school-class-list" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="Nursery"> Nursery</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="LKG"> LKG</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="UKG"> UKG</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="1st" checked> Class 1</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="2nd" checked> Class 2</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="3rd" checked> Class 3</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="4th" checked> Class 4</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="5th" checked> Class 5</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="6th" checked> Class 6</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="7th" checked> Class 7</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="8th" checked> Class 8</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="9th" checked> Class 9</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="10th" checked> Class 10</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="11th" checked> Class 11</label>
+                                <label class="flex items-center gap-2 rounded-lg border border-glassBorder p-2 text-xs text-coolLight"><input type="checkbox" class="input-checkbox institution-class-option" value="12th" checked> Class 12</label>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label for="schoolSectionNames" class="text-[10px] font-mono text-cyan-200/80 uppercase block mb-1">Sections per class</label><input id="schoolSectionNames" class="input-premium w-full px-3 py-2 rounded-lg text-white" value="A, B" placeholder="A, B, C"></div>
+                                <div><label for="schoolSubjects" class="text-[10px] font-mono text-cyan-200/80 uppercase block mb-1">Subjects (comma-separated)</label><input id="schoolSubjects" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="English, Mathematics, Science"></div>
+                            </div>
+                        </section>
+
+                        <section id="college-academic-config" class="hidden-el mb-6 rounded-xl border border-fuchsia-500/20 bg-slateBase/40 p-4 md:p-5">
+                            <h4 class="text-xs font-mono font-bold text-fuchsia-300 uppercase tracking-widest">College structure</h4>
+                            <p class="text-[11px] text-coolLight mt-1 mb-4">Creates the reference architecture: Institution → Department → Program/Course → Semester/Year → Section. Department and program codes are unique within this institution.</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
+                                <div><label for="newDepartmentName" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Department name</label><input id="newDepartmentName" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="Computer Applications"></div>
+                                <div><label for="newDepartmentCode" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Department code</label><input id="newDepartmentCode" class="input-premium w-full px-3 py-2 rounded-lg text-white uppercase" placeholder="CA"></div>
+                                <button type="button" onclick="window.addInstitutionDepartmentDraft()" class="px-4 py-2.5 bg-fuchsia-600/20 border border-fuchsia-400 text-fuchsia-200 hover:bg-fuchsia-500 hover:text-white rounded-lg font-mono text-xs font-bold"><i class="fas fa-plus"></i> ADD DEPARTMENT</button>
+                            </div>
+                            <div id="institution-department-drafts" class="mt-3 space-y-2"></div>
+                            <div class="border-t border-glassBorder my-5"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-end">
+                                <div><label for="newProgramDepartment" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Department</label><select id="newProgramDepartment" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="">Add a department first</option></select></div>
+                                <div><label for="newProgramName" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Program / course name</label><input id="newProgramName" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="Bachelor of Computer Applications"></div>
+                                <div><label for="newProgramCode" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Program code</label><input id="newProgramCode" class="input-premium w-full px-3 py-2 rounded-lg text-white uppercase" placeholder="BCA"></div>
+                                <div><label for="newProgramLevelType" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Level system</label><select id="newProgramLevelType" class="input-premium w-full px-3 py-2 rounded-lg text-white"><option value="semester">Semester</option><option value="year">Year</option><option value="trimester">Trimester</option><option value="custom">Custom levels</option></select></div>
+                                <div><label for="newProgramDuration" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Number of levels</label><input id="newProgramDuration" type="number" min="1" max="30" value="6" class="input-premium w-full px-3 py-2 rounded-lg text-white"></div>
+                                <div><label for="newProgramSections" class="text-[10px] font-mono text-fuchsia-200/80 uppercase block mb-1">Sections per level</label><input id="newProgramSections" value="A, B" class="input-premium w-full px-3 py-2 rounded-lg text-white" placeholder="A, B"></div>
+                                <div class="md:col-span-2 xl:col-span-3"><button type="button" onclick="window.addInstitutionProgramDraft()" class="w-full px-4 py-2.5 bg-indigo-600/20 border border-indigo-400 text-indigo-200 hover:bg-indigo-500 hover:text-white rounded-lg font-mono text-xs font-bold"><i class="fas fa-plus"></i> ADD PROGRAM / COURSE</button></div>
+                            </div>
+                            <div id="institution-program-drafts" class="mt-3 space-y-2"></div>
+                        </section>
+
+                        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                            <button type="button" id="createChairmanBtn" class="flex-1 px-6 py-3 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)] transition"><i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN</button>
+                            <button type="button" id="cancelInstitutionEditBtn" onclick="window.startNewInstitution()" class="hidden-el px-5 py-3 bg-slateSurface text-white rounded-lg font-mono text-xs font-bold border border-glassBorder">CANCEL EDIT</button>
                         </div>
-                        <button id="createChairmanBtn"
-                            class="mt-4 px-6 py-2 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)] transition">DEPLOY
-                            NODE</button>
+                        <p id="institution-provision-feedback" class="text-xs font-mono text-coolLight mt-3" aria-live="polite"></p>
+                    </div>
+                </div>
+
+                <div id="tab-institutions" class="tab-content hidden-el space-y-8">
+                    <div class="glass-card p-6 md:p-8 rounded-2xl border border-cyan-500/25 shadow-[0_0_20px_rgba(0,240,255,0.08)]">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                            <div><h3 class="text-xl font-display font-bold text-white"><i class="fas fa-building-columns text-cyan-400 mr-2"></i>Institution Registry</h3><p class="text-xs text-coolLight mt-2">Institutions are read from <code>public.schools</code>; type is <code>institution_type</code>. The ID shown here is the same tenant ID used by Chairman, staff, and students.</p></div>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" onclick="window.startNewInstitution()" class="px-4 py-2 bg-tealAccent hover:bg-tealHover text-slateBase rounded-lg font-mono text-xs font-bold"><i class="fas fa-plus mr-1"></i>CREATE INSTITUTION</button>
+                                <button type="button" onclick="window.loadInstitutionRegistry()" class="px-4 py-2 bg-slateSurface border border-glassBorder hover:border-cyan-400 text-coolLight hover:text-white rounded-lg font-mono text-xs"><i class="fas fa-rotate"></i> REFRESH</button>
+                            </div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                            <input id="institution-search" type="search" oninput="window.renderInstitutionRegistry()" placeholder="Search name, code, or institution ID" class="input-premium min-w-0 flex-1 px-3 py-2 rounded-lg text-white font-mono text-xs">
+                            <select id="institution-type-filter" onchange="window.renderInstitutionRegistry()" class="input-premium px-3 py-2 rounded-lg text-white font-mono text-xs"><option value="all">All types</option><option value="school">Schools</option><option value="college">Colleges</option></select>
+                        </div>
+                        <div class="overflow-x-auto rounded-xl border border-glassBorder">
+                            <table class="w-full min-w-[850px] text-left border-collapse">
+                                <thead class="bg-slateSurface/80 text-cyan-300/80 font-mono uppercase text-[10px] font-bold tracking-widest border-b border-glassBorder"><tr><th class="p-3">Institution</th><th class="p-3">Type</th><th class="p-3">Chairman / Principal</th><th class="p-3">Portal access</th><th class="p-3">Admissions</th><th class="p-3 text-right">Actions</th></tr></thead>
+                                <tbody id="institution-table-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"><tr><td colspan="6" class="p-5 text-center text-coolGray">Institution registry loads when opened.</td></tr></tbody>
+                            </table>
+                        </div>
+                        <p class="text-[10px] text-coolGray mt-3">Deactivate / activate uses the existing Chairman account status controls. It does not create a second institution ID or alter student data.</p>
                     </div>
                 </div>
 
@@ -3448,7 +3566,7 @@
     </div>
 
     <!-- Prevent aggressive caching of script.js -->
-    <script src="script.js?v=20260902"></script>
+    <script src="script.js?v=202610021530"></script>
 
 </body>
 
