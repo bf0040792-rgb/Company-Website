@@ -1114,8 +1114,8 @@
                         data-target="tab-institutions"><i class="fas fa-building-columns text-cyan-400 w-5 text-center"></i> Institutions</button>
                     <button
                         class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-school-id"><i class="fas fa-id-card text-fuchsia-400 w-5 text-center"></i> School
-                        ID</button>
+                        data-target="tab-school-id"><i class="fas fa-id-card text-fuchsia-400 w-5 text-center"></i> School &amp;
+                        College IDs</button>
                     <button
                         class="menu-item w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
                         data-target="tab-modules"><i class="fas fa-user-astronaut text-blue-400 w-5 text-center"></i>
@@ -1570,6 +1570,15 @@
 
                 <div id="tab-school-id" class="tab-content hidden-el space-y-8">
 
+                    <div class="flex flex-col gap-1">
+                        <h3 class="text-2xl font-display font-extrabold text-white flex items-center gap-3">
+                            <i class="fas fa-school text-fuchsia-400 drop-shadow-[0_0_8px_rgba(232,121,249,0.7)]"></i>
+                            School <span class="text-fuchsia-400">&amp;</span> College
+                            <span class="text-tealAccent">IDs</span>
+                        </h3>
+                        <p id="institution-ids-email" class="text-[11px] font-mono font-bold text-tealAccent tracking-widest"></p>
+                    </div>
+
                     <div
                         class="glass-card p-6 rounded-2xl border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.1)] mb-8">
                         <div class="flex justify-between items-center mb-4">
@@ -1597,10 +1606,19 @@
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-display font-bold text-white"><i
                                     class="fas fa-network-wired text-indigo-400"></i> Active Network Nodes</h3>
-                            <select id="filterChairmenSchool" onchange="window.filterChairmenList()"
-                                class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono">
-                                <option value="ALL">-- GLOBAL NETWORK --</option>
-                            </select>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <select id="filterNodeType" onchange="window.filterChairmenList()"
+                                    class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono"
+                                    aria-label="Filter institutions by type">
+                                    <option value="ALL">-- ALL TYPES --</option>
+                                    <option value="school">SCHOOLS</option>
+                                    <option value="college">COLLEGES</option>
+                                </select>
+                                <select id="filterChairmenSchool" onchange="window.filterChairmenList()"
+                                    class="input-premium px-3 py-1.5 rounded-lg text-white text-xs font-mono">
+                                    <option value="ALL">-- GLOBAL NETWORK --</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="overflow-x-auto rounded-xl border border-glassBorder">
                             <table class="w-full text-left border-collapse">
@@ -1609,6 +1627,8 @@
                                     <tr>
                                         <th class="p-4">Logo</th>
                                         <th class="p-4">Node</th>
+                                        <th class="p-4">Institution ID</th>
+                                        <th class="p-4">Type</th>
                                         <th class="p-4">Commander</th>
                                         <th class="p-4">Status</th>
                                         <th class="p-4">Security</th>

@@ -351,6 +351,8 @@ async function bootstrapDashboard(user) {
 
         const adminEmailEl = document.getElementById("adminEmail");
         if (adminEmailEl) adminEmailEl.innerText = user.email;
+        const instIdsEmailEl = document.getElementById("institution-ids-email");
+        if (instIdsEmailEl) instIdsEmailEl.innerText = (user.email || "").toLowerCase();
 
         const roleFooterEl = document.getElementById("role-footer");
         if (roleFooterEl) {
@@ -831,6 +833,7 @@ window.loadInstitutionRegistry = async () => {
         }));
         window.institutionRegistryChairmen = window.institutionRegistryData.map(school => school.chairman).filter(Boolean);
         window.renderInstitutionRegistry();
+        if (typeof window.filterChairmenList === "function") window.filterChairmenList();
     } catch (error) {
         console.error("Institution registry failed:", error);
         body.innerHTML = `<tr><td colspan="6" class="p-5 text-center text-rose-400">Could not load institutions: ${institutionEsc(error.message || error)}</td></tr>`;
@@ -940,29 +943,75 @@ window.toggleInstitutionAccess = (schoolId) => {
 };
 
 window.filterChairmenList = () => {
-    const sid = document.getElementById("filterChairmenSchool").value; let html = ""; let ls = window.fetchedChairmen;
+    const body = document.getElementById("chairmanTableBody");
+    if (!body) return;
+    const sid = document.getElementById("filterChairmenSchool").value;
+    const typeFilterEl = document.getElementById("filterNodeType");
+    const typeFilter = typeFilterEl ? typeFilterEl.value : "ALL";
+    const registry = window.institutionRegistryData || [];
+    const typeOf = (schoolId, fallback) => {
+        const rec = registry.find(r => r.id === schoolId);
+        return normalizeInstitutionType(rec ? rec.institution_type : fallback);
+    };
+
+    // Chairman rows come from the users table; institutions from the registry
+    // that are not present there are merged in so every school/college ID is
+    // always listed (with a NO CHAIRMAN / registry-only row when needed).
+    let ls = (window.fetchedChairmen || []).slice();
+    registry.forEach(school => {
+        if (ls.some(c => c.schoolId === school.id)) return;
+        const ch = school.chairman || null;
+        ls.push({
+            id: ch ? (ch.id || "") : "",
+            schoolId: school.id,
+            schoolName: school.schoolName || (ch && ch.schoolName) || "",
+            name: ch ? (ch.name || "") : "",
+            email: ch ? (ch.email || "") : "",
+            logoUrl: (ch && ch.logoUrl) || school.logoUrl || "",
+            status: ch ? (ch.status || "active") : "active",
+            shadowBan: ch ? ch.shadowBan : false,
+            plainPassword: ch ? ch.plainPassword : "",
+            subscriptionTier: ch ? ch.subscriptionTier : "",
+            institution_type: school.institution_type,
+            noChairman: !ch
+        });
+    });
+
     if (sid !== "ALL" && sid !== "") { ls = ls.filter(c => c.schoolId === sid); }
+    if (typeFilter !== "ALL") { ls = ls.filter(c => typeOf(c.schoolId, c.institution_type) === typeFilter); }
+
+    let html = "";
     (ls || []).forEach(dt => {
+        const instType = typeOf(dt.schoolId, dt.institution_type);
+        const typeBadge = instType === "college"
+            ? '<span class="inline-flex px-2 py-1 rounded border border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300 text-[10px] font-bold font-mono uppercase tracking-widest">COLLEGE</span>'
+            : '<span class="inline-flex px-2 py-1 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 text-[10px] font-bold font-mono uppercase tracking-widest">SCHOOL</span>';
         const sc = dt.status === "blocked" ? "text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10" : "text-emerald-400 border border-emerald-500/50 shadow-[0_0_5px_rgba(16,185,129,0.3)] bg-emerald-500/10";
         const bb = dt.status === "blocked" ? `<button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="updateStatus('${dt.id}', 'active')">UNBLOCK</button>` : `<button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] font-mono transition" onclick="updateStatus('${dt.id}', 'blocked')">BLOCK</button>`;
         const shadowBtn = dt.shadowBan ? `<button class="px-2 py-1 bg-slate-600/50 border border-slate-500 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition" onclick="toggleShadowBan('${dt.id}', false)"><i class="fas fa-eye"></i> UNBAN</button>` : `<button class="px-2 py-1 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded text-[10px] font-mono transition" onclick="toggleShadowBan('${dt.id}', true)"><i class="fas fa-ghost"></i> SHADOW BAN</button>`;
-        html += `<tr class="hover:bg-slateSurface/50 transition">
-            <td class="p-4"><img src="${dt.logoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
-            <td class="p-4 sensitive-data font-bold text-white">${dt.schoolName}</td>
-            <td class="p-4 sensitive-data text-gray-200">${dt.name}<br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.email}</span></td>
-            <td class="p-4"><span class="${sc} px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">${(dt.status || 'ACTIVE').toUpperCase()}</span></td>
-            <td class="p-4">${dt.shadowBan ? '<span class="text-purple-400 text-[10px] font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]">SHADOW BANNED</span>' : '<span class="text-coolGray text-[10px] font-mono tracking-widest">STANDARD</span>'}</td>
-            <td class="p-4 text-right flex justify-end gap-1">
+        const actions = dt.id ? `
                 <button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.impersonateUser('${dt.id}', '${dt.schoolId}', '${dt.email}', '${dt.plainPassword}')"><i class="fas fa-user-secret"></i></button>
                 <button class="px-2 py-1 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded text-[10px] transition" onclick="window.openEditChairman('${dt.id}')"><i class="fas fa-edit"></i></button>
                 <button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.openLicenseModal('${dt.schoolId}')"><i class="fas fa-calendar-check"></i></button>
                 <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.generateGSTInvoice('${dt.schoolId}', '${dt.schoolName.replace(/'/g, "\\'")}', '${dt.email}', '${dt.subscriptionTier || 'Starter'}')"><i class="fas fa-file-invoice"></i></button>
                 ${bb} ${shadowBtn}
-                <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteChairman('${dt.id}', '${dt.schoolId}')"><i class="fas fa-trash"></i></button>
-            </td>
+                <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteChairman('${dt.id}', '${dt.schoolId}')"><i class="fas fa-trash"></i></button>`
+            : `<button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 hover:bg-indigo-600 hover:text-white rounded text-[10px] font-mono transition" onclick="window.openInstitutionEditor('${dt.schoolId}')"><i class="fas fa-sliders"></i> CONFIGURE</button>`;
+        const statusCell = dt.noChairman
+            ? '<span class="text-amber-300 border border-amber-500/40 bg-amber-500/10 px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">NO CHAIRMAN</span>'
+            : `<span class="${sc} px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">${(dt.status || 'ACTIVE').toUpperCase()}</span>`;
+        html += `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-4"><img src="${dt.logoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
+            <td class="p-4 sensitive-data font-bold text-white">${dt.schoolName}</td>
+            <td class="p-4"><code class="text-tealAccent font-mono text-[11px] font-bold tracking-wider">${dt.schoolId || "—"}</code></td>
+            <td class="p-4">${typeBadge}</td>
+            <td class="p-4 sensitive-data text-gray-200">${dt.name || "—"}<br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.email || ""}</span></td>
+            <td class="p-4">${statusCell}</td>
+            <td class="p-4">${dt.shadowBan ? '<span class="text-purple-400 text-[10px] font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]">SHADOW BANNED</span>' : '<span class="text-coolGray text-[10px] font-mono tracking-widest">STANDARD</span>'}</td>
+            <td class="p-4 text-right"><div class="flex justify-end gap-1">${actions}</div></td>
         </tr>`;
     });
-    document.getElementById("chairmanTableBody").innerHTML = html || "<tr><td colspan='6' class='text-center p-4 text-coolGray font-mono'>NO NODES FOUND</td></tr>";
+    body.innerHTML = html || "<tr><td colspan='8' class='text-center p-4 text-coolGray font-mono'>NO NODES FOUND</td></tr>";
 };
 
 window.openEditChairman = async (uid) => {
