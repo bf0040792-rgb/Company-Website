@@ -1,91 +1,102 @@
-# Company Portal School / College provisioning verification
+# Company Portal institution provisioning — review and test checklist
 
-## Scope and prerequisites
+## Scope and authority boundaries
 
-This checklist covers the Company Portal wizard and registry against the reference School/Chairman tenant architecture. The reference repository is read-only; changes and the Company migration are in this repository only.
+Company creates an institution identity and manages institution-level details only: Institution ID, name, School/College type, code, contact/address/location, registration and affiliation details, logo/branding, subscription, initial Chairman/Principal login, and basic settings. The existing `public.schools` row is the institution. `schools.id` is the shared tenant key used by the Chairman account and tenant rows as `schoolId`.
 
-1. In the **reference School/Chairman repository**, review and manually apply its Phase A migration (`20261002140000_phase_a_institution_architecture.sql`) and the updated staff-portal RLS script (`supabase/2026-10-02_staff_portal_rls.sql`) in the project owner's chosen order. The Company migration depends on the Phase A tables and fields.
-2. Manually review and apply `supabase/migrations/20261002153000_company_institution_provisioning.sql` from this repository. It adds the School/College discriminator to the existing Company registration request tables and creates tightly role-checked Company RPCs; it does not change RLS policies.
-3. Sign in to the Company Portal with a `developer`, `admin`, `superadmin`, or `root` account represented in `public.users`. Confirm the existing `create_chairman_auth_user` and `deploy_tenant_node` RPCs are available. Use a non-production/test Supabase project and unique emails/passwords.
+Company does **not** create or manage school classes, College departments, programs/courses, levels, sections, HODs, or staff. Each institution creates and manages those records from its own Chairman/Principal portal. The Company and Chairman portals are separate repositories; this change modifies only the Company Portal.
 
-Do not run the checks below against production data unless approved by the project owner. SQL examples use `SCHOOL_ID` / `COLLEGE_ID` as placeholders.
+This file is a pre-migration checklist, not evidence of live-database validation. Do not run production migrations or SQL solely by following it. The project owner must review the implementation/migration report and compare the SQL assumptions with the live Supabase schema first.
 
-## School creation and edit
+## Prerequisites to review before any manual migration
 
-1. Open **Create Institution**. Confirm a generated `INS-...` ID appears and can be regenerated before creation.
-2. Select **School**. Enter a school name and optional institution code; choose an initial Chairman/Principal name, email, password, and display role. Keep the ID, type, name, and credentials unique to the test.
-3. Set an academic session, leave the default class selection or change it, enter sections such as `A, B`, add subjects such as `English, Mathematics, Science`, set admission/brand fields, and optionally upload a logo.
-4. Click **CREATE INSTITUTION & CHAIRMAN** once. Expect a success toast containing the ID. Open **Institutions** and confirm the School row, type, Chairman/Principal, and admission state appear. Search by ID/name and filter to Schools.
-5. Verify the database uses the exact same tenant key everywhere:
+1. Review the Chairman/School reference architecture migration `20261002140000_phase_a_institution_architecture.sql` and the updated staff-portal RLS script `supabase/2026-10-02_staff_portal_rls.sql` in the designated reference repository. The Phase A architecture defines `public.schools` as the existing institution table and `schools.id` / tenant `schoolId` text values as the shared tenant key. It supplies the institution discriminator and the academic tables used by the institution portal.
+2. Review this repository's `supabase/migrations/20261002153000_company_institution_provisioning.sql` only after checking its prerequisites against the live schema. It adds School/College type to Company registration-workflow rows and creates role-checked Company RPCs; it does not create tenant academic rows or change RLS policies.
+3. On the live schema, inspect `provider_id` and the definitions, ownership, grants, and side effects of `create_chairman_auth_user` and `deploy_tenant_node`. The Company code does not set `provider_id`; its live meaning and the deploy RPC's handling of it are not established by this repository.
+4. Verify the signed-in Company's `public.users` row, `id = auth.uid()::text`, and an allowed role (`developer`, `admin`, `superadmin`, or `root`). Also verify that a user without a Company row cannot create/update their own role to one of those values. The current Company login bootstrap contains a missing-profile self-provisioning path; see the report's permission review before relying on the RPC role gate.
+5. Use a non-production/test project and unique IDs, emails, and passwords for acceptance tests. A test project is not a substitute for comparing the live production schema and function definitions.
+
+## Company creation — School and College
+
+Run the same institution-level workflow once with **School** and once with **College**:
+
+1. Open **Create Institution**. Confirm a generated `INS-...` ID appears, can be regenerated before creation, and is editable. Enter a unique ID only if the owner-approved format permits it.
+2. Select School or College. Enter the name, code, contact phone/email, website, address and location, registration/affiliation details, branding/logo, subscription, admission/basic settings, and initial Chairman/Principal name, email, and password. For registration-driven setup, check that the approved registration's type and details are carried over.
+3. Submit once. Confirm the UI shows the same Institution ID. Open **Institutions**, search by ID/name/code, filter by type, and verify the institution and initial Chairman/Principal are listed.
+4. Verify tenant identity with read-only queries in the approved test project:
 
    ```sql
    select id, "schoolName", institution_type, institution_code,
-          academic_config, "themeColor", "secondaryColor", "admissionOpen", "examSubjects"
+          "themeColor", "secondaryColor", "admissionOpen", "logoUrl", "branding"
      from public.schools
-    where id = 'SCHOOL_ID';
+    where id = 'INSTITUTION_ID';
 
    select id, "schoolId", role, "staffRole", name, email, status
      from public.users
-    where "schoolId" = 'SCHOOL_ID';
-
-   select id, "schoolId", name, "isCurrent"
-     from public.academic_sessions
-    where "schoolId" = 'SCHOOL_ID';
-
-   select id, "schoolId", name, code, kind, "programId"
-     from public.academic_levels
-    where "schoolId" = 'SCHOOL_ID'
-    order by "sortOrder";
-
-   select "schoolId", class, name, "levelId", "academicSessionId"
-     from public.sections
-    where "schoolId" = 'SCHOOL_ID';
+    where "schoolId" = 'INSTITUTION_ID';
    ```
 
-   Expected: `schools.id`, Chairman `users.schoolId`, academic session/level `schoolId`, and section `schoolId` all equal `SCHOOL_ID`. School `examSubjects` stays compatible with the Chairman portal's existing exam-subject setting where that column is available.
-6. Sign in to the Chairman portal using the created account and confirm it resolves to the same institution. In the Company registry, click **CONFIGURE**. Confirm ID and type are disabled/stable. Change a safe profile value (for example, name, admission state, or a subject), save, and confirm the same row/ID is updated. Existing academic rows are retained; this workflow does not delete omitted classes, departments, programs, levels, or sections.
-7. Click **DEACTIVATE**, confirm, and verify the linked Chairman row's status becomes `blocked`; click **ACTIVATE** and verify it returns to `active`. Confirm these actions do not create another institution or alter students.
+   Expected: `schools.id` equals the generated Institution ID, and the initial Chairman/Principal's `users.schoolId` equals that exact value. Existing `schools.id` values must never be regenerated by an edit.
+5. Confirm Company setup did not provision tenant academic or staff rows. Before the institution's portal is used, query the applicable reference tables (`departments`, `programs`, `academic_sessions`, `academic_levels`, `sections`, and `staff_assignments`) scoped to this ID and confirm the Company workflow inserted none. Do not use this check to delete or “clean up” pre-existing institution data.
+6. Sign in to the institution's own Chairman/Principal portal using its initial login. That institution—not Company—creates any school classes or College departments/programs/levels/sections, HODs, and staff. Verify created tenant rows retain the same `schoolId` as `schools.id`; a College's programs reference departments belonging to that same institution.
 
-## College creation and edit
+## Institution metadata edit and access controls
 
-1. Open **Create Institution**, generate a fresh ID, select **College**, and enter a different institution name and unique Chairman/Principal account.
-2. Set a session. Add at least one department (for example, `Computer Applications` / `CA`) and at least one program/course (for example, `Bachelor of Computer Applications` / `BCA`). Choose a level system (for example, Semester), a count (for example, 6), and section names (for example, `A, B`). Add a second department/program too if verifying multiple records.
-3. Save once. In **Institutions**, confirm the College row and search/type filter. Verify the shared tenant key and reference hierarchy:
+1. In **Institutions**, open **CONFIGURE**. Confirm Institution ID and School/College type are stable and disabled. Update safe institution-level values (for example, website, contact email, logo/brand color, affiliation number, or admission setting) and save.
+2. Confirm the existing `schools.id` and Chairman `users.schoolId` are unchanged. Compare tenant academic/staff row counts before and after; Company metadata edits must not insert, delete, or rewrite them.
+3. Test a type change against a disposable institution. The Company UI prevents it; the `company_configure_institution` RPC should reject a type change once dependent academic/student data exists. Do not run an ad hoc production `UPDATE` for this test.
+4. Use **DEACTIVATE** and **ACTIVATE** for a disposable Chairman account. Confirm only Chairman access/status for the selected Institution ID changes, and that another institution's account and tenant data are unaffected.
+5. From a non-Company authenticated account, call the Company registry, ID-availability, configuration, and access RPCs. Confirm the request is denied. From an unauthenticated/anon client, confirm the privileged RPCs cannot be executed. Repeat after reviewing the live `public.users` grants/policies and the login bootstrap path noted above.
 
-   ```sql
-   select id, "schoolName", institution_type, institution_code, academic_config
-     from public.schools
-    where id = 'COLLEGE_ID';
+## Registration intake
 
-   select id, "schoolId", name, code, status
-     from public.departments
-    where "schoolId" = 'COLLEGE_ID';
+1. Submit one School and one College registration request in the test project. Confirm the type remains `school` / `college` in `pending_registrations` and, after approval, in `accepted_registrations`.
+2. Check registration lookup loads institution-level fields and type only. **AUTO DEPLOY** creates the institution and initial Chairman/Principal account; it must not create a department/program/academic structure. The institution completes that work from its own portal.
+3. Simulate a failure at each provisioning boundary in a disposable test project. Record whether an Auth user, school row, or Company metadata can be left behind, and whether retry is safe. The current UI makes multiple RPC requests; do not assume the full workflow is atomic.
 
-   select id, "schoolId", "departmentId", name, code, "levelType", duration, status
-     from public.programs
-    where "schoolId" = 'COLLEGE_ID';
+## Suggested read-only schema review queries
 
-   select id, "schoolId", "departmentId", "programId", name, code, kind, "sortOrder"
-     from public.academic_levels
-    where "schoolId" = 'COLLEGE_ID'
-    order by "sortOrder";
+Run only after the project owner has selected the database and reviewed permissions. These queries inspect the schema/function definitions; they do not execute migrations or modify rows.
 
-   select id, "schoolId", "levelId", "programId", class, name, "academicSessionId"
-     from public.sections
-    where "schoolId" = 'COLLEGE_ID';
-   ```
+```sql
+-- Find provider_id columns across non-system schemas.
+select n.nspname as schema_name, c.relname as table_name, a.attname as column_name,
+       format_type(a.atttypid, a.atttypmod) as data_type
+  from pg_attribute a
+  join pg_class c on c.oid = a.attrelid
+  join pg_namespace n on n.oid = c.relnamespace
+ where a.attnum > 0 and not a.attisdropped
+   and a.attname = 'provider_id'
+   and n.nspname not in ('pg_catalog', 'information_schema')
+ order by n.nspname, c.relname;
 
-   Expected: every row's `schoolId` is exactly `COLLEGE_ID`; each program's `departmentId` points to a department in that college; each generated semester/year/trimester/custom level and section points to the same college and the appropriate program/level. Level codes match the Chairman portal's three-letter prefixes (`SEM`, `YEA`, `TRI`, `LEV`); the example uses `BCA-SEM1` through `BCA-SEM6`.
-4. Re-open **CONFIGURE**. Confirm College structure is reconstructed from the reference `departments`, `programs`, `academic_levels`, `sections`, and `academic_sessions` tables, not only from a Company-side list. Add a new program or increase a level count, save, and verify new rows appear while pre-existing rows remain. Department/program status is preserved during edits.
-5. Verify the type is stable: the edit form disables it, and a direct attempt to change type through `company_configure_institution` after academic/student rows exist is rejected.
-6. Create a second College with new ID, department, program, and Chairman. Confirm it appears independently in the registry and its rows never use the first College's `schoolId`.
+-- Inspect current provisioning RPC source without invoking it.
+select n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) as arguments,
+       p.prosecdef as security_definer, pg_get_userbyid(p.proowner) as owner,
+       pg_get_functiondef(p.oid) as definition
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('create_chairman_auth_user', 'deploy_tenant_node');
 
-## Registration intake and tenant-isolation checks
+-- Inspect explicit EXECUTE grants for the Company provisioning RPCs.
+select routine_schema, routine_name, grantee, privilege_type
+  from information_schema.routine_privileges
+ where routine_schema = 'public'
+   and routine_name in (
+     'company_institution_setup_ready', 'company_institution_id_available',
+     'company_list_institutions', 'company_set_chairman_access',
+     'company_configure_institution'
+   )
+ order by routine_name, grantee;
+```
 
-1. In public registration, submit one School request and one College request. Confirm each `pending_registrations.institution_type` is saved correctly, and that approved registration lookup preserves it through `accepted_registrations.institution_type`.
-2. If **AUTO DEPLOY** is used for a College request, the public request form captures its type but not a department/program design. Complete its academic setup with **CONFIGURE** before treating it as ready for normal College operations.
-3. With Chairman A signed in, query/read the Phase A tenant-scoped tables for College/School B. RLS should return no rows for B (or deny a write); repeat with a non-Company account. Do not add policies to make these cross-tenant checks pass. The Company registry/provisioning operations should work only through the new Company RPCs and the existing tenant deployment RPCs.
+## Local validation
 
-## Expected browser/build checks
+The Company Portal is a static HTML/JavaScript project without a package manifest or repository test runner. Before requesting migration review, run:
 
-The Company portal is a static HTML/JavaScript site without a package manifest or repository test/lint script. At minimum run `node --check script.js`, `git diff --check`, and the HTML-hook/ID checks described in the change report. Real database/RLS acceptance still requires the owner's manual Supabase migration and test project.
+```sh
+node --check script.js
+git diff --check
+```
+
+Also check that the Company form has no academic-structure controls or stale JavaScript hooks, that HTML IDs are unique, and that no Company-side academic provisioning payload remains. Browser, Auth, RLS, SQL-function, `provider_id`, and failure/retry acceptance require the owner's test project and live-schema review; none is claimed as verified by local static checks.
