@@ -460,6 +460,7 @@ function activateCompanyTab(targetId, menuItem = null) {
     }
 
     target.classList.remove('hidden-el');
+    if (targetId === 'tab-institutions') window.loadInstitutionRegistry?.();
     if (targetId === 'tab-audit-logs') window.loadAuditLogs();
     if (targetId === 'tab-device-tracking') window.loadDeviceLogs();
     if (targetId === 'tab-transfer-approvals') window.loadTransferApprovals();
@@ -514,91 +515,469 @@ window.initQuotaMonitor = () => {
 // 6. CHAIRMEN & TENANT DEPLOYMENT
 // ==========================================
 window.fetchRegistrationDetails = async () => {
-    const regNo = document.getElementById("fetchRegNo").value.trim();
+    const regNo = document.getElementById("fetchRegNo")?.value.trim();
     if (!regNo) { window.showToast("PLEASE ENTER REGISTRATION NO", "#e11d48"); return; }
 
     try {
         const docId = regNo.replace(/\//g, "_");
-        const { data: docSnap } = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
-        if (!docSnap) {
+        const { data, error } = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
+        if (error) throw error;
+        if (!data) {
             window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
             return;
         }
 
-        const data = docSnap;
+        const set = (id, value) => { const el = document.getElementById(id); if (el && value != null) el.value = value; };
+        set("schoolName", data.schoolName || "");
+        set("chairmanName", data.principalName || "");
+        set("chairmanEmail", data.email || "");
+        set("chairmanPassword", data.password || "");
+        set("provisionContactEmail", data.contactEmail || data.email || "");
+        set("provisionPhone", data.phone || "");
+        set("provisionAltPhone", data.altPhone || "");
+        set("provisionAffiliationNo", data.affiliationNo || "");
+        set("provisionBoard", data.board || "");
+        set("provisionSchoolSegment", data.schoolType || "");
+        set("provisionWebsite", data.website || "");
+        set("provisionCountry", data.country || "");
+        set("provisionState", data.state || "");
+        set("provisionDistrict", data.district || "");
+        set("provisionPincode", data.pincode || "");
+        set("provisionAddress", data.address || "");
+        set("institutionCode", data.institution_code || data.institutionCode || "");
+        set("institutionType", normalizeInstitutionType(data.institution_type));
+        window.toggleInstitutionSetupFields();
 
-        // Auto-fill fields
-        document.getElementById("schoolName").value = data.schoolName || "";
-        document.getElementById("chairmanName").value = data.principalName || "";
-        document.getElementById("chairmanEmail").value = data.email || "";
-        document.getElementById("chairmanPassword").value = data.password || "";
-
-        // Logo is tricky because it's a file input. We can store the data URL globally and bypass the file check,
-        // but it requires changing createChairmanBtn logic to accept a pre-filled logoData.
+        // File inputs cannot be populated from a URL; the deployment handler
+        // safely reuses this approved registration logo instead.
         window.fetchedRegLogoData = data.logoUrl || null;
-        window.fetchedRegFullData = data; // store all data for later
-
-        window.showToast("DETAILS AUTO-FILLED SUCCESSFULLY!", "#10b981");
-
+        window.fetchedRegFullData = data;
+        window.showToast("REGISTRATION DETAILS LOADED", "#10b981");
     } catch (e) {
-        console.error(e);
-        window.showToast("ERROR FETCHING DETAILS", "#e11d48");
+        console.error("Registration lookup failed:", e);
+        window.showToast("ERROR FETCHING DETAILS: " + (e.message || e), "#e11d48");
     }
 };
 
+const normalizeInstitutionType = value => String(value || "school").trim().toLowerCase() === "college" ? "college" : "school";
+const institutionEsc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+const splitInstitutionList = value => String(value || "").split(/[\n,;]/).map(item => item.trim()).filter(Boolean).filter((item, index, all) => all.findIndex(candidate => candidate.toLowerCase() === item.toLowerCase()) === index);
+const defaultAcademicSessionName = () => {
+    const year = new Date().getFullYear();
+    return `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
+};
+const makeInstitutionId = () => {
+    const randomPart = window.crypto?.randomUUID ? window.crypto.randomUUID().replace(/-/g, "").slice(0, 12) : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    return `INS-${randomPart.toUpperCase()}`;
+};
+let institutionDepartmentDrafts = [];
+window.editingInstitutionId = null;
+window.currentInstitutionEditRecord = null;
+
+window.generateInstitutionId = () => {
+    const input = document.getElementById("institutionId");
+    if (input && !input.disabled) input.value = makeInstitutionId();
+};
+
+window.toggleInstitutionSetupFields = () => {
+    const isCollege = normalizeInstitutionType(document.getElementById("institutionType")?.value) === "college";
+    document.getElementById("school-academic-config")?.classList.toggle("hidden-el", isCollege);
+    document.getElementById("college-academic-config")?.classList.toggle("hidden-el", !isCollege);
+    document.getElementById("provision-school-segment-wrap")?.classList.toggle("hidden-el", isCollege);
+};
+
+window.toggleRegistrationInstitutionType = () => {
+    const type = normalizeInstitutionType(document.getElementById("reg-institution-type")?.value);
+    const segment = document.getElementById("registration-school-segment");
+    const segmentSelect = document.getElementById("reg-school-type");
+    if (segment) segment.classList.toggle("hidden-el", type === "college");
+    if (segmentSelect) {
+        segmentSelect.required = type === "school";
+        if (type === "college") segmentSelect.value = "";
+    }
+};
+
+function renderInstitutionAcademicDrafts() {
+    const deptBox = document.getElementById("institution-department-drafts");
+    const programBox = document.getElementById("institution-program-drafts");
+    const departmentSelect = document.getElementById("newProgramDepartment");
+    if (departmentSelect) {
+        departmentSelect.innerHTML = institutionDepartmentDrafts.length
+            ? institutionDepartmentDrafts.map(dept => `<option value="${institutionEsc(dept.key)}">${institutionEsc(dept.name)} (${institutionEsc(dept.code)})</option>`).join("")
+            : '<option value="">Add a department first</option>';
+    }
+    if (deptBox) {
+        deptBox.innerHTML = institutionDepartmentDrafts.length ? institutionDepartmentDrafts.map(dept => `
+            <div class="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 items-center rounded-lg border border-glassBorder bg-slateSurface/40 p-3">
+                <input aria-label="Department name" data-department-name="${institutionEsc(dept.key)}" value="${institutionEsc(dept.name)}" class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs">
+                <input aria-label="Department code" data-department-code="${institutionEsc(dept.key)}" value="${institutionEsc(dept.code)}" ${dept.id ? "readonly" : ""} class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs uppercase">
+                ${dept.id ? '<span class="text-[10px] text-coolGray text-center">Existing row · retained on save</span>' : `<button type="button" data-remove-department="${institutionEsc(dept.key)}" class="px-3 py-2 text-rose-300 border border-rose-500/40 rounded-lg text-xs" aria-label="Remove draft department"><i class="fas fa-trash"></i></button>`}
+            </div>`).join("") : '<p class="text-[11px] text-coolGray py-2">No departments added yet.</p>';
+        deptBox.querySelectorAll("[data-department-name]").forEach(input => input.addEventListener("input", event => {
+            const dept = institutionDepartmentDrafts.find(item => item.key === event.currentTarget.dataset.departmentName);
+            if (dept) dept.name = event.currentTarget.value;
+        }));
+        deptBox.querySelectorAll("[data-department-code]").forEach(input => input.addEventListener("input", event => {
+            const dept = institutionDepartmentDrafts.find(item => item.key === event.currentTarget.dataset.departmentCode);
+            if (dept) { dept.code = event.currentTarget.value.toUpperCase(); event.currentTarget.value = dept.code; }
+        }));
+        deptBox.querySelectorAll("[data-remove-department]").forEach(button => button.addEventListener("click", event => {
+            const department = institutionDepartmentDrafts.find(item => item.key === event.currentTarget.dataset.removeDepartment);
+            if (department?.id) return;
+            institutionDepartmentDrafts = institutionDepartmentDrafts.filter(item => item.key !== event.currentTarget.dataset.removeDepartment);
+            renderInstitutionAcademicDrafts();
+        }));
+    }
+    if (programBox) {
+        const programs = institutionDepartmentDrafts.flatMap(dept => (dept.programs || []).map(program => ({ ...program, departmentKey: dept.key, departmentName: dept.name, departmentCode: dept.code })));
+        programBox.innerHTML = programs.length ? programs.map(program => `
+            <div class="rounded-lg border border-glassBorder bg-slateSurface/40 p-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+                    <input aria-label="Program name" data-program-name="${institutionEsc(program.key)}" value="${institutionEsc(program.name)}" class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs">
+                    <input aria-label="Program code" data-program-code="${institutionEsc(program.key)}" value="${institutionEsc(program.code)}" ${program.id ? "readonly" : ""} class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs uppercase">
+                    <select aria-label="Program level type" data-program-level-type="${institutionEsc(program.key)}" ${Number(program.levelCount) > 0 ? "disabled" : ""} class="input-premium min-w-0 px-3 py-2 rounded-lg text-white text-xs">
+                        <option value="semester" ${program.levelType === "semester" ? "selected" : ""}>Semester · ${Number(program.duration) || 0}</option>
+                        <option value="year" ${program.levelType === "year" ? "selected" : ""}>Year · ${Number(program.duration) || 0}</option>
+                        <option value="trimester" ${program.levelType === "trimester" ? "selected" : ""}>Trimester · ${Number(program.duration) || 0}</option>
+                        <option value="custom" ${program.levelType === "custom" ? "selected" : ""}>Custom · ${Number(program.duration) || 0}</option>
+                    </select>
+                    <div class="flex gap-2"><input aria-label="Program level count" data-program-duration="${institutionEsc(program.key)}" type="number" min="${Math.max(1, Number(program.levelCount) || 1)}" max="30" value="${Number(program.duration) || 1}" class="input-premium w-24 px-3 py-2 rounded-lg text-white text-xs"><input aria-label="Sections for program" data-program-sections="${institutionEsc(program.key)}" value="${institutionEsc((program.sections || []).join(", "))}" class="input-premium min-w-0 flex-1 px-3 py-2 rounded-lg text-white text-xs"></div>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-2 text-[10px] text-coolGray"><span>${institutionEsc(program.departmentName)} (${institutionEsc(program.departmentCode)})</span>${program.id ? '<span>Existing academic levels are retained.</span>' : `<button type="button" data-remove-program="${institutionEsc(program.key)}" class="text-rose-300 hover:text-white">Remove draft</button>`}</div>
+            </div>`).join("") : '<p class="text-[11px] text-coolGray py-2">Add a program/course after adding a department.</p>';
+        programBox.querySelectorAll("[data-program-name]").forEach(input => input.addEventListener("input", event => updateDraftProgram(event.currentTarget.dataset.programName, "name", event.currentTarget.value)));
+        programBox.querySelectorAll("[data-program-code]").forEach(input => input.addEventListener("input", event => { event.currentTarget.value = event.currentTarget.value.toUpperCase(); updateDraftProgram(event.currentTarget.dataset.programCode, "code", event.currentTarget.value); }));
+        programBox.querySelectorAll("[data-program-level-type]").forEach(input => input.addEventListener("change", event => updateDraftProgram(event.currentTarget.dataset.programLevelType, "levelType", event.currentTarget.value)));
+        programBox.querySelectorAll("[data-program-duration]").forEach(input => input.addEventListener("input", event => updateDraftProgram(event.currentTarget.dataset.programDuration, "duration", Number(event.currentTarget.value))));
+        programBox.querySelectorAll("[data-program-sections]").forEach(input => input.addEventListener("input", event => updateDraftProgram(event.currentTarget.dataset.programSections, "sections", splitInstitutionList(event.currentTarget.value))));
+        programBox.querySelectorAll("[data-remove-program]").forEach(button => button.addEventListener("click", event => {
+            const programKey = event.currentTarget.dataset.removeProgram;
+            const program = institutionDepartmentDrafts.flatMap(dept => dept.programs || []).find(item => item.key === programKey);
+            if (program?.id) return;
+            institutionDepartmentDrafts.forEach(dept => { dept.programs = (dept.programs || []).filter(item => item.key !== programKey); });
+            renderInstitutionAcademicDrafts();
+        }));
+    }
+}
+
+function updateDraftProgram(key, field, value) {
+    for (const dept of institutionDepartmentDrafts) {
+        const program = (dept.programs || []).find(item => item.key === key);
+        if (program) { program[field] = value; break; }
+    }
+}
+
+window.addInstitutionDepartmentDraft = () => {
+    const nameInput = document.getElementById("newDepartmentName");
+    const codeInput = document.getElementById("newDepartmentCode");
+    const name = nameInput?.value.trim() || "";
+    const code = codeInput?.value.trim().toUpperCase() || "";
+    if (!name || !code) return window.showToast("ENTER A DEPARTMENT NAME AND CODE", "#e11d48");
+    if (institutionDepartmentDrafts.some(dept => dept.code.toLowerCase() === code.toLowerCase())) {
+        return window.showToast("DEPARTMENT CODE ALREADY EXISTS IN THIS INSTITUTION", "#e11d48");
+    }
+    institutionDepartmentDrafts.push({ key: makeInstitutionId(), name, code, programs: [] });
+    nameInput.value = "";
+    codeInput.value = "";
+    renderInstitutionAcademicDrafts();
+};
+
+window.addInstitutionProgramDraft = () => {
+    const departmentKey = document.getElementById("newProgramDepartment")?.value;
+    const name = document.getElementById("newProgramName")?.value.trim() || "";
+    const code = document.getElementById("newProgramCode")?.value.trim().toUpperCase() || "";
+    const levelType = document.getElementById("newProgramLevelType")?.value || "semester";
+    const duration = Number(document.getElementById("newProgramDuration")?.value || 0);
+    const sections = splitInstitutionList(document.getElementById("newProgramSections")?.value || "");
+    const department = institutionDepartmentDrafts.find(item => item.key === departmentKey);
+    if (!department) return window.showToast("ADD OR SELECT A DEPARTMENT FIRST", "#e11d48");
+    if (!name || !code) return window.showToast("ENTER A PROGRAM NAME AND CODE", "#e11d48");
+    if (!Number.isInteger(duration) || duration < 1 || duration > 30) return window.showToast("PROGRAM LEVEL COUNT MUST BE 1–30", "#e11d48");
+    if (institutionDepartmentDrafts.some(dept => dept.programs.some(program => program.code.toLowerCase() === code.toLowerCase()))) {
+        return window.showToast("PROGRAM CODE ALREADY EXISTS IN THIS INSTITUTION", "#e11d48");
+    }
+    department.programs.push({ key: makeInstitutionId(), name, code, levelType, duration, sections });
+    document.getElementById("newProgramName").value = "";
+    document.getElementById("newProgramCode").value = "";
+    renderInstitutionAcademicDrafts();
+};
+
+function buildInstitutionAcademicConfig(type) {
+    const sessionName = document.getElementById("academicSessionName")?.value.trim() || "";
+    if (!sessionName) throw new Error("Enter an academic session name.");
+    const startDate = document.getElementById("academicSessionStart")?.value || null;
+    const endDate = document.getElementById("academicSessionEnd")?.value || null;
+    if (startDate && endDate && endDate < startDate) throw new Error("Academic session end date must be on or after its start date.");
+    const config = {
+        version: 1,
+        mode: type,
+        academicSession: { name: sessionName, startDate, endDate, isCurrent: true }
+    };
+    if (type === "school") {
+        const classes = Array.from(document.querySelectorAll(".institution-class-option:checked"), input => input.value);
+        if (!classes.length) throw new Error("Select at least one school class.");
+        config.school = {
+            classes,
+            sections: splitInstitutionList(document.getElementById("schoolSectionNames")?.value || ""),
+            subjects: splitInstitutionList(document.getElementById("schoolSubjects")?.value || "")
+        };
+    } else {
+        const departments = institutionDepartmentDrafts.map(dept => ({
+            name: dept.name.trim(),
+            code: dept.code.trim().toUpperCase(),
+            programs: (dept.programs || []).map(program => ({
+                name: program.name.trim(),
+                code: program.code.trim().toUpperCase(),
+                levelType: program.levelType,
+                duration: Number(program.duration),
+                sections: Array.isArray(program.sections) ? program.sections : splitInstitutionList(program.sections)
+            }))
+        }));
+        if (!departments.length) throw new Error("Add at least one college department and program/course.");
+        if (departments.some(dept => !dept.name || !dept.code || !dept.programs.length)) throw new Error("Each college department needs a name, code, and at least one program/course.");
+        const programCodes = departments.flatMap(dept => dept.programs.map(program => program.code.toLowerCase()));
+        if (new Set(programCodes).size !== programCodes.length) throw new Error("Program codes must be unique within the institution.");
+        const departmentCodes = departments.map(dept => dept.code.toLowerCase());
+        if (new Set(departmentCodes).size !== departmentCodes.length) throw new Error("Department codes must be unique within the institution.");
+        departments.forEach(dept => dept.programs.forEach(program => {
+            if (!program.name || !program.code || !Number.isInteger(program.duration) || program.duration < 1 || program.duration > 30) {
+                throw new Error(`Check the name, code, and level count for ${program.code || "each program"}.`);
+            }
+            if (Number(program.levelCount) > program.duration) {
+                throw new Error(`${program.code} already has ${program.levelCount} academic levels; the count cannot be reduced.`);
+            }
+        }));
+        config.college = { departments };
+    }
+    return config;
+}
+
+function buildInstitutionProfile() {
+    const contactEmail = document.getElementById("provisionContactEmail")?.value.trim()
+        || document.getElementById("chairmanEmail")?.value.trim()
+        || "";
+    const type = normalizeInstitutionType(document.getElementById("institutionType")?.value);
+    return {
+        phone: document.getElementById("provisionPhone")?.value.trim() || "",
+        altPhone: document.getElementById("provisionAltPhone")?.value.trim() || "",
+        email: contactEmail,
+        website: document.getElementById("provisionWebsite")?.value.trim() || "",
+        affiliationNo: document.getElementById("provisionAffiliationNo")?.value.trim() || "",
+        board: document.getElementById("provisionBoard")?.value || "",
+        schoolType: type === "school" ? (document.getElementById("provisionSchoolSegment")?.value || "") : "",
+        country: document.getElementById("provisionCountry")?.value.trim() || "",
+        state: document.getElementById("provisionState")?.value.trim() || "",
+        district: document.getElementById("provisionDistrict")?.value.trim() || "",
+        pincode: document.getElementById("provisionPincode")?.value.trim() || "",
+        address: document.getElementById("provisionAddress")?.value.trim() || "",
+        regNo: window.fetchedRegFullData?.regNo || "",
+        secondaryColor: document.getElementById("provisionSecondaryColor")?.value || "#ffffff",
+        chairmanRole: document.getElementById("assignedRole")?.value || "Chairman"
+    };
+}
+
+async function ensureCompanyInstitutionSetupReady() {
+    const { data, error } = await supabaseClient.rpc("company_institution_setup_ready");
+    if (error) {
+        throw new Error("Institution provisioning SQL is not ready. Apply the Chairman Phase A migration and this Company Portal migration first. " + error.message);
+    }
+    if (data !== true) throw new Error("The signed-in Company account is not authorized to provision institutions.");
+}
+
+async function configureCompanyInstitution({ schoolId, name, type, code, logoUrl, branding, academicConfig, profile, themeColor, admissionOpen }) {
+    return supabaseClient.rpc("company_configure_institution", {
+        p_school_id: schoolId,
+        p_school_name: name,
+        p_institution_type: type,
+        p_institution_code: code || null,
+        p_logo_url: logoUrl || null,
+        p_branding: branding,
+        p_academic_config: academicConfig,
+        p_profile: profile,
+        p_theme_color: themeColor,
+        p_admission_open: admissionOpen
+    });
+}
+
+window.startNewInstitution = (navigate = true) => {
+    window.editingInstitutionId = null;
+    window.currentInstitutionEditRecord = null;
+    const set = (id, value) => { const el = document.getElementById(id); if (el) { el.value = value; el.disabled = false; } };
+    set("institutionId", makeInstitutionId());
+    set("institutionType", "school");
+    set("institutionCode", "");
+    set("schoolName", "");
+    set("provisionPhone", ""); set("provisionAltPhone", ""); set("provisionContactEmail", ""); set("provisionWebsite", "");
+    set("provisionAffiliationNo", ""); set("provisionSchoolSegment", "K-12 (Pre-K to 12)"); set("provisionBoard", "");
+    set("provisionCountry", ""); set("provisionState", ""); set("provisionDistrict", ""); set("provisionPincode", ""); set("provisionAddress", "");
+    set("chairmanName", ""); set("chairmanEmail", ""); set("chairmanPassword", ""); set("assignedRole", "Chairman"); set("subscriptionTier", "Starter"); set("watermarkUrl", "");
+    set("academicSessionName", defaultAcademicSessionName()); set("academicSessionStart", ""); set("academicSessionEnd", "");
+    set("schoolSectionNames", "A, B"); set("schoolSubjects", ""); set("newDepartmentName", ""); set("newDepartmentCode", "");
+    set("newProgramName", ""); set("newProgramCode", ""); set("newProgramLevelType", "semester"); set("newProgramDuration", "6"); set("newProgramSections", "A, B"); set("masterNodeId", "");
+    set("provisionThemeColor", "#1e3c72"); set("provisionSecondaryColor", "#ffffff");
+    const file = document.getElementById("schoolLogo"); if (file) file.value = "";
+    const admissions = document.getElementById("provisionAdmissionOpen"); if (admissions) admissions.checked = true;
+    const branch = document.getElementById("isSubNode"); if (branch) branch.checked = false;
+    document.getElementById("masterNodeId")?.classList.add("hidden-el");
+    document.getElementById("fetchRegNo").value = "";
+    document.querySelectorAll(".institution-class-option").forEach(input => { input.checked = /^(?:\d+)(?:st|nd|rd|th)$/i.test(input.value); });
+    institutionDepartmentDrafts = [];
+    window.fetchedRegLogoData = null;
+    window.fetchedRegFullData = null;
+    document.getElementById("provision-chairman-fields")?.classList.remove("hidden-el");
+    document.getElementById("cancelInstitutionEditBtn")?.classList.add("hidden-el");
+    document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-building text-tealAccent"></i> Create Institution';
+    document.getElementById("institution-form-subtitle").innerHTML = 'One institution ID is used for <code>schools.id</code>, the Chairman and staff <code>schoolId</code>, and every tenant-scoped row. Choose the portal type before saving.';
+    document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN';
+    document.getElementById("institution-provision-feedback").textContent = "";
+    window.toggleInstitutionSetupFields();
+    renderInstitutionAcademicDrafts();
+    if (navigate) window.openCompanyTab("tab-manage");
+};
+
+function initializeInstitutionProvisioningUI() {
+    if (!document.getElementById("institutionId")) return;
+    window.startNewInstitution(false);
+    window.toggleRegistrationInstitutionType();
+}
+
 const createChairmanBtnEl = document.getElementById("createChairmanBtn");
 if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () => {
-    const sN = document.getElementById("schoolName").value.trim(); const cN = document.getElementById("chairmanName").value.trim(); const em = document.getElementById("chairmanEmail").value.trim(); const pA = document.getElementById("chairmanPassword").value.trim(); const lF = document.getElementById("schoolLogo").files[0]; const b = document.getElementById("createChairmanBtn");
-    if (!sN || !cN || !em || !pA) return window.showToast("FILL ALL PARAMETERS!", "#e11d48");
-    const tier = document.getElementById("subscriptionTier") ? document.getElementById("subscriptionTier").value : "Starter";
-    const isSubNode = document.getElementById("isSubNode") ? document.getElementById("isSubNode").checked : false;
-    const masterNodeId = (isSubNode && document.getElementById("masterNodeId")) ? document.getElementById("masterNodeId").value : "";
-    const watermarkUrl = document.getElementById("watermarkUrl") ? document.getElementById("watermarkUrl").value.trim() : "";
-    b.innerText = "DEPLOYING NODE...";
+    const button = document.getElementById("createChairmanBtn");
+    const feedback = document.getElementById("institution-provision-feedback");
+    const schoolName = document.getElementById("schoolName").value.trim();
+    const type = normalizeInstitutionType(document.getElementById("institutionType").value);
+    const isEditing = Boolean(window.editingInstitutionId);
+    const schoolId = (window.editingInstitutionId || document.getElementById("institutionId").value).trim();
+    const chairmanName = document.getElementById("chairmanName").value.trim();
+    const chairmanEmail = document.getElementById("chairmanEmail").value.trim();
+    const password = document.getElementById("chairmanPassword").value.trim();
+    const logoFile = document.getElementById("schoolLogo").files[0];
+    const institutionCode = document.getElementById("institutionCode").value.trim();
+    const themeColor = document.getElementById("provisionThemeColor").value || "#1e3c72";
+    const secondaryColor = document.getElementById("provisionSecondaryColor").value || "#ffffff";
+    const admissionOpen = document.getElementById("provisionAdmissionOpen").checked;
+
+    if (!schoolName) return window.showToast("INSTITUTION NAME IS REQUIRED", "#e11d48");
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(schoolId)) return window.showToast("INSTITUTION ID MUST BE 3–64 CHARACTERS (LETTERS, NUMBERS, _ OR -)", "#e11d48");
+    if (!isEditing && (!chairmanName || !chairmanEmail || !password)) return window.showToast("INITIAL CHAIRMAN NAME, EMAIL, AND PASSWORD ARE REQUIRED", "#e11d48");
+
+    let academicConfig;
+    try { academicConfig = buildInstitutionAcademicConfig(type); }
+    catch (error) { return window.showToast(error.message, "#e11d48"); }
+
+    const profile = buildInstitutionProfile();
+    const tier = document.getElementById("subscriptionTier")?.value || "Starter";
+    const isSubNode = document.getElementById("isSubNode")?.checked || false;
+    const masterNodeId = isSubNode ? document.getElementById("masterNodeId")?.value || "" : "";
+    const watermarkUrl = document.getElementById("watermarkUrl")?.value.trim() || "";
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> SAVING INSTITUTION...';
+    if (feedback) feedback.textContent = "Checking architecture and tenant identity…";
+
+    let deployed = isEditing;
     try {
-        let lU = "https://via.placeholder.com/40";
-        if (lF) {
-            const upU = await uploadToCloudinary(lF);
-            if (upU) { lU = upU; } else { window.showToast("ASSET UPLOAD FAILED.", "#e11d48"); b.innerText = "DEPLOY NODE"; return; }
-        } else if (window.fetchedRegLogoData) {
-            lU = window.fetchedRegLogoData; // Use the logo data URL from the registration form
+        await ensureCompanyInstitutionSetupReady();
+        if (!isEditing) {
+            const { data: idAvailable, error: availabilityError } = await supabaseClient.rpc("company_institution_id_available", {
+                p_school_id: schoolId
+            });
+            if (availabilityError) throw availabilityError;
+            if (idAvailable !== true) throw new Error("That Institution ID already exists. Generate or enter a different ID.");
         }
 
-        b.innerText = "PROVISIONING ID...";
-        const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
-        const { data: authUserId, error: authErr } = await supabaseClient.rpc("create_chairman_auth_user", { p_email: em, p_password: pA, p_name: pN, p_school_id: sId });
-        if (authErr) { window.showToast("AUTH CREATION FAILED: " + authErr.message, "#e11d48"); b.innerText = "DEPLOY NODE"; return; }
-        const nuId = authUserId;
+        let logoUrl = window.currentInstitutionEditRecord?.logoUrl || window.fetchedRegLogoData || "";
+        if (logoFile) {
+            logoUrl = await uploadToCloudinary(logoFile);
+            if (!logoUrl) throw new Error("Institution logo upload failed.");
+        }
+        const branding = { primaryColor: themeColor, secondaryColor };
 
-        let extraSchoolData = {};
-        if (window.fetchedRegFullData) {
-            extraSchoolData = {
-                regNo: window.fetchedRegFullData.regNo || "",
-                phone: window.fetchedRegFullData.phone || "",
-                altPhone: window.fetchedRegFullData.altPhone || "",
-                affiliationNo: window.fetchedRegFullData.affiliationNo || "",
-                board: window.fetchedRegFullData.board || "",
-                schoolType: window.fetchedRegFullData.schoolType || "",
-                website: window.fetchedRegFullData.website || "",
-                country: window.fetchedRegFullData.country || "",
-                state: window.fetchedRegFullData.state || "",
-                district: window.fetchedRegFullData.district || "",
-                pincode: window.fetchedRegFullData.pincode || "",
-                address: window.fetchedRegFullData.address || ""
+        if (!isEditing) {
+            const { data: authUserId, error: authError } = await supabaseClient.rpc("create_chairman_auth_user", {
+                p_email: chairmanEmail,
+                p_password: password,
+                p_name: chairmanName,
+                p_school_id: schoolId
+            });
+            if (authError) throw new Error("Chairman Auth creation failed: " + authError.message);
+
+            const extraSchoolData = {
+                ...profile,
+                institution_type: type,
+                institution_code: institutionCode || null,
+                branding,
+                academic_config: academicConfig,
+                admissionOpen,
+                themeColor
             };
+            const { error: deployError } = await supabaseClient.rpc("deploy_tenant_node", {
+                p_school_id: schoolId,
+                p_chairman_uid: authUserId,
+                p_school_name: schoolName,
+                p_chairman_name: chairmanName,
+                p_email: chairmanEmail,
+                p_password: password,
+                p_logo_url: logoUrl,
+                p_tier: tier,
+                p_is_sub_node: isSubNode,
+                p_master_node_id: masterNodeId || null,
+                p_watermark_url: watermarkUrl || null,
+                p_extra_data: extraSchoolData
+            });
+            if (deployError) throw new Error("Tenant deployment failed: " + deployError.message);
+            deployed = true;
         }
 
-        const { error: rpcErr } = await supabaseClient.rpc("deploy_tenant_node", { p_school_id: sId, p_chairman_uid: nuId, p_school_name: sN, p_chairman_name: cN, p_email: em, p_password: pA, p_logo_url: lU, p_tier: tier, p_is_sub_node: isSubNode, p_master_node_id: masterNodeId, p_watermark_url: watermarkUrl, p_extra_data: extraSchoolData || {} }); if (rpcErr) throw rpcErr;
-        window.showToast("✅ TENANT NODE DEPLOYED!"); window.logAudit("Provisioned Node", sN);
+        const { data: setupResult, error: setupError } = await configureCompanyInstitution({
+            schoolId,
+            name: schoolName,
+            type,
+            code: institutionCode,
+            logoUrl,
+            branding,
+            academicConfig,
+            profile,
+            themeColor,
+            admissionOpen
+        });
+        if (setupError) throw new Error("Institution row created, but the reference configuration could not be saved: " + setupError.message);
 
-        // Reset form & fetched data
-        document.getElementById("schoolName").value = ""; document.getElementById("chairmanName").value = ""; document.getElementById("chairmanEmail").value = ""; document.getElementById("chairmanPassword").value = ""; document.getElementById("schoolLogo").value = "";
-        if (document.getElementById("fetchRegNo")) document.getElementById("fetchRegNo").value = "";
-        window.fetchedRegLogoData = null; window.fetchedRegFullData = null;
-        if (document.getElementById("watermarkUrl")) document.getElementById("watermarkUrl").value = "";
-        loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff();
-    } catch (err) { window.showToast("ERROR: " + err.message, "#e11d48"); } finally { b.innerText = "DEPLOY NODE"; }
+        window.logAudit(isEditing ? "Updated Institution Configuration" : "Provisioned Institution", `${schoolName} (${schoolId})`);
+        window.showToast(`${isEditing ? "INSTITUTION CONFIGURATION UPDATED" : "INSTITUTION CREATED"} · ID ${schoolId}`, "#10b981");
+        if (feedback) feedback.textContent = `Saved. Institution ID / schools.id / users.schoolId: ${schoolId}.`;
+        await Promise.all([loadChairmen(), loadSchoolsForDropdown(), loadSchoolPayments(), window.loadInstitutionRegistry?.()]);
+        window.startNewInstitution();
+        window.openCompanyTab("tab-institutions");
+    } catch (error) {
+        console.error("Institution provisioning failed:", error);
+        if (deployed && !isEditing) {
+            // Preserve the created ID and switch to edit mode so a transient
+            // metadata/academic RPC failure can be retried without deploying a
+            // second Auth user or a second institution.
+            window.editingInstitutionId = schoolId;
+            window.currentInstitutionEditRecord = { id: schoolId, schoolName, institution_type: type, institution_code: institutionCode, logoUrl: window.currentInstitutionEditRecord?.logoUrl || window.fetchedRegLogoData || "" };
+            document.getElementById("institutionId").value = schoolId;
+            document.getElementById("institutionId").disabled = true;
+            document.getElementById("institutionType").disabled = true;
+            document.getElementById("provision-chairman-fields")?.classList.add("hidden-el");
+            document.getElementById("cancelInstitutionEditBtn")?.classList.remove("hidden-el");
+            document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-save mr-2"></i> RETRY CONFIGURATION SAVE';
+            document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-triangle-exclamation text-amber-400"></i> Finish Institution Configuration';
+            if (feedback) feedback.textContent = `Institution ${schoolId} was deployed. Configuration failed: ${error.message}. Retry this save; do not create the ID again.`;
+            await window.loadInstitutionRegistry?.();
+        } else if (feedback) {
+            feedback.textContent = error.message || String(error);
+        }
+        window.showToast("INSTITUTION SAVE FAILED: " + (error.message || error), "#e11d48");
+    } finally {
+        button.disabled = false;
+        if (window.editingInstitutionId) button.innerHTML = '<i class="fas fa-save mr-2"></i> SAVE INSTITUTION CONFIGURATION';
+        else button.innerHTML = '<i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN';
+    }
 });
+
+initializeInstitutionProvisioningUI();
 
 async function loadChairmen() {
     try {
@@ -609,6 +988,157 @@ async function loadChairmen() {
         window.filterChairmenList(); window.loadPasswordRequests();
     } catch (err) { }
 }
+
+
+window.institutionRegistryData = [];
+window.institutionRegistryChairmen = [];
+window.loadInstitutionRegistry = async () => {
+    const body = document.getElementById("institution-table-body");
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-coolGray"><i class="fas fa-spinner fa-spin mr-2"></i>Loading institutions…</td></tr>';
+    try {
+        const { data, error } = await supabaseClient.rpc("company_list_institutions");
+        if (error) throw error;
+        window.institutionRegistryData = (Array.isArray(data) ? data : []).map(school => ({
+            ...school,
+            institution_type: normalizeInstitutionType(school.institution_type),
+            chairman: school.chairman || null
+        }));
+        window.institutionRegistryChairmen = window.institutionRegistryData.map(school => school.chairman).filter(Boolean);
+        window.renderInstitutionRegistry();
+    } catch (error) {
+        console.error("Institution registry failed:", error);
+        body.innerHTML = `<tr><td colspan="6" class="p-5 text-center text-rose-400">Could not load institutions: ${institutionEsc(error.message || error)}</td></tr>`;
+    }
+};
+
+window.renderInstitutionRegistry = () => {
+    const body = document.getElementById("institution-table-body");
+    if (!body) return;
+    const search = (document.getElementById("institution-search")?.value || "").trim().toLowerCase();
+    const typeFilter = document.getElementById("institution-type-filter")?.value || "all";
+    const rows = (window.institutionRegistryData || []).filter(school => {
+        const matchesType = typeFilter === "all" || school.institution_type === typeFilter;
+        const haystack = [school.schoolName, school.id, school.institution_code, school.chairman?.name, school.chairman?.email].join(" ").toLowerCase();
+        return matchesType && (!search || haystack.includes(search));
+    });
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-coolGray">No institutions match this filter.</td></tr>';
+        return;
+    }
+    body.innerHTML = rows.map(school => {
+        const id = institutionEsc(school.id);
+        const isBlocked = String(school.chairman?.status || "active").toLowerCase() === "blocked";
+        const accessLabel = school.chairman ? (isBlocked ? "Deactivated" : "Active") : "No Chairman";
+        const accessClass = school.chairman ? (isBlocked ? "text-rose-300 border-rose-500/40 bg-rose-500/10" : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10") : "text-amber-300 border-amber-500/40 bg-amber-500/10";
+        const typeClass = school.institution_type === "college" ? "text-fuchsia-300 border-fuchsia-500/40 bg-fuchsia-500/10" : "text-cyan-300 border-cyan-500/40 bg-cyan-500/10";
+        const admissionOpen = school.admissionOpen !== false;
+        return `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-3"><strong class="block text-white">${institutionEsc(school.schoolName || "Unnamed institution")}</strong><span class="text-[10px] text-coolGray">ID: ${id}</span>${school.institution_code ? `<br><span class="text-[10px] text-tealAccent/70">Code: ${institutionEsc(school.institution_code)}</span>` : ""}</td>
+            <td class="p-3"><span class="inline-flex px-2 py-1 rounded border ${typeClass} text-[10px] font-bold uppercase">${institutionEsc(school.institution_type)}</span></td>
+            <td class="p-3">${institutionEsc(school.chairman?.name || "—")}<br><span class="text-[10px] text-coolGray">${institutionEsc(school.chairman?.email || "No account linked")}</span></td>
+            <td class="p-3"><span class="inline-flex px-2 py-1 rounded border ${accessClass} text-[10px] font-bold">${accessLabel}</span></td>
+            <td class="p-3"><span class="${admissionOpen ? "text-emerald-300" : "text-coolGray"}">${admissionOpen ? "Open" : "Closed"}</span></td>
+            <td class="p-3 text-right whitespace-nowrap"><button type="button" data-institution-edit="${id}" class="px-2 py-1 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 hover:bg-indigo-600 hover:text-white rounded text-[10px] mr-1"><i class="fas fa-sliders"></i> CONFIGURE</button>${school.chairman ? `<button type="button" data-institution-access="${id}" class="px-2 py-1 ${isBlocked ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-300" : "bg-rose-600/20 border-rose-500/50 text-rose-300"} border hover:text-white rounded text-[10px]">${isBlocked ? "ACTIVATE" : "DEACTIVATE"}</button>` : ""}</td>
+        </tr>`;
+    }).join("");
+
+    body.querySelectorAll("[data-institution-edit]").forEach(button => button.addEventListener("click", () => window.openInstitutionEditor(button.dataset.institutionEdit)));
+    body.querySelectorAll("[data-institution-access]").forEach(button => button.addEventListener("click", () => window.toggleInstitutionAccess(button.dataset.institutionAccess)));
+};
+
+window.openInstitutionEditor = async (schoolId) => {
+    let school = (window.institutionRegistryData || []).find(item => item.id === schoolId);
+    if (!school) {
+        await window.loadInstitutionRegistry();
+        school = (window.institutionRegistryData || []).find(item => item.id === schoolId);
+    }
+    if (!school) return window.showToast("INSTITUTION NOT FOUND", "#e11d48");
+
+    window.editingInstitutionId = school.id;
+    window.currentInstitutionEditRecord = school;
+    const config = school.academic_config && typeof school.academic_config === "object" ? school.academic_config : {};
+    const branding = school.branding && typeof school.branding === "object" ? school.branding : {};
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ""; };
+    set("institutionId", school.id);
+    set("institutionType", normalizeInstitutionType(school.institution_type));
+    set("institutionCode", school.institution_code || "");
+    set("schoolName", school.schoolName || "");
+    set("provisionThemeColor", school.themeColor || branding.primaryColor || "#1e3c72");
+    set("provisionSecondaryColor", school.secondaryColor || branding.secondaryColor || "#ffffff");
+    set("provisionPhone", school.phone || "");
+    set("provisionAltPhone", school.altPhone || "");
+    set("provisionContactEmail", school.email || school.contactEmail || school.chairman?.email || "");
+    set("provisionWebsite", school.website || "");
+    set("provisionAffiliationNo", school.affiliationNo || "");
+    set("provisionSchoolSegment", school.schoolType || "");
+    set("provisionBoard", school.board || "");
+    set("provisionCountry", school.country || "");
+    set("provisionState", school.state || "");
+    set("provisionDistrict", school.district || "");
+    set("provisionPincode", school.pincode || "");
+    set("provisionAddress", school.address || "");
+    set("assignedRole", ["Chairman", "Principal"].includes(school.chairman?.staffRole) ? school.chairman.staffRole : "Chairman");
+    const admission = document.getElementById("provisionAdmissionOpen");
+    if (admission) admission.checked = school.admissionOpen !== false;
+
+    const session = config.academicSession || {};
+    set("academicSessionName", session.name || defaultAcademicSessionName());
+    set("academicSessionStart", session.startDate || "");
+    set("academicSessionEnd", session.endDate || "");
+    const schoolConfig = config.school || {};
+    const configuredClasses = new Set(Array.isArray(schoolConfig.classes) && schoolConfig.classes.length ? schoolConfig.classes : ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]);
+    document.querySelectorAll(".institution-class-option").forEach(input => { input.checked = configuredClasses.has(input.value); });
+    set("schoolSectionNames", Array.isArray(schoolConfig.sections) ? schoolConfig.sections.join(", ") : "");
+    const subjects = Array.isArray(schoolConfig.subjects) ? schoolConfig.subjects : Array.isArray(school.examSubjects) ? school.examSubjects : [];
+    set("schoolSubjects", subjects.join(", "));
+
+    const collegeConfig = config.college || {};
+    institutionDepartmentDrafts = Array.isArray(collegeConfig.departments) ? collegeConfig.departments.map(dept => ({
+        id: dept.id || null,
+        key: makeInstitutionId(), name: dept.name || "", code: dept.code || "",
+        programs: (Array.isArray(dept.programs) ? dept.programs : []).map(program => ({
+            id: program.id || null,
+            key: makeInstitutionId(), name: program.name || "", code: program.code || "",
+            levelType: program.levelType || "semester", duration: Number(program.duration) || 1,
+            levelCount: Number(program.levelCount) || 0,
+            sections: Array.isArray(program.sections) ? program.sections : []
+        }))
+    })) : [];
+
+    document.getElementById("institutionId").disabled = true;
+    document.getElementById("institutionType").disabled = true;
+    document.getElementById("provision-chairman-fields")?.classList.add("hidden-el");
+    document.getElementById("cancelInstitutionEditBtn")?.classList.remove("hidden-el");
+    document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-sliders text-cyan-300"></i> Edit Institution Configuration';
+    document.getElementById("institution-form-subtitle").innerHTML = `Editing <code>${institutionEsc(school.id)}</code>. The institution ID and type are stable tenant identity; existing academic records are retained.`;
+    document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-save mr-2"></i> SAVE INSTITUTION CONFIGURATION';
+    document.getElementById("institution-provision-feedback").textContent = "Existing departments, programs, levels, and sections are updated by stable codes or retained; omitted rows are never deleted.";
+    document.getElementById("schoolLogo").value = "";
+    window.toggleInstitutionSetupFields();
+    renderInstitutionAcademicDrafts();
+    window.openCompanyTab("tab-manage");
+};
+
+window.toggleInstitutionAccess = (schoolId) => {
+    const chairmen = (window.institutionRegistryChairmen || []).filter(user => user.schoolId === schoolId && user.role === "chairman");
+    if (!chairmen.length) return window.showToast("NO CHAIRMAN ACCOUNT IS LINKED TO THIS INSTITUTION", "#e11d48");
+    const shouldBlock = chairmen.some(user => String(user.status || "active").toLowerCase() !== "blocked");
+    window.customConfirm(shouldBlock ? "DEACTIVATE CHAIRMAN ACCESS FOR THIS INSTITUTION?" : "ACTIVATE CHAIRMAN ACCESS FOR THIS INSTITUTION?", async () => {
+        try {
+            const { error } = await supabaseClient.rpc("company_set_chairman_access", {
+                p_school_id: schoolId,
+                p_status: shouldBlock ? "blocked" : "active",
+                p_reason: "Institution access deactivated by Company Admin"
+            });
+            if (error) throw error;
+            window.showToast(shouldBlock ? "CHAIRMAN ACCESS DEACTIVATED" : "CHAIRMAN ACCESS ACTIVATED", "#10b981");
+            await Promise.all([loadChairmen(), window.loadInstitutionRegistry()]);
+        } catch (error) {
+            window.showToast("ACCESS UPDATE FAILED: " + (error.message || error), "#e11d48");
+        }
+    });
+};
 
 window.filterChairmenList = () => {
     const sid = document.getElementById("filterChairmenSchool").value; let html = ""; let ls = window.fetchedChairmen;
@@ -2180,6 +2710,7 @@ window.submitSchoolRegistration = async () => {
     const altPhone = document.getElementById('reg-alt-phone').value.trim();
     const affiliationNo = document.getElementById('reg-affiliation-no').value.trim();
     const board = document.getElementById('reg-board').value;
+    const institutionType = normalizeInstitutionType(document.getElementById('reg-institution-type')?.value);
     const schoolType = document.getElementById('reg-school-type').value;
     const website = document.getElementById('reg-website').value.trim();
     const country = document.getElementById('reg-country').value;
@@ -2189,7 +2720,7 @@ window.submitSchoolRegistration = async () => {
     const addr = document.getElementById('reg-address').value.trim();
     const logoInput = document.getElementById('reg-logo').files[0];
 
-    if (!sName || !pName || !email || !pwd || !phone || !affiliationNo || !board || !schoolType || !country || !state || !dist || !pin || !addr || !logoInput) {
+    if (!sName || !pName || !email || !pwd || !phone || !affiliationNo || !board || (institutionType === "school" && !schoolType) || !country || !state || !dist || !pin || !addr || !logoInput) {
         window.showToast('ALL MANDATORY FIELDS AND UPLOADS ARE REQUIRED', '#e11d48');
         return;
     }
@@ -2228,6 +2759,7 @@ window.submitSchoolRegistration = async () => {
             affiliationNo: affiliationNo,
             board: board,
             schoolType: schoolType,
+            institution_type: institutionType,
             website: website,
             country, state, district: dist, pincode: pin, address: addr,
             logoUrl: logoData,
@@ -2393,7 +2925,7 @@ window.loadPendingRegistrations = async () => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td class="p-4"><img src="${data.logoUrl}" class="w-10 h-10 rounded-full border border-glassBorder object-cover"></td>
-                <td class="p-4 font-bold text-white">${data.schoolName}<br><span class="text-[10px] text-emerald-400 font-mono">${data.email}</span></td>
+                <td class="p-4 font-bold text-white">${data.schoolName}<br><span class="text-[10px] text-cyan-300 font-mono uppercase">${institutionEsc(normalizeInstitutionType(data.institution_type))}</span> · <span class="text-[10px] text-emerald-400 font-mono">${data.email}</span></td>
                 <td class="p-4 text-xs text-gray-300">${data.principalName}<br><span class="text-[10px] text-gray-500">${data.phone}</span></td>
                 <td class="p-4 text-xs text-gray-300">${data.district}, ${data.state}</td>
                 <td class="p-4"><a href="${data.authorityLetterUrl}" download="Authority_${data.schoolName}.pdf" class="text-indigo-400 hover:text-indigo-300 underline"><i class="fas fa-download"></i> View</a></td>
@@ -2415,35 +2947,78 @@ window.loadPendingRegistrations = async () => {
     }
 };
 
+function defaultAcademicConfigForType(type) {
+    const normalizedType = normalizeInstitutionType(type);
+    const config = {
+        version: 1,
+        mode: normalizedType,
+        academicSession: { name: defaultAcademicSessionName(), startDate: null, endDate: null, isCurrent: true }
+    };
+    if (normalizedType === "school") {
+        config.school = {
+            classes: ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"],
+            sections: ["A", "B"],
+            subjects: []
+        };
+    } else {
+        config.college = { departments: [] };
+    }
+    return config;
+}
+
 window.approveRegistrationAuto = async (docId) => {
-    window.customConfirm("APPROVE THIS NODE DEPLOYMENT?", async () => {
+    window.customConfirm("APPROVE AND DEPLOY THIS INSTITUTION?", async () => {
         try {
-            const docRef = docId;
-            const { data: docSnap } = await supabaseClient.from(typeof docRef === "string" ? "unknown" : docRef.col).select("*").eq("id", typeof docRef === "string" ? docRef : docRef.id).maybeSingle();
-            if (!docSnap) return;
+            const { data, error: requestError } = await supabaseClient
+                .from("pending_registrations")
+                .select("*")
+                .eq("id", docId)
+                .maybeSingle();
+            if (requestError) throw requestError;
+            if (!data) throw new Error("Pending registration was not found.");
+            await ensureCompanyInstitutionSetupReady();
 
-            const data = docSnap;
+            const type = normalizeInstitutionType(data.institution_type);
+            const schoolId = makeInstitutionId();
+            const { data: idAvailable, error: availabilityError } = await supabaseClient.rpc("company_institution_id_available", {
+                p_school_id: schoolId
+            });
+            if (availabilityError) throw availabilityError;
+            if (idAvailable !== true) throw new Error("Generated Institution ID is already in use. Retry the approval.");
+            const registrationNo = `CORE/REG/EDU/${Math.floor(100000 + Math.random() * 900000)}`;
+            const profile = {
+                phone: data.phone || "",
+                altPhone: data.altPhone || "",
+                email: data.email || "",
+                website: data.website || "",
+                affiliationNo: data.affiliationNo || "",
+                board: data.board || "",
+                schoolType: type === "school" ? (data.schoolType || "") : "",
+                country: data.country || "",
+                state: data.state || "",
+                district: data.district || "",
+                pincode: data.pincode || "",
+                address: data.address || "",
+                regNo: registrationNo,
+                secondaryColor: "#ffffff",
+                chairmanRole: "Principal"
+            };
+            const academicConfig = defaultAcademicConfigForType(type);
+            const branding = { primaryColor: "#1e3c72", secondaryColor: "#ffffff" };
 
-            // Generate Registration No
-            const randomDigits = Math.floor(100000 + Math.random() * 900000);
-            const regNo = `CORE/REG/EDU/${randomDigits}`;
-
-            // 1. Create Chairman Auth user securely via RPC
-            const sId = "NODE-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
-            const { data: authUserId, error: authErr } = await supabaseClient.rpc("create_chairman_auth_user", {
+            const { data: chairmanUid, error: authError } = await supabaseClient.rpc("create_chairman_auth_user", {
                 p_email: data.email,
                 p_password: data.password,
                 p_name: data.principalName || "Chairman",
-                p_school_id: sId
+                p_school_id: schoolId
             });
-            if (authErr) { window.showToast("AUTH CREATION FAILED: " + authErr.message, "#e11d48"); return; }
+            if (authError) throw new Error("Chairman Auth creation failed: " + authError.message);
 
-            // 2. Provision Node via RPC
-            const { error: rpcErr } = await supabaseClient.rpc("deploy_tenant_node", {
-                p_school_id: sId,
-                p_chairman_uid: authUserId,
+            const { error: deployError } = await supabaseClient.rpc("deploy_tenant_node", {
+                p_school_id: schoolId,
+                p_chairman_uid: chairmanUid,
                 p_school_name: data.schoolName,
-                p_chairman_name: data.principalName,
+                p_chairman_name: data.principalName || "Chairman",
                 p_email: data.email,
                 p_password: data.password,
                 p_logo_url: data.logoUrl || "",
@@ -2452,25 +3027,39 @@ window.approveRegistrationAuto = async (docId) => {
                 p_master_node_id: null,
                 p_watermark_url: null,
                 p_extra_data: {
-                    regNo: regNo,
-                    address: data.address,
-                    phone: data.phone,
-                    district: data.district,
-                    state: data.state,
-                    country: data.country,
-                    pincode: data.pincode
+                    ...profile,
+                    institution_type: type,
+                    institution_code: data.institution_code || null,
+                    branding,
+                    academic_config: academicConfig,
+                    admissionOpen: true,
+                    themeColor: "#1e3c72"
                 }
             });
-            if (rpcErr) throw rpcErr;
-            const sRef = { id: sId };
+            if (deployError) throw new Error("Tenant deployment failed: " + deployError.message);
 
-            // 5. Delete pending request
-            await docRef.delete();
-            window.showToast("NODE PROVISIONED SUCCESSFULLY", "#10b981");
-            window.logAudit("Provisioned Node", data.schoolName);
+            const { error: setupError } = await configureCompanyInstitution({
+                schoolId,
+                name: data.schoolName,
+                type,
+                code: data.institution_code || "",
+                logoUrl: data.logoUrl || "",
+                branding,
+                academicConfig,
+                profile,
+                themeColor: "#1e3c72",
+                admissionOpen: true
+            });
+            if (setupError) throw new Error(`Institution ${schoolId} was deployed, but configuration failed: ${setupError.message}`);
 
-        } catch (err) {
-            window.showToast("ERROR: " + err.message, "#e11d48");
+            const { error: deleteError } = await supabaseClient.from("pending_registrations").delete().eq("id", docId);
+            if (deleteError) throw deleteError;
+            window.showToast(`INSTITUTION DEPLOYED · ${schoolId}`, "#10b981");
+            window.logAudit("Provisioned Institution from Registration", `${data.schoolName} (${schoolId})`);
+            await Promise.all([loadChairmen(), loadSchoolsForDropdown(), loadSchoolPayments(), window.loadInstitutionRegistry?.(), window.loadPendingRegistrations()]);
+        } catch (error) {
+            console.error("Registration deployment failed:", error);
+            window.showToast("DEPLOYMENT ERROR: " + (error.message || error), "#e11d48");
         }
     });
 };
