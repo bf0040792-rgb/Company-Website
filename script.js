@@ -316,12 +316,20 @@ async function bootstrapDashboard(user) {
         if (udErr) console.warn("Could not query user profile:", udErr.message);
 
         const role = ud?.role?.toLowerCase();
-        const isAllowed = !ud || ["developer", "admin", "superadmin", "root"].includes(role);
+        const isAllowed = !ud || ["developer", "admin", "superadmin", "root", "company"].includes(role);
 
         if (!isAllowed) {
-            await supabaseClient.auth.signOut();
+            const deniedMsg = "ACCESS DENIED: ROLE '" + (ud?.role || "UNKNOWN") + "' is not authorized for the Company Portal. Chairman/Principal accounts must use SCHOOL LOGIN; only company/root accounts use SYSTEM LOGIN.";
             window.showToast("ACCESS DENIED. ROLE: " + (ud?.role || "UNKNOWN"), "#e11d48");
-            hideLoginModal();
+            await supabaseClient.auth.signOut();
+            setTimeout(() => {
+                const lm = document.getElementById("login-modal");
+                if (lm) { lm.classList.remove("hidden-el"); lm.classList.replace("opacity-0", "opacity-100"); }
+                const box = document.getElementById("login-modal-box");
+                if (box) box.classList.replace("scale-95", "scale-100");
+                const deniedEl = document.getElementById("loginErrorMsg");
+                if (deniedEl) { deniedEl.innerText = deniedMsg; deniedEl.classList.remove("hidden-el"); }
+            }, 350);
             return;
         }
 
