@@ -2694,7 +2694,7 @@ window.submitSchoolLogin = async () => {
         let isChairman = false;
         let userData = {};
         try {
-            const { data: docSnap } = await supabaseClient.from("users").select("*").eq("id", userId).maybeSingle();
+            const { data: docSnap } = await tempAuthClient.from("users").select("*").eq("id", userId).maybeSingle();
             if (docSnap && docSnap.role === "chairman") {
                 isChairman = true;
                 userData = docSnap;
@@ -2714,7 +2714,7 @@ window.submitSchoolLogin = async () => {
                 } catch (e) { console.warn("IP fetch failed", e); }
                 const coordinates = await getBrowserCoordinates();
 
-                await supabaseClient.from("login_logs").insert([{
+                await tempAuthClient.from("login_logs").insert([{
                     userId: userId,
                     uid: userId,
                     email: email,
@@ -4446,3 +4446,5 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
+
