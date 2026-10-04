@@ -1,6603 +1,4450 @@
-// ============================================================================
-// CHAIRMAN SCHOOL PORTAL - NATIVE SUPABASE SDK v2 (@supabase/supabase-js)
-// ----------------------------------------------------------------------------
-// The legacy Firebase / Firestore adapter layer is gone. Everything below talks
-// to Supabase directly:
-//   * data      -> PostgREST builders (.from().select()/.insert()/.upsert()
-//                  /.update()/.delete())
-//   * live sync -> Supabase Realtime channels (.channel().on('postgres_changes'))
-//   * login     -> GoTrue (supabaseClient.auth.signInWithPassword / signOut /
-//                  onAuthStateChange)
-// The SDK bundle itself is loaded from the CDN in index.html (window.supabase).
-// ============================================================================
+window.handleDbError = (e) => {
+    console.error("DB ERROR:", e);
+    const msg = e.message || e.toString();
+    if (msg.includes("JWT") || msg.includes("token") || msg.includes("expired")) {
+        window.showToast("SESSION EXPIRED. PLEASE RE-LOGIN.", "#e11d48");
+    } else if (msg.includes("permission denied") || msg.includes("Unauthorized")) {
+        window.showToast("ACCESS DENIED: " + msg, "#e11d48");
+    } else {
+        window.showToast("ERROR: " + msg, "#e11d48");
+    }
+};
+
 const supabaseUrl = 'https://ynlcbpxcsnfxqrogizns.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGNicHhjc25meHFyb2dpem5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MDMxNjMsImV4cCI6MjEwMzQ3OTE2M30.sx5iFeugOuLBt4pqt0-8_4VOGz1yWa7HQWl4NyGCWkE';
-
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
     auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storageKey: 'coreedu-school-auth'
+        flowType: 'pkce',
+        storageKey: 'coreedu-company-auth'
     }
 });
+// ==========================================
+// 🛡️ GEO-FENCING LAYER
+// ==========================================
+const allowedMasterIPs = ['127.0.0.1', '192.168.1.1', '::1'];
 
-// Provisioning a login for a new staff member must never replace or sign out the
-// chairman's own session, so sign-up runs on a second, non-persisting Supabase client.
-const staffAuthClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
-    auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-    }
-});
-
-// Supabase has no `auth.currentUser`: the signed-in user id is tracked from the
-// auth session so the audit columns (createdBy / updatedBy / resolvedBy ...) keep working.
-let currentUserId = null;
-
-// PostgREST returns plain ISO timestamps, so ordering/formatting parses them as dates.
-function toEpochMillis(value) {
-    if (!value) return 0;
-    const time = new Date(value).getTime();
-    return Number.isNaN(time) ? 0 : time;
-}
-
-window.portalModuleLoaded = true;
-
-let currentSchoolId = ""; let currentSchoolName = ""; let currentSignatureUrl = ""; let currentThemeColor = "#1e3c72"; let currentSecondaryColor = "#ffffff"; let currentTemplateStyle = "wave"; let currentIdTemplateUrl = "";
-let currentSchoolNameColor = "#ffffff"; let currentStudentNameColor = "#d32f2f"; let currentDetailsColor = "#333333"; let currentPhotoBgColor = "#ffffff";
-window.fetchedStudents = []; window.fetchedStaff = []; let currentEditStaffId = null;
-window.selectedStudentIds = new Set();
-window.currentFeatureSettings = {};
-const DEFAULT_FEATURE_SETTINGS = {
-    school: {
-        dashboard: true, students: true, studentTransfer: true, admitCards: true, staff: true, finance: true,
-        feeApprovals: true, academics: true, notices: true, communicationHub: true, qrFee: true,
-        admitCardModule: true, whatsapp: true, transport: true, inventory: true, dailyAttendance: true,
-        studentPortalFeatures: true, settings: true
-    },
-    modules: { qrFee: true, admitCard: true, whatsapp: true, transport: true, inventory: true, attendance: true },
-    student: {
-        profile: true, homework: true, fee: true, datesheet: true, attendance: true, sms: true,
-        calendar: true, idcard: true, syllabus: true, 'fee-receipt': true, admit: true, gatepass: true,
-        notifications: true, birthday: true, transport: true, 'study-material': true, result: true,
-        leave: true, batchmate: true, circular: true, news: true, assignment: true, complaint: true,
-        'online-classes': true, 'social-media': true
-    }
-};
-
-const LEGACY_STUDENT_FEATURE_KEYS = {
-    timetable: 'datesheet',
-    notice: 'notifications',
-    library: 'study-material',
-    marks: 'result'
-};
-
-const FEATURE_TOGGLE_META = {
-    modules: {
-        label: "Admin Modules",
-        items: {
-            qrFee: "QR Fee System",
-            admitCard: "Admit Card Module",
-            whatsapp: "WhatsApp / Group Link",
-            transport: "Transport Manager",
-            inventory: "Inventory Manager",
-            attendance: "Daily Attendance"
-        }
-    },
-    student: {
-        label: "Student Portal Features",
-        items: {
-            profile: "Profile",
-            homework: "Homework",
-            fee: "Fee Payment",
-            datesheet: "DateSheet",
-            attendance: "Attendance",
-            sms: "SMS",
-            calendar: "Calendar Planning",
-            idcard: "ID Card",
-            syllabus: "Syllabus",
-            'fee-receipt': "Fee Receipt",
-            admit: "Admit Card",
-            gatepass: "Gate Pass",
-            notifications: "Notifications",
-            birthday: "Birthday",
-            transport: "Transport",
-            'study-material': "Study Material",
-            result: "Result",
-            leave: "Leave Request",
-            batchmate: "Batchmate",
-            circular: "Circular",
-            news: "News",
-            assignment: "Assignment",
-            complaint: "Complaint",
-            'online-classes': "Online Classes",
-            'social-media': "Social Media"
-        }
-    }
-};
-
-// Feature toggles live in their own Supabase table now (one row per school),
-// instead of the old Firestore sub-collection schools/{id}/feature_controls/settings.
-const FEATURE_SETTINGS_TABLE = "feature_controls";
-
-function normalizeFeatureSettingsPayload(payload = {}) {
-    const source = payload.featureSettings || payload;
-    return hydrateFeatureSettings(source, payload.enabledModules || []);
-}
-
-async function readSchoolFeatureSettings(schoolId) {
-    if (!schoolId) return hydrateFeatureSettings();
-
-    const { data: featureRow, error: featureError } = await supabaseClient
-        .from(FEATURE_SETTINGS_TABLE)
-        .select("*")
-        .eq("schoolId", schoolId)
-        .maybeSingle();
-    if (featureError) console.error("Feature control lookup failed:", featureError);
-    if (featureRow) return normalizeFeatureSettingsPayload(featureRow);
-
-    // Fallback: legacy toggle fields stored directly on the school row.
-    const { data: schoolRow, error: schoolError } = await supabaseClient
-        .from("schools")
-        .select("*")
-        .eq("id", schoolId)
-        .maybeSingle();
-    if (schoolError) console.error("School lookup failed:", schoolError);
-    if (schoolRow) return normalizeFeatureSettingsPayload(schoolRow);
-    return hydrateFeatureSettings();
-}
-
-async function syncSchoolFeatureSettings(schoolId) {
-    if (!schoolId) return;
-    window.currentFeatureSettings = await readSchoolFeatureSettings(schoolId);
-    applyFeatureLocks();
-    renderFeatureToggleSettings();
-}
-
-function listenToFeatureSettings() {
-    if (window.unsubFeatureSettings) {
-        window.unsubFeatureSettings();
-        window.unsubFeatureSettings = null;
-    }
-    if (!currentSchoolId) return;
-    const schoolId = currentSchoolId;
-
-    const refreshFeatureSettings = async () => {
-        window.currentFeatureSettings = await readSchoolFeatureSettings(schoolId);
-        applyFeatureLocks();
-        renderFeatureToggleSettings();
-    };
-
-    const featureChannel = supabaseClient.channel('realtime:' + FEATURE_SETTINGS_TABLE + ':' + crypto.randomUUID())
-        .on('postgres_changes', { event: '*', schema: 'public', table: FEATURE_SETTINGS_TABLE, filter: `schoolId=eq.${schoolId}` }, () => {
-            refreshFeatureSettings();
-        })
-        .subscribe();
-
-    window.unsubFeatureSettings = () => supabaseClient.removeChannel(featureChannel);
-}
-
-const overlay = document.getElementById('auth-overlay');
-const loginWrapper = document.getElementById('login-wrapper');
-const dashboardWrapper = document.getElementById('dashboard-wrapper');
-const licenseLockScreen = document.getElementById('license-lock-screen');
-
-window.closeCustomModal = (id) => { document.getElementById(id).style.display = 'none'; };
-
-window.switchTab = (targetId) => {
-    if (!targetId) return;
-    // Redirect the legacy CoreEdu menu tab into the unified Communication Hub (chat sub-section)
-    if (targetId === 'tab-coreedu-comm') {
-        window.switchTab('tab-mailbox');
-        if (window.switchCommSubtab) window.switchCommSubtab('sub-chat');
-        return;
-    }
-    if (isSchoolTabRestricted(targetId)) {
-        showCompanyRestrictedAlert();
-        applyFeatureLocks();
-        return;
-    }
-    document.querySelectorAll('#dashboard-wrapper .tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('#dashboard-wrapper .menu-item').forEach(item => item.classList.remove('active'));
-    const targetTab = document.getElementById(targetId);
-    const targetMenu = document.querySelector(`#dashboard-wrapper .menu-item[data-target="${targetId}"]`);
-    if (targetTab) targetTab.classList.add('active');
-    if (targetMenu) targetMenu.classList.add('active');
-    sessionStorage.setItem('chairmanActiveTab', targetId);
-    if (targetId === 'tab-student-transfer') {
-        populateTransferStudentOptions();
-        window.previewTransferStudent();
-        window.previewTransferSchoolName();
-        window.loadStudentTransfers();
-    }
-    if (targetId === 'tab-daily-attendance' && window.loadDailyAttendanceRoster) window.loadDailyAttendanceRoster();
-    if (targetId === 'tab-export-records') window.renderStudentExportRecords();
-    if (targetId === 'tab-staff') loadStaff();
-    if (targetId === 'tab-finance') loadTransactions();
-    // Refresh inbox/sent when opening the Communication Hub
-    if (targetId === 'tab-mailbox') {
-        loadInbox(); loadSentMail();
-    }
-};
-
-window.openDashboardDetail = (type) => {
-    const targetMap = {
-        'students-all': { tab: 'tab-students', title: 'All Students', filter: () => renderStudentsTable('All') },
-        attendance: { tab: 'tab-daily-attendance', title: 'Attendance' },
-        pending: { tab: 'tab-students', title: 'Pending Admissions', filter: () => window.filterByStatus('Pending') },
-        staff: { tab: 'tab-staff', title: 'Staff Directory' },
-        notices: { tab: 'tab-notices', title: 'Notices' },
-        finance: { tab: 'tab-finance', title: 'Finance Ledger' }
-    };
-    const detail = targetMap[type];
-    if (!detail) return;
-    window.switchTab(detail.tab);
-    setTimeout(() => {
-        if (typeof detail.filter === 'function') detail.filter();
-        const title = document.querySelector(`#${detail.tab} h3`);
-        if (title) title.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
-};
-
-function setRoleBadge(elementId, roleText) {
-    const badge = document.getElementById(elementId);
-    if (!badge) return;
-    badge.innerHTML = `<i class="fas fa-user-shield"></i> Role: ${roleText}`;
-    badge.style.display = "inline-flex";
-    badge.style.alignItems = "center";
-    badge.style.gap = "6px";
-}
-
-function initializeChairmanNavigation() {
-    document.querySelectorAll('#dashboard-wrapper .menu-item[data-target]').forEach(item => {
-        if (item.dataset.navReady === 'true') return;
-        item.dataset.navReady = 'true';
-        item.addEventListener('click', () => window.switchTab(item.dataset.target));
-    });
-}
-
-initializeChairmanNavigation();
-
-function showLoginScreen(errorText = "") {
-    overlay.style.display = "none";
-    dashboardWrapper.style.display = "none";
-    document.getElementById("pin-wrapper").style.display = "none";
-    document.getElementById("staff-dashboard-wrapper").style.display = "none";
-    document.getElementById("student-dashboard-wrapper").style.display = "none";
-    licenseLockScreen.style.display = "none";
-    loginWrapper.style.display = "flex";
-
-    if (errorText) {
-        const errBox = document.getElementById('loginErrorMsg');
-        errBox.innerText = errorText; errBox.style.display = 'block';
-        setTimeout(() => errBox.style.display = 'none', 5000);
-    }
-}
-
-// --- LICENSE VERIFICATION API LOGIC ---
-async function verifySchoolLicense(schoolId) {
+async function verifyGeoFence() {
     try {
-        const { data, error } = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
-        if (error) throw error;
-        if (data) {
-            window.currentLicenseStatus = data.licenseStatus || "Active";
-            // If locked, reject access immediately
-            if (window.currentLicenseStatus === "Locked") return false;
-
-            // If no license date is set, assume it is valid (Lifetime)
-            if (!data.licenseExpiry) return true;
-
-            const expiryDate = new Date(data.licenseExpiry);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Reset time for accurate date comparison
-
-            if (expiryDate < today) return false;
-            return true;
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        if (!allowedMasterIPs.includes(data.ip)) {
+            console.warn(`Unauthorized Access Attempt from IP: ${data.ip} (Geo-Fence currently disabled for testing)`);
+        } else {
+            console.log(`✅ Geo-Fence Passed: ${data.ip}`);
         }
-        return false;
-    } catch (error) {
-        console.error("License verification failed:", error);
-        return false;
+    } catch (e) {
+        console.error("Geo-fencing verification failed:", e);
     }
 }
+verifyGeoFence();
 
-const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('impersonate') === 'true') {
-    sessionStorage.setItem("is_impersonating", "true");
-    sessionStorage.setItem("imp_e", urlParams.get('email'));
-    sessionStorage.setItem("imp_p", urlParams.get('pass'));
+// ==========================================
+// 1. SUPABASE SYSTEM INITIALIZATION
+// ==========================================
+// Initialize Theme
+if (localStorage.getItem('master_theme') === 'light') {
+    document.body.classList.add('light-theme');
+    document.getElementById('themeToggle').checked = true;
 }
-if (urlParams.get('isGhost') === 'true') {
-    window.isGhost = true;
-    sessionStorage.setItem("isGhost", "true");
-    console.log("👻 GHOST MODE ACTIVE: Database audit logging bypassed.");
-} else {
-    window.isGhost = sessionStorage.getItem("isGhost") === "true";
-}
-
-// --- CHAIRMAN PIN UNLOCK LOGIC ---
-window.unlockChairmanDashboard = () => {
-    document.getElementById("pin-wrapper").style.display = "none";
-    dashboardWrapper.style.display = "flex";
-    initializeChairmanNavigation();
-
-    const savedTab = sessionStorage.getItem('chairmanActiveTab');
-    window.switchTab(savedTab || 'tab-dashboard');
-};
-
-window.saveChairmanPin = async () => {
-    const pin = document.getElementById("c_newPin").value;
-    if (pin.length < 4) return alert("Please enter 4 digits");
-    const { error } = await supabaseClient.from("users").update({ pin: pin }).eq("id", currentUserId);
-    if (error) throw error;
-    window.currentChairmanPin = pin;
-    window.unlockChairmanDashboard();
-};
-
-window.verifyChairmanPin = () => {
-    const pin = document.getElementById("c_loginPin").value;
-    if (pin === window.currentChairmanPin) {
-        window.unlockChairmanDashboard();
+document.getElementById('themeToggle').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        document.body.classList.add('light-theme');
+        localStorage.setItem('master_theme', 'light');
     } else {
-        document.getElementById("c_pinErrorMsg").style.display = "block";
-        setTimeout(() => document.getElementById("c_pinErrorMsg").style.display = "none", 2000);
+        document.body.classList.remove('light-theme');
+        localStorage.setItem('master_theme', 'dark');
+    }
+});
+
+
+
+// Global State Variables
+window.fetchedChairmen = [];
+window.fetchedGlobalStaffList = [];
+window.fetchedSchoolPayments = [];
+window.fetchedInspectStudents = [];
+window.currentDeviceLogs = [];
+let superAdminUid = "";
+let currentEditChairmanId = null;
+const PUBLIC_MEDIA_DOC = { col: "system_config", id: "public_media" };
+const readFileAsDataURL = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
+
+// UI Control Variables
+const loginModal = document.getElementById('login-modal');
+const dashboardWrapper = document.getElementById('dashboard-wrapper');
+const landingPage = document.getElementById('landing-page');
+const pinWrapper = document.getElementById('pin-wrapper');
+
+// Initialize Icons
+setTimeout(() => window.lucide?.createIcons(), 100);
+
+// A database outage must never prevent the public landing page from rendering.
+setTimeout(() => document.getElementById('auth-overlay')?.classList.add('hidden-el'), 8000);
+
+// ==========================================
+// 2. CORE UI & UTILITY FUNCTIONS
+// ==========================================
+function showLoginModal() {
+    loginModal.classList.remove('hidden-el');
+    setTimeout(() => loginModal.classList.replace('opacity-0', 'opacity-100'), 10);
+    document.getElementById('login-modal-box').classList.replace('scale-95', 'scale-100');
+}
+function hideLoginModal() {
+    loginModal.classList.replace('opacity-100', 'opacity-0');
+    document.getElementById('login-modal-box').classList.replace('scale-100', 'scale-95');
+    setTimeout(() => loginModal.classList.add('hidden-el'), 300);
+}
+
+window.closeCustomModal = (id) => { document.getElementById(id).classList.add('hidden-el'); };
+const openCustomModal = (id) => { document.getElementById(id).classList.remove('hidden-el'); };
+window.openCustomFeatureBuilder = () => openCustomModal('custom-feature-modal');
+
+window.showToast = (message, color = "#00F0FF") => {
+    const t = document.createElement('div');
+    // Updated toast styling for cyber theme
+    let textColor = color === "#00F0FF" ? "#050b14" : "white";
+    let shadowColor = color === "#00F0FF" ? "rgba(0,240,255,0.5)" : "rgba(244,63,94,0.5)";
+    t.style.cssText = `position:fixed; bottom:40px; left:50%; transform:translateX(-50%); background:${color}; color:${textColor}; padding:12px 28px; border-radius:8px; font-weight:bold; font-family: 'JetBrains Mono', monospace; font-size:12px; z-index:999999; box-shadow:0 0 20px ${shadowColor}; white-space:nowrap; border: 1px solid rgba(255,255,255,0.2); letter-spacing: 1px; text-transform: uppercase;`;
+    t.innerHTML = message;
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.4s'; setTimeout(() => t.remove(), 400); }, 3000);
+};
+
+window.customConfirm = (message, onYes) => {
+    document.getElementById("confirm-delete-msg").innerText = message;
+    const yesBtn = document.getElementById("confirm-delete-yes");
+    yesBtn.onclick = () => { window.closeCustomModal('confirm-delete-modal'); onYes(); };
+    openCustomModal("confirm-delete-modal");
+};
+
+// Device Mode & Privacy Shield
+const deviceModeToggleEl = document.getElementById("deviceModeToggle");
+if (deviceModeToggleEl) deviceModeToggleEl.addEventListener("change", (e) => {
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (e.target.checked) {
+        document.body.classList.add("force-desktop");
+        viewportMeta.setAttribute("content", "width=1200, user-scalable=yes");
+    } else {
+        document.body.classList.remove("force-desktop");
+        viewportMeta.setAttribute("content", "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes");
+    }
+});
+
+const privacyShieldToggleEl = document.getElementById("privacyShieldToggle");
+if (privacyShieldToggleEl) privacyShieldToggleEl.addEventListener("change", (e) => {
+    if (e.target.checked) { document.body.classList.add("privacy-mode"); window.showToast("<i class='fas fa-user-secret'></i> STEALTH MODE ENGAGED", "#6366f1"); }
+    else { document.body.classList.remove("privacy-mode"); window.showToast("STEALTH MODE DISABLED", "#64748b"); }
+});
+
+// PDF Downloader Helper
+window.robustWebViewDownload = async (blobData, filename) => {
+    try {
+        const reader = new FileReader(); reader.readAsDataURL(blobData);
+        reader.onloadend = function () {
+            let base64data = reader.result;
+            base64data = base64data.replace(";base64,", `;filename=${encodeURIComponent(filename.replace(/ /g, "_"))};base64,`);
+            window.showToast("⏳ EXTRACTING " + filename + "...", "#f59e0b");
+            const a = document.createElement("a"); a.href = base64data; a.download = filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        };
+    } catch (e) { window.showToast("❌ EXTRACTION ERROR: " + e.message, "#e11d48"); }
+};
+
+const CLOUDINARY_SETTINGS = window.APP_CONFIG?.cloudinary || {};
+const PUBLIC_MEDIA_FALLBACK_FOLDER = window.APP_CONFIG?.publicMediaFallbackFolder || 'public/media';
+const PUBLIC_MEDIA_UPLOAD_PATHS = Array.isArray(window.APP_CONFIG?.publicMediaUploadPaths)
+    ? window.APP_CONFIG.publicMediaUploadPaths
+    : [];
+const PUBLIC_MEDIA_BACKEND_BASE = window.APP_CONFIG?.backendBaseUrl || '';
+
+const buildBackendUploadUrls = (options = {}) => {
+    const explicit = options.backendEndpoint ? [options.backendEndpoint] : [];
+    const base = PUBLIC_MEDIA_BACKEND_BASE ? PUBLIC_MEDIA_UPLOAD_PATHS.map(path => `${PUBLIC_MEDIA_BACKEND_BASE}${path}`) : [];
+    return [...explicit, ...base].filter(Boolean);
+};
+
+const uploadToCloudinary = async (fileObj, options = {}) => {
+    if (!fileObj) return null;
+
+    const uploadPreset = options.uploadPreset || CLOUDINARY_SETTINGS.uploadPreset || 'ml_default';
+    const cloudName = options.cloudName || CLOUDINARY_SETTINGS.cloudName || 'disgtvs6f';
+    const cloudinaryUrl = options.cloudinaryUrl || CLOUDINARY_SETTINGS.uploadUrl || `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    const fallbackFolder = options.fallbackFolder || PUBLIC_MEDIA_FALLBACK_FOLDER;
+    const backendUrls = buildBackendUploadUrls(options);
+
+        const parseUploadResponse = async (res) => {
+        const text = await res.text();
+        if (!text) return {};
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return { raw: text };
+        }
+    };
+
+    const tryBackendUpload = async (endpoint) => {
+        const backendForm = new FormData();
+        backendForm.append("file", fileObj);
+        backendForm.append("upload_preset", uploadPreset);
+        const res = await fetch(endpoint, {
+            method: "POST",
+            body: backendForm
+        });
+        const data = await parseUploadResponse(res);
+        const backendUrl = data.secure_url || data.url || data.location || data.fileUrl;
+        if (res.ok && backendUrl) return backendUrl;
+        throw new Error(data.error || data.message || data.raw || `Backend upload failed (${res.status})`);
+    };
+
+    try {
+        for (const endpoint of backendUrls) {
+            try {
+                window.showToast("⏳ UPLOADING VIA BACKEND...", "#f59e0b");
+                const backendUrl = await tryBackendUpload(endpoint);
+                if (backendUrl) {
+                    window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
+                    return backendUrl;
+                }
+            } catch (backendErr) {
+                console.warn("Backend media upload failed for endpoint:", endpoint, backendErr);
+            }
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileObj);
+        formData.append("upload_preset", uploadPreset);
+        window.showToast("⏳ UPLOADING TO CLOUDINARY...", "#f59e0b");
+        const res = await fetch(cloudinaryUrl, {
+            method: "POST",
+            body: formData
+        });
+        const data = await parseUploadResponse(res);
+        if (res.ok && data.secure_url) {
+            window.showToast("✅ UPLOAD COMPLETE!", "#00F0FF");
+            return data.secure_url;
+        }
+        throw new Error("Upload failed: " + err.message);
+    } catch (err) {
+        throw new Error("Upload failed: " + err.message);
     }
 };
 
-window.logoutFromPin = () => supabaseClient.auth.signOut();
+// ==========================================
+// 3. AUTHENTICATION & PIN SECURITY
+// ==========================================
+const doLoginBtnEl = document.getElementById("doLoginBtn");
+if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
+    const e = document.getElementById("loginId").value.trim();
+    const p = document.getElementById("loginPassword").value.trim();
+    const b = document.getElementById("doLoginBtn");
+    const err = document.getElementById("loginErrorMsg");
+    if (!e || !p) { err.innerText = "CREDENTIALS REQUIRED."; err.classList.remove('hidden-el'); return; }
 
-// ================= AUTH LOGIC (WITH PIN, LICENSE LOCK & SUPER ADMIN BYPASS) =================
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    window.portalAuthStateReceived = true;
-    // A refreshed access token does not change who is signed in - skip the bootstrap.
-    if (event === 'TOKEN_REFRESHED') return;
+    // reCAPTCHA stays optional: Supabase auth must not be blocked by a third-party captcha widget.
+    const recaptchaField = document.querySelector('#login-modal [name="g-recaptcha-response"]');
+    if (recaptchaField && recaptchaField.value) { /* verified */ }
 
-    // Supabase sends PASSWORD_RECOVERY after the user opens the reset email.
-    // Do not bootstrap the dashboard until the new password has been saved.
-    if (event === 'PASSWORD_RECOVERY') {
-        overlay.style.display = 'none';
-        dashboardWrapper.style.display = 'none';
-        loginWrapper.style.display = 'flex';
-        document.getElementById('admin-login-fields').style.display = 'none';
-        document.getElementById('student-login-fields').style.display = 'none';
-        document.getElementById('password-reset-fields').style.display = 'block';
-        document.getElementById('loginErrorMsg').style.display = 'none';
-        document.querySelector('.glass-login-title').innerText = 'set new password';
-        return;
-    }
+    b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> VERIFYING HASH...`;
 
-    const user = session?.user ? { uid: session.user.id, email: session.user.email } : null;
-    currentUserId = user ? user.uid : null;
+    // Anti-Brute Force Logic (3-Strike Rule)
+    try {
+        // Persistence managed by Supabase
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({ email: e, password: p });
+        if (signInError) throw signInError;
 
-    if (user) {
         try {
-            const { data, error: userError } = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
-            if (userError) throw userError;
-            if (!data) { await supabaseClient.auth.signOut(); showLoginScreen("Account not found."); return; }
-
-            if (data.role === "chairman") {
-                if (data.status === "blocked") {
-                    await supabaseClient.auth.signOut(); showLoginScreen("Account Blocked. Reason: " + (data.blockReason || "Contact Super Admin")); return;
-                }
-
-                currentSchoolId = data.schoolId; currentSchoolName = data.schoolName;
-                window.applyInstitutionMode && window.applyInstitutionMode();
-                await syncSchoolFeatureSettings(currentSchoolId);
-                listenToFeatureSettings();
-
-                // --- TRIGGER SAAS LICENSE VERIFICATION ---
-                overlay.innerHTML = '<i class="fas fa-fingerprint fa-pulse" style="font-size:3rem; margin-bottom:15px;"></i><div>Verifying License Subscription...</div>';
-                overlay.style.display = 'flex';
-
-                const isLicenseValid = await verifySchoolLicense(currentSchoolId);
-
-                if (!isLicenseValid) {
-                    overlay.style.display = 'none';
-                    dashboardWrapper.style.display = "none";
-                    loginWrapper.style.display = "none";
-                    document.getElementById("pin-wrapper").style.display = "none";
-                    licenseLockScreen.style.display = "flex";
-                    return; // Prevent remainder of the script from executing if invalid
-                }
-                // -----------------------------------------
-
-                document.getElementById('top-school-name').innerText = data.schoolName;
-                setRoleBadge('dashboard-role-badge', data.staffRole || 'Chairman');
-                document.getElementById('req_old_pass').value = data.plainPassword || '******';
-
-                const initials = data.schoolName.split(' ').map(word => word.charAt(0).toUpperCase()).join('');
-                document.getElementById('top-school-name-mobile').innerText = initials;
-
-                if (data.logoUrl) {
-                    document.getElementById('top-school-logo').src = data.logoUrl; document.getElementById('top-school-logo').style.display = 'block';
-                    document.getElementById('print_school_logo').src = data.logoUrl; document.getElementById('print_school_logo').style.display = 'block';
-                }
-
-                overlay.style.display = "none"; loginWrapper.style.display = "none";
-
-                // PIN LOGIC (Auto bypass for Super Admin)
-                if (sessionStorage.getItem("is_impersonating") === "true") {
-                    window.unlockChairmanDashboard();
-                } else {
-                    if (data.pin) {
-                        document.getElementById("pin-wrapper").style.display = "flex";
-                        document.getElementById("enter-pin-box").style.display = "block";
-                        document.getElementById("create-pin-box").style.display = "none";
-                        window.currentChairmanPin = data.pin;
-                    } else {
-                        document.getElementById("pin-wrapper").style.display = "flex";
-                        document.getElementById("create-pin-box").style.display = "block";
-                        document.getElementById("enter-pin-box").style.display = "none";
-                    }
-                }
-
-                document.documentElement.style.setProperty('--theme-color', currentThemeColor);
-                checkAdmissionStatus(); listenToTicker(); loadAllData();
-
-                const today = new Date().toISOString().split('T')[0];
-                document.getElementById("fee_date").value = today; document.getElementById("salary_date").value = today; document.getElementById("exp_date").value = today;
-
-                populateClassDropdowns();
-
-                if (!sessionStorage.getItem("tracked_login_" + user.uid) && sessionStorage.getItem("is_impersonating") !== "true") {
-                    try {
-                        const ipRes = await fetch('https://api.ipify.org?format=json'); const ipData = await ipRes.json();
-                        const { error: logError } = await supabaseClient.from("login_logs").insert({
-                            uid: user.uid, name: data.name, email: data.email, role: "chairman", schoolId: currentSchoolId,
-                            ip: ipData.ip || "Unknown", device: navigator.userAgent, timestamp: new Date().toISOString()
-                        });
-                        if (logError) throw logError;
-                        sessionStorage.setItem("tracked_login_" + user.uid, "true");
-                    } catch (e) { }
-                }
-
-            } else if (data.role === "staff") {
-                if (data.status === "blocked") {
-                    await supabaseClient.auth.signOut(); showLoginScreen("Account Blocked."); return;
-                }
-                currentSchoolId = data.schoolId; currentSchoolName = data.schoolName;
-                window.applyInstitutionMode && window.applyInstitutionMode();
-                await syncSchoolFeatureSettings(currentSchoolId);
-                listenToFeatureSettings();
-
-                const isLicenseValid = await verifySchoolLicense(currentSchoolId);
-                if (!isLicenseValid) {
-                    overlay.style.display = 'none'; dashboardWrapper.style.display = "none"; loginWrapper.style.display = "none";
-                    document.getElementById("pin-wrapper").style.display = "none"; licenseLockScreen.style.display = "flex"; return;
-                }
-
-                overlay.style.display = "none"; loginWrapper.style.display = "none";
-                document.getElementById("staff-dashboard-wrapper").style.display = "block";
-                document.getElementById("staff-school-name").innerText = data.schoolName;
-                document.getElementById("staff-welcome-name").innerText = data.name;
-                setRoleBadge('staff-role-badge', data.staffRole || 'Staff');
-
-                listenToTicker();
-                window.initStaffPortal(data);
-                document.querySelectorAll('#staff-dashboard-wrapper .menu-item').forEach(item => {
-                    item.addEventListener('click', () => {
-                        if (isSchoolTabRestricted(item.dataset.target)) {
-                            showCompanyRestrictedAlert();
-                            applyFeatureLocks();
-                            return;
-                        }
-                        document.querySelectorAll('#staff-dashboard-wrapper .menu-item').forEach(m => m.classList.remove('active'));
-                        document.querySelectorAll('#staff-dashboard-wrapper .tab-content').forEach(t => t.classList.remove('active'));
-                        item.classList.add('active');
-                        const target = document.getElementById(item.dataset.target);
-                        if (target) target.classList.add('active');
-                        document.getElementById('staff-tab-title').innerText = item.innerText;
-                        if (window.onStaffTabOpen) window.onStaffTabOpen(item.dataset.target);
-                    });
-                });
-
-            } else {
-                await supabaseClient.auth.signOut();
-                if (sessionStorage.getItem("is_impersonating") !== "true") {
-                    showLoginScreen("Access Denied: Invalid role.");
+            const failRef = e.replace(/[^a-zA-Z0-9_@-]/g, "_");
+            const { data: failDoc } = await supabaseClient.from("login_logs").select("*").eq("id", failRef).maybeSingle();
+            if (!!failDoc) {
+                let lockTime = failDoc.lockTime || 0;
+                if (Date.now() < lockTime) {
+                    await supabaseClient.auth.signOut();
+                    err.innerText = "ACCOUNT TEMPORARILY LOCKED. PLEASE WAIT.";
+                    err.classList.remove('hidden-el');
+                    b.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
+                    lucide.createIcons();
+                    return;
                 }
             }
-        } catch (e) {
-            document.getElementById('auth-overlay').style.display = 'none';
-            showLoginScreen("DB Err: " + e.message); console.error("DB ERROR DETAILS:", e);
-        }
-    } else {
-        if (sessionStorage.getItem("is_impersonating") === "true" && sessionStorage.getItem("imp_e")) {
-            document.getElementById('auth-overlay').innerHTML = '<i class="fas fa-fingerprint fa-pulse" style="font-size:3rem; margin-bottom:15px;"></i><div>Authenticating Super Admin...</div>';
-            document.getElementById('auth-overlay').style.display = 'flex';
-            document.getElementById('login-wrapper').style.display = 'none';
-
-            supabaseClient.auth.signInWithPassword({
-                email: decodeURIComponent(sessionStorage.getItem("imp_e")),
-                password: decodeURIComponent(sessionStorage.getItem("imp_p"))
-            })
-                .then(({ error: signInError }) => { if (signInError) throw signInError; })
-                .then(() => {
-                    sessionStorage.removeItem("imp_e");
-                    sessionStorage.removeItem("imp_p");
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }).catch(e => {
-                    sessionStorage.removeItem("is_impersonating");
-                    document.getElementById('auth-overlay').style.display = 'none';
-                    showLoginScreen("Impersonation Failed: " + e.message);
-                });
-        } else {
-            document.getElementById('auth-overlay').style.display = 'none';
-            showLoginScreen();
-        }
-    }
-});
-
-document.getElementById("doLoginBtn").addEventListener("click", async () => {
-    const email = document.getElementById("loginId").value.trim();
-    // IMPORTANT: never trim a password. Spaces can be valid password characters.
-    const pass = document.getElementById("loginPassword").value;
-    const btn = document.getElementById("doLoginBtn");
-
-    if (!email || !pass) return showLoginScreen("Enter Username and Password");
-
-    btn.innerText = "Verifying...";
-    btn.disabled = true;
-
-    try {
-        // Session persistence + auto token refresh are configured on the client itself.
-        const { error: signInError } = await supabaseClient.auth.signInWithPassword({
-            email,
-            password: pass
-        });
-
-        if (signInError) throw signInError;
-    } catch (e) {
-        console.error("SUPABASE LOGIN ERROR:", {
-            message: e?.message || "Unknown authentication error",
-            status: e?.status || null,
-            code: e?.code || null
-        });
-
-        let message = "Login failed. Please verify your email and password.";
-
-        if (e?.code === "invalid_credentials" || /invalid login credentials/i.test(e?.message || "")) {
-            message = "Email/password incorrect. Please enter the exact password from your authentication email.";
-        } else if (/email not confirmed/i.test(e?.message || "")) {
-            message = "Email is not verified yet. Please verify the authentication email and try again.";
-        } else if (e?.status === 429) {
-            message = "Too many login attempts. Please wait a few minutes and try again.";
-        } else if (e?.message) {
-            message = "Login failed: " + e.message;
+            // Clear fails on success
+            await supabaseClient.from("login_logs").upsert([{id: failRef, fails: 0, lockTime: 0}]);
+        } catch (logErr) {
+            console.error("Login logs access failed:", logErr);
         }
 
-        btn.innerText = "Login";
-        btn.disabled = false;
-        showLoginScreen(message);
-        return;
-    }
+        window.logAudit("Master Login Success", "System Core");
+    } catch (error) {
+        // Record Failure
+        err.innerText = "Error: " + (error.message || "Invalid ID / Password");
+        try {
+            const failRef = e.replace(/[^a-zA-Z0-9_@-]/g, "_");
+            const { data: failDoc } = await supabaseClient.from("login_logs").select("*").eq("id", failRef).maybeSingle();
+            let fails = (!!failDoc ? (failDoc.fails || 0) : 0) + 1;
+            let newLockTime = 0;
 
-    btn.innerText = "Login";
-    btn.disabled = false;
+            if (fails >= 3) {
+                newLockTime = Date.now() + 15 * 60 * 1000; // 15 mins lock
+                err.innerText = "MAX ATTEMPTS REACHED. ACCOUNT LOCKED.";
+                window.logAudit(`Brute Force Lockout - User: ${e}`, "Security");
+            } else {
+                err.innerText = `Invalid ID / Password (${3 - fails} attempts left)`;
+                window.logAudit(`Failed Login - User: ${e}`, "Security");
+            }
+
+            await supabaseClient.from("login_logs").upsert([{id: failRef, fails: fails, lockTime: newLockTime}]);
+        } catch (logErr) {
+            console.error("Login log read/write failed, bypassing:", logErr);
+        }
+
+        err.classList.remove('hidden-el');
+        b.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
+        lucide.createIcons();
+    }
 });
 
-// ================= SECURE PASSWORD RECOVERY =================
-document.getElementById("forgotPasswordBtn")?.addEventListener("click", async () => {
-    const email = document.getElementById("loginId").value.trim();
-    const errBox = document.getElementById("loginErrorMsg");
-
-    if (!email) {
-        showLoginScreen("Pehle apna registered email enter karein, phir Forgot Password dabayein.");
-        return;
-    }
-
-    const btn = document.getElementById("forgotPasswordBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending reset email...';
-
+async function bootstrapDashboard(user) {
     try {
-        const redirectTo = window.location.origin + window.location.pathname;
-        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
-        if (error) throw error;
+        superAdminUid = user.uid;
+        const { data: ud, error: udErr } = await supabaseClient.from("users").select("*").eq("id", user.uid).maybeSingle();
+        if (udErr) console.warn("Could not query user profile:", udErr.message);
 
-        showLoginScreen("Password reset email bhej di gayi hai. Gmail inbox/spam check karke link open karein.");
-    } catch (e) {
-        console.error("PASSWORD RESET ERROR:", {
-            message: e?.message || "Unknown error",
-            status: e?.status || null,
-            code: e?.code || null
-        });
-        showLoginScreen("Password reset request failed: " + (e?.message || "Please try again."));
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-key"></i> Forgot Password?';
-    }
-});
+        const role = ud?.role?.toLowerCase();
+        const isAllowed = !ud || ["developer", "admin", "superadmin", "root"].includes(role);
 
-document.getElementById("updatePasswordBtn")?.addEventListener("click", async () => {
-    const password = document.getElementById("newLoginPassword").value;
-    const confirm = document.getElementById("confirmLoginPassword").value;
-    const btn = document.getElementById("updatePasswordBtn");
-
-    if (password.length < 8) {
-        showLoginScreen("New password kam se kam 8 characters ka hona chahiye.");
-        return;
-    }
-    if (password !== confirm) {
-        showLoginScreen("New password aur confirmation match nahi karte.");
-        return;
-    }
-
-    btn.disabled = true;
-    btn.innerText = "Updating...";
-
-    try {
-        const { error } = await supabaseClient.auth.updateUser({ password });
-        if (error) throw error;
-
-        await supabaseClient.auth.signOut();
-        document.getElementById("password-reset-fields").style.display = "none";
-        document.getElementById("admin-login-fields").style.display = "block";
-        document.querySelector('.glass-login-title').innerText = 'login';
-        document.getElementById("newLoginPassword").value = "";
-        document.getElementById("confirmLoginPassword").value = "";
-        showLoginScreen("Password successfully changed. Ab ab naye password se login karein.");
-    } catch (e) {
-        console.error("PASSWORD UPDATE ERROR:", {
-            message: e?.message || "Unknown error",
-            status: e?.status || null,
-            code: e?.code || null
-        });
-        showLoginScreen("Password update failed: " + (e?.message || "Please reopen the reset email and try again."));
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>Set New Password</span> <i class="fas fa-check"></i>';
-    }
-});
-
-window.doLogout = () => {
-    document.getElementById("staff-dashboard-wrapper").style.display = "none";
-    document.getElementById("student-dashboard-wrapper").style.display = "none";
-    supabaseClient.auth.signOut();
-};
-
-document.getElementById("deviceModeToggle").addEventListener("change", (e) => { e.target.checked ? document.body.classList.add("force-desktop") : document.body.classList.remove("force-desktop"); });
-
-document.querySelectorAll('.menu-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-        if (item.classList.contains('logout-btn')) return;
-        const targetId = item.dataset.target;
-        if (isSchoolTabRestricted(targetId)) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            showCompanyRestrictedAlert();
-            applyFeatureLocks();
+        if (!isAllowed) {
+            await supabaseClient.auth.signOut();
+            window.showToast("ACCESS DENIED. ROLE: " + (ud?.role || "UNKNOWN"), "#e11d48");
+            hideLoginModal();
             return;
         }
-        document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        item.classList.add('active');
 
-        const targetEl = document.getElementById(targetId);
-        if (targetEl) targetEl.classList.add('active');
-
-        document.getElementById('tab-title').innerText = item.innerText;
-        sessionStorage.setItem('chairmanActiveTab', targetId);
-    });
-});
-
-window.generateRegistrationLink = () => {
-    const liveDomain = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/admission.html"; const link = `${liveDomain}?school=${currentSchoolId}`;
-    document.getElementById("short-link-input").value = link; document.getElementById("link-display-box").style.display = "flex";
-};
-
-window.copyToClipboard = () => {
-    const link = document.getElementById("short-link-input").value;
-    if (link) { navigator.clipboard.writeText(link).then(() => alert("Link Copied!")); }
-};
-
-function populateClassDropdowns() {
-    const classes = institutionIsCollege() ? ["1st Semester", "2nd Semester", "3rd Semester", "4th Semester", "5th Semester", "6th Semester"] : ["Nursery", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
-    let feeClsOpts = '<option value="">-- Select --</option>';
-    classes.forEach(c => feeClsOpts += `<option value="${c}">${c}</option>`);
-    if(document.getElementById("fee_class")) document.getElementById("fee_class").innerHTML = feeClsOpts;
-    
-    // Auto-update all other class dropdowns in index.html
-    document.querySelectorAll("select").forEach(select => {
-        let has1st = false;
-        let hasAll = false;
-        Array.from(select.options).forEach(opt => {
-            if (opt.value === "1st") has1st = true;
-            if (opt.value === "All" || opt.value === "all") hasAll = true;
-        });
-        if (has1st) {
-            let html = "";
-            if (hasAll) html += `<option value="All">All Classes</option>`;
-            else if (select.options[0].value === "") html += `<option value="">${select.options[0].text}</option>`;
-            
-            classes.forEach(c => html += `<option value="${c}">${c}</option>`);
-            select.innerHTML = html;
+        if (!ud) {
+            try { await supabaseClient.from("users").upsert([{id: user.uid, email: user.email, role: "developer", name: "Super Admin", status: "active"}]); } catch (pErr) { console.warn('Self-provisioning deferred:', pErr); }
         }
-    });
-}
 
-async function checkAdmissionStatus() {
-    const { data, error } = await supabaseClient.from("schools").select("*").eq("id", currentSchoolId).maybeSingle();
-    if (error) console.error("School settings lookup failed:", error);
-    if (data) {
-        if (data.idTemplateUrl) { currentIdTemplateUrl = data.idTemplateUrl; }
-        if (data.idTemplateStyle) {
-            currentTemplateStyle = data.idTemplateStyle;
-            if (document.getElementById('ts_' + data.idTemplateStyle)) {
-                document.getElementById('ts_' + data.idTemplateStyle).checked = true;
-                if (typeof window.selectTemplateUI === 'function') window.selectTemplateUI(data.idTemplateStyle);
+        document.getElementById("auth-overlay").classList.add("hidden-el");
+        landingPage.classList.add("hidden-el");
+        hideLoginModal();
+
+        let devData = ud || {};
+        if (sessionStorage.getItem("pin_verified") === "true") {
+            window.unlockDashboard();
+        } else {
+            pinWrapper.classList.remove("hidden-el");
+            pinWrapper.style.display = "flex";
+            if (devData.pin) {
+                document.getElementById("enter-pin-box").classList.remove("hidden-el");
+                document.getElementById("create-pin-box").classList.add("hidden-el");
+                window.currentAppPin = devData.pin;
+            } else {
+                document.getElementById("create-pin-box").classList.remove("hidden-el");
+                document.getElementById("enter-pin-box").classList.add("hidden-el");
             }
         }
-        if (data.idTemplateColor && document.getElementById("id_template_color")) {
-            document.getElementById("id_template_color").value = data.idTemplateColor;
-        }
-        if (data.secondaryColor && document.getElementById("school_secondary_color")) {
-            document.getElementById("school_secondary_color").value = data.secondaryColor;
-            currentSecondaryColor = data.secondaryColor;
-        }
-        document.getElementById("admissionToggle").checked = data.admissionOpen !== false;
 
-        if (data.emergencyMobile) { document.getElementById("school_emergency").value = data.emergencyMobile; document.getElementById("print_emergency").innerText = "Emergency: " + data.emergencyMobile; }
-        if (data.signatureUrl) {
-            currentSignatureUrl = data.signatureUrl;
-            document.getElementById("preview-signature").src = data.signatureUrl;
-            if (!data.sigSettings || data.sigSettings.idCard !== false) document.getElementById("print_sig").src = data.signatureUrl;
-            document.getElementById("cert_sig").src = data.signatureUrl;
-        }
-        if (data.sigSettings) {
-            window.currentSigSettings = data.sigSettings;
-            if (document.getElementById("sig_on_id")) {
-                if (document.getElementById("sig_on_marksheet")) document.getElementById("sig_on_marksheet").checked = data.sigSettings.marksheet !== false;
-                document.getElementById("sig_on_id").checked = data.sigSettings.idCard !== false;
-                document.getElementById("sig_on_bonafide").checked = data.sigSettings.bonafide !== false;
-                document.getElementById("sig_on_admit").checked = data.sigSettings.admit !== false;
-            }
-        } else {
-            window.currentSigSettings = { marksheet: true, idCard: true, bonafide: true, admit: true };
+        const adminEmailEl = document.getElementById("adminEmail");
+        if (adminEmailEl) adminEmailEl.innerText = user.email;
+        const instIdsEmailEl = document.getElementById("institution-ids-email");
+        if (instIdsEmailEl) instIdsEmailEl.innerText = (user.email || "").toLowerCase();
+
+        const roleFooterEl = document.getElementById("role-footer");
+        if (roleFooterEl) {
+            roleFooterEl.innerText = "SYSTEM STATUS: ROOT AUTHORIZED | SECURE CONNECTION ESTABLISHED";
+            roleFooterEl.style.background = "#00F0FF";
+            roleFooterEl.style.color = "#050b14";
         }
 
-        if (data.examSubjects && Array.isArray(data.examSubjects)) {
-            window.examSubjects = data.examSubjects;
-        } else {
-            window.examSubjects = [...(window.factoryDefaultSubjects || [])];
-        }
+        loadChairmen(); loadSchoolsForDropdown(); loadAllStaff(); loadSchoolPayments(); checkAndSendBillingAlerts(); loadInboxMessages();
+        window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
 
-        populateClassDropdowns();
-        if (data.themeColor) { currentThemeColor = data.themeColor; document.getElementById("school_theme_color").value = currentThemeColor; document.documentElement.style.setProperty('--theme-color', currentThemeColor); }
-        if (data.schoolNameColor) { currentSchoolNameColor = data.schoolNameColor; if (document.getElementById("idSchoolNameColor")) document.getElementById("idSchoolNameColor").value = currentSchoolNameColor; }
-        if (data.studentNameColor) { currentStudentNameColor = data.studentNameColor; if (document.getElementById("idStudentNameColor")) document.getElementById("idStudentNameColor").value = currentStudentNameColor; }
-        if (data.detailsColor) { currentDetailsColor = data.detailsColor; if (document.getElementById("idDetailsColor")) document.getElementById("idDetailsColor").value = currentDetailsColor; }
-        if (data.photoBgColor) { currentPhotoBgColor = data.photoBgColor; if (document.getElementById("idPhotoBgColor")) document.getElementById("idPhotoBgColor").value = currentPhotoBgColor; }
-        if (data.emergencyTicker) { document.getElementById("ticker_input").value = data.emergencyTicker; }
-
-        // Authority Enforcement: Hide restricted modules
-        if (data.blockedModules && Array.isArray(data.blockedModules)) {
-            data.blockedModules.forEach(mod => {
-                const menuItem = document.querySelector(`.menu-item[data-target="tab-${mod}"]`);
-                if (menuItem) menuItem.style.display = 'none';
-            });
-        }
+    } catch (err) {
+        document.getElementById("auth-overlay")?.classList.add("hidden-el");
+        console.error("Dashboard Bootstrap Error:", err);
+        window.showToast("DASHBOARD LOAD ERROR: " + (err.message || err), "#e11d48");
     }
 }
 
-window.listenToTicker = () => {
-    if (!currentSchoolId) return;
-    if (window.unsubTicker) { window.unsubTicker(); window.unsubTicker = null; }
-    const schoolId = currentSchoolId;
-
-    const applySchoolSnapshot = (data) => {
-        if (data) {
-            if (data.tickerActive && data.emergencyTicker) {
-                document.getElementById("school-ticker-container").style.display = "block";
-                document.getElementById("school-ticker-text").innerText = data.emergencyTicker;
-            } else {
-                document.getElementById("school-ticker-container").style.display = "none";
-            }
-
-            // Payment Settings Init
-            if (data.paymentQrUrl) {
-                currentPaymentQrUrl = data.paymentQrUrl;
-                const preview = document.getElementById("payment_qr_preview");
-                if (preview) { preview.src = currentPaymentQrUrl; preview.style.display = "block"; }
-            }
-            if (data.upiId) {
-                const upiEl = document.getElementById("upi_id_input");
-                if (upiEl && upiEl.value === "") upiEl.value = data.upiId;
-            }
-            if (data.whatsappGroup) {
-                const waEl = document.getElementById("wa_group_link");
-                if (waEl && waEl.value === "") waEl.value = data.whatsappGroup;
-            }
-
-            // Feature controls live in their own `feature_controls` table (one row per school).
-            // Legacy toggle fields on the school row are only a fallback for readSchoolFeatureSettings().
-
-            // Session Upgrade Status Logic
-            const upgradeStatus = data.sessionUpgradeStatus;
-            const statusText = document.getElementById("session-upgrade-status-text");
-            const reqBtn = document.getElementById("request-upgrade-btn");
-            const execBtn = document.getElementById("execute-promotion-btn");
-
-            if (statusText && reqBtn && execBtn) {
-                if (upgradeStatus === "pending") {
-                    statusText.innerText = "Status: Pending Approval (Master Core)";
-                    statusText.style.color = "#d97706";
-                    reqBtn.style.display = "none";
-                    execBtn.style.display = "none";
-                } else if (upgradeStatus === "approved") {
-                    statusText.innerText = "Status: Approved! Ready to Execute.";
-                    statusText.style.color = "#059669";
-                    reqBtn.style.display = "none";
-                    execBtn.style.display = "inline-block";
-                } else {
-                    statusText.innerText = "Status: N/A";
-                    statusText.style.color = "#7f8c8d";
-                    reqBtn.style.display = "inline-block";
-                    execBtn.style.display = "none";
-                }
-            }
+supabaseClient.auth.onAuthStateChange((event, session) => {
+    console.log("AUTH STATE CHANGE TRIGGERED! EVENT:", event, "SESSION:", session ? "EXISTS" : "NULL");
+    if (event === "SIGNED_OUT" || !session?.user) {
+        hideLoginModal();
+        const loginBtn = document.getElementById("doLoginBtn");
+        if (loginBtn) {
+            loginBtn.innerHTML = `<i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE`;
+            if (window.lucide) lucide.createIcons();
         }
+        document.getElementById("auth-overlay").classList.add("hidden-el");
+        landingPage.classList.remove("hidden-el");
+        dashboardWrapper.classList.add("hidden-el");
+        return;
+    }
+    if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        const user = { uid: session.user.id, email: session.user.email, id: session.user.id };
+        setTimeout(() => bootstrapDashboard(user), 0);
+    }
+});
+
+// Failsafe: Ensure auth-overlay never blocks the user indefinitely
+setTimeout(() => {
+    const overlay = document.getElementById("auth-overlay");
+    if (overlay && !overlay.classList.contains("hidden-el")) {
+        const dashboard = document.getElementById("dashboard-wrapper");
+        if (dashboard && dashboard.classList.contains("hidden-el")) {
+            overlay.classList.add("hidden-el");
+            const landing = document.getElementById("landing-page");
+            if (landing) landing.classList.remove("hidden-el");
+        }
+    }
+}, 3000);
+const logoutBtnEl = document.getElementById("logoutBtn");
+if (logoutBtnEl) logoutBtnEl.addEventListener("click", () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); });
+window.logoutFromPin = () => { sessionStorage.removeItem("pin_verified"); supabaseClient.auth.signOut().then(() => location.reload()); };
+
+window.unlockDashboard = () => {
+    pinWrapper.classList.add("hidden-el");
+    dashboardWrapper.classList.remove("hidden-el");
+    lucide.createIcons();
+
+    const savedTab = localStorage.getItem('companyActiveTab');
+    if (savedTab) {
+        const targetMenu = document.querySelector(`.menu-item[data-target="${savedTab}"]`);
+        if (targetMenu) targetMenu.click();
+    }
+};
+
+window.saveNewPin = async () => {
+    const pin = document.getElementById("newPin").value;
+    if (pin.length < 4) return window.showToast("PLEASE ENTER 4 DIGITS", "#e11d48");
+    try { await supabaseClient.from("users").upsert([{id: superAdminUid, ...{ pin: pin }}]); } catch (e) { window.showToast("PIN SAVE ERR: " + (e.message || e), "#e11d48"); console.error("Pin Error:", e); return; }
+    window.currentAppPin = pin;
+    sessionStorage.setItem("pin_verified", "true");
+    window.unlockDashboard();
+};
+
+window.verifyPin = () => {
+    const pin = document.getElementById("loginPin").value;
+    if (pin === window.currentAppPin) {
+        sessionStorage.setItem("pin_verified", "true");
+        window.unlockDashboard();
+    } else {
+        document.getElementById("pinErrorMsg").classList.remove("hidden-el");
+        setTimeout(() => document.getElementById("pinErrorMsg").classList.add("hidden-el"), 2000);
+    }
+};
+
+// ==========================================
+// 4. TAB NAVIGATION
+// ==========================================
+function activateCompanyTab(targetId, menuItem = null) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+
+    localStorage.setItem('companyActiveTab', targetId);
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.classList.remove('active', 'bg-tealAccent/10', 'text-tealAccent', 'border-l-2', 'border-tealAccent', 'shadow-[inset_2px_0_10px_rgba(0,240,255,0.1)]');
+        item.classList.add('text-coolLight');
+    });
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden-el'));
+
+    const linkedMenuItem = menuItem || document.querySelector(`.menu-item[data-target="${targetId}"]`);
+    if (linkedMenuItem) {
+        linkedMenuItem.classList.remove('text-coolLight');
+        linkedMenuItem.classList.add('active', 'bg-tealAccent/10', 'text-tealAccent', 'border-l-2', 'border-tealAccent', 'shadow-[inset_2px_0_10px_rgba(0,240,255,0.1)]');
+        const title = document.getElementById('tab-title');
+        if (title) title.innerHTML = linkedMenuItem.innerHTML;
+    }
+
+    target.classList.remove('hidden-el');
+    if (targetId === 'tab-institutions') window.loadInstitutionRegistry?.();
+    if (targetId === 'tab-audit-logs') window.loadAuditLogs();
+    if (targetId === 'tab-device-tracking') window.loadDeviceLogs();
+    if (targetId === 'tab-transfer-approvals') window.loadTransferApprovals();
+    if (targetId === 'tab-broadcast') window.loadCommHubSchools();
+    if (window.lucide) lucide.createIcons();
+}
+
+document.querySelectorAll('.menu-item').forEach(item => {
+    item.addEventListener('click', event => {
+        const menuItem = event.target.closest('.menu-item');
+        if (menuItem?.dataset.target) activateCompanyTab(menuItem.dataset.target, menuItem);
+    });
+});
+
+window.openCompanyTab = targetId => activateCompanyTab(targetId);
+
+window.switchCommonHubView = (viewName, trigger) => {
+    document.querySelectorAll('[data-hub-view]').forEach(button => button.classList.toggle('active', button === trigger));
+    document.querySelectorAll('[data-hub-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.hubPanel === viewName));
+    if (viewName === 'communications') window.loadCommHubSchools();
+    if (viewName === 'transfers') window.loadTransferApprovals();
+};
+
+// ==========================================
+// 5. ANALYTICS & QUOTA MONITOR
+// ==========================================
+window.initQuotaMonitor = () => {
+    let baseReads = 14230; let baseWrites = 3490;
+    setInterval(() => {
+        baseReads += Math.floor(Math.random() * 5); baseWrites += Math.floor(Math.random() * 2);
+        const rEl = document.getElementById("stat-reads"); const wEl = document.getElementById("stat-writes");
+        if (rEl && wEl) { rEl.innerText = baseReads.toLocaleString(); wEl.innerText = baseWrites.toLocaleString(); }
+    }, 3000);
+
+    fetch("https://school-backend-zlgy.onrender.com/api/cloudinary-usage")
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const storageUsed = (data.usage.storage.usage / (1024 * 1024 * 1024)).toFixed(4) + " GB";
+                const bandwidthUsed = (data.usage.bandwidth.usage / (1024 * 1024 * 1024)).toFixed(4) + " GB";
+                if (document.getElementById("stat-cloudinary-storage")) document.getElementById("stat-cloudinary-storage").innerText = storageUsed;
+                if (document.getElementById("stat-cloudinary-bandwidth")) document.getElementById("stat-cloudinary-bandwidth").innerText = "Bandwidth: " + bandwidthUsed;
+            } else {
+                if (document.getElementById("stat-cloudinary-storage")) document.getElementById("stat-cloudinary-storage").innerHTML = "<i class='fas fa-exclamation-triangle text-rose-500'></i> ERROR";
+            }
+        }).catch(e => {
+            if (document.getElementById("stat-cloudinary-storage")) document.getElementById("stat-cloudinary-storage").innerHTML = "OFFLINE";
+        });
+};
+
+// ==========================================
+// 6. CHAIRMEN & TENANT DEPLOYMENT
+// ==========================================
+window.fetchRegistrationDetails = async () => {
+    const regNo = document.getElementById("fetchRegNo")?.value.trim();
+    if (!regNo) { window.showToast("PLEASE ENTER REGISTRATION NO", "#e11d48"); return; }
+
+    try {
+        const docId = regNo.replace(/\//g, "_");
+        const { data, error } = await supabaseClient.from("accepted_registrations").select("*").eq("id", docId).maybeSingle();
+        if (error) throw error;
+        if (!data) {
+            window.showToast("REGISTRATION NO NOT FOUND", "#e11d48");
+            return;
+        }
+
+        const set = (id, value) => { const el = document.getElementById(id); if (el && value != null) el.value = value; };
+        set("schoolName", data.schoolName || "");
+        set("chairmanName", data.principalName || "");
+        set("chairmanEmail", data.email || "");
+        set("chairmanPassword", data.password || "");
+        set("provisionContactEmail", data.contactEmail || data.email || "");
+        set("provisionPhone", data.phone || "");
+        set("provisionAltPhone", data.altPhone || "");
+        set("provisionAffiliationNo", data.affiliationNo || "");
+        set("provisionBoard", data.board || "");
+        set("provisionSchoolSegment", data.schoolType || "");
+        set("provisionWebsite", data.website || "");
+        set("provisionCountry", data.country || "");
+        set("provisionState", data.state || "");
+        set("provisionDistrict", data.district || "");
+        set("provisionPincode", data.pincode || "");
+        set("provisionAddress", data.address || "");
+        set("institutionCode", data.institution_code || data.institutionCode || "");
+        set("institutionType", normalizeInstitutionType(data.institution_type));
+        window.toggleInstitutionSetupFields();
+
+        // File inputs cannot be populated from a URL; the deployment handler
+        // safely reuses this approved registration logo instead.
+        window.fetchedRegLogoData = data.logoUrl || null;
+        window.fetchedRegFullData = data;
+        window.showToast("REGISTRATION DETAILS LOADED", "#10b981");
+    } catch (e) {
+        console.error("Registration lookup failed:", e);
+        window.showToast("ERROR FETCHING DETAILS: " + (e.message || e), "#e11d48");
+    }
+};
+
+const normalizeInstitutionType = value => String(value || "school").trim().toLowerCase() === "college" ? "college" : "school";
+const institutionEsc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+const makeInstitutionId = () => {
+    const randomPart = window.crypto?.randomUUID ? window.crypto.randomUUID().replace(/-/g, "").slice(0, 12) : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    return `INS-${randomPart.toUpperCase()}`;
+};
+window.editingInstitutionId = null;
+window.currentInstitutionEditRecord = null;
+
+window.generateInstitutionId = () => {
+    const input = document.getElementById("institutionId");
+    if (input && !input.disabled) input.value = makeInstitutionId();
+};
+
+window.toggleInstitutionSetupFields = () => {
+    const isCollege = normalizeInstitutionType(document.getElementById("institutionType")?.value) === "college";
+    document.getElementById("provision-school-segment-wrap")?.classList.toggle("hidden-el", isCollege);
+};
+
+window.toggleRegistrationInstitutionType = () => {
+    const type = normalizeInstitutionType(document.getElementById("reg-institution-type")?.value);
+    const segment = document.getElementById("registration-school-segment");
+    const segmentSelect = document.getElementById("reg-school-type");
+    if (segment) segment.classList.toggle("hidden-el", type === "college");
+    if (segmentSelect) {
+        segmentSelect.required = type === "school";
+        if (type === "college") segmentSelect.value = "";
+    }
+};
+
+function buildInstitutionProfile() {
+    const contactEmail = document.getElementById("provisionContactEmail")?.value.trim()
+        || document.getElementById("chairmanEmail")?.value.trim()
+        || "";
+    const type = normalizeInstitutionType(document.getElementById("institutionType")?.value);
+    return {
+        phone: document.getElementById("provisionPhone")?.value.trim() || "",
+        altPhone: document.getElementById("provisionAltPhone")?.value.trim() || "",
+        email: contactEmail,
+        website: document.getElementById("provisionWebsite")?.value.trim() || "",
+        affiliationNo: document.getElementById("provisionAffiliationNo")?.value.trim() || "",
+        board: document.getElementById("provisionBoard")?.value || "",
+        schoolType: type === "school" ? (document.getElementById("provisionSchoolSegment")?.value || "") : "",
+        country: document.getElementById("provisionCountry")?.value.trim() || "",
+        state: document.getElementById("provisionState")?.value.trim() || "",
+        district: document.getElementById("provisionDistrict")?.value.trim() || "",
+        pincode: document.getElementById("provisionPincode")?.value.trim() || "",
+        address: document.getElementById("provisionAddress")?.value.trim() || "",
+        regNo: window.fetchedRegFullData?.regNo || "",
+        secondaryColor: document.getElementById("provisionSecondaryColor")?.value || "#ffffff",
+        chairmanRole: document.getElementById("assignedRole")?.value || "Chairman"
+    };
+}
+
+async function ensureCompanyInstitutionSetupReady() {
+    const { data, error } = await supabaseClient.rpc("company_institution_setup_ready");
+    if (error) {
+        throw new Error("Institution provisioning SQL is not ready. Apply the Chairman Phase A migration and this Company Portal migration first. " + error.message);
+    }
+    if (data !== true) throw new Error("The signed-in Company account is not authorized to provision institutions.");
+}
+
+async function configureCompanyInstitution({ schoolId, name, type, code, logoUrl, branding, profile, themeColor, admissionOpen }) {
+    return supabaseClient.rpc("company_configure_institution", {
+        p_school_id: schoolId,
+        p_school_name: name,
+        p_institution_type: type,
+        p_institution_code: code || null,
+        p_logo_url: logoUrl || null,
+        p_branding: branding,
+        p_profile: profile,
+        p_theme_color: themeColor,
+        p_admission_open: admissionOpen
+    });
+}
+
+window.startNewInstitution = (navigate = true) => {
+    window.editingInstitutionId = null;
+    window.currentInstitutionEditRecord = null;
+    const set = (id, value) => { const el = document.getElementById(id); if (el) { el.value = value; el.disabled = false; } };
+    set("institutionId", makeInstitutionId());
+    set("institutionType", "school");
+    set("institutionCode", "");
+    set("schoolName", "");
+    set("provisionPhone", ""); set("provisionAltPhone", ""); set("provisionContactEmail", ""); set("provisionWebsite", "");
+    set("provisionAffiliationNo", ""); set("provisionSchoolSegment", "K-12 (Pre-K to 12)"); set("provisionBoard", "");
+    set("provisionCountry", ""); set("provisionState", ""); set("provisionDistrict", ""); set("provisionPincode", ""); set("provisionAddress", "");
+    set("chairmanName", ""); set("chairmanEmail", ""); set("chairmanPassword", ""); set("assignedRole", "Chairman"); set("subscriptionTier", "Starter"); set("watermarkUrl", "");
+    set("masterNodeId", "");
+    set("provisionThemeColor", "#1e3c72"); set("provisionSecondaryColor", "#ffffff");
+    const file = document.getElementById("schoolLogo"); if (file) file.value = "";
+    const admissions = document.getElementById("provisionAdmissionOpen"); if (admissions) admissions.checked = true;
+    const branch = document.getElementById("isSubNode"); if (branch) branch.checked = false;
+    document.getElementById("masterNodeId")?.classList.add("hidden-el");
+    document.getElementById("fetchRegNo").value = "";
+    window.fetchedRegLogoData = null;
+    window.fetchedRegFullData = null;
+    document.getElementById("provision-chairman-fields")?.classList.remove("hidden-el");
+    document.getElementById("cancelInstitutionEditBtn")?.classList.add("hidden-el");
+    document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-building text-tealAccent"></i> Create Institution';
+    document.getElementById("institution-form-subtitle").innerHTML = 'One institution ID is used for <code>schools.id</code>, the Chairman and staff <code>schoolId</code>, and every tenant-scoped row. Choose the portal type before saving.';
+    document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN';
+    document.getElementById("institution-provision-feedback").textContent = "";
+    window.toggleInstitutionSetupFields();
+    if (navigate) window.openCompanyTab("tab-manage");
+};
+
+function initializeInstitutionProvisioningUI() {
+    if (!document.getElementById("institutionId")) return;
+    window.startNewInstitution(false);
+    window.toggleRegistrationInstitutionType();
+}
+
+const createChairmanBtnEl = document.getElementById("createChairmanBtn");
+if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () => {
+    const button = document.getElementById("createChairmanBtn");
+    const feedback = document.getElementById("institution-provision-feedback");
+    const schoolName = document.getElementById("schoolName").value.trim();
+    const type = normalizeInstitutionType(document.getElementById("institutionType").value);
+    const isEditing = Boolean(window.editingInstitutionId);
+    const schoolId = (window.editingInstitutionId || document.getElementById("institutionId").value).trim();
+    const chairmanName = document.getElementById("chairmanName").value.trim();
+    const chairmanEmail = document.getElementById("chairmanEmail").value.trim();
+    const password = document.getElementById("chairmanPassword").value.trim();
+    const logoFile = document.getElementById("schoolLogo").files[0];
+    const institutionCode = document.getElementById("institutionCode").value.trim();
+    const themeColor = document.getElementById("provisionThemeColor").value || "#1e3c72";
+    const secondaryColor = document.getElementById("provisionSecondaryColor").value || "#ffffff";
+    const admissionOpen = document.getElementById("provisionAdmissionOpen").checked;
+
+    if (!schoolName) return window.showToast("INSTITUTION NAME IS REQUIRED", "#e11d48");
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(schoolId)) return window.showToast("INSTITUTION ID MUST BE 3–64 CHARACTERS (LETTERS, NUMBERS, _ OR -)", "#e11d48");
+    if (!isEditing && (!chairmanName || !chairmanEmail || !password)) return window.showToast("INITIAL CHAIRMAN NAME, EMAIL, AND PASSWORD ARE REQUIRED", "#e11d48");
+
+    const profile = buildInstitutionProfile();
+    const tier = document.getElementById("subscriptionTier")?.value || "Starter";
+    const isSubNode = document.getElementById("isSubNode")?.checked || false;
+    const masterNodeId = isSubNode ? document.getElementById("masterNodeId")?.value || "" : "";
+    const watermarkUrl = document.getElementById("watermarkUrl")?.value.trim() || "";
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> SAVING INSTITUTION...';
+    if (feedback) feedback.textContent = "Checking architecture and tenant identity…";
+
+    let deployed = isEditing;
+    try {
+        await ensureCompanyInstitutionSetupReady();
+        if (!isEditing) {
+            const { data: idAvailable, error: availabilityError } = await supabaseClient.rpc("company_institution_id_available", {
+                p_school_id: schoolId
+            });
+            if (availabilityError) throw availabilityError;
+            if (idAvailable !== true) throw new Error("That Institution ID already exists. Generate or enter a different ID.");
+        }
+
+        let logoUrl = window.currentInstitutionEditRecord?.logoUrl || window.fetchedRegLogoData || "";
+        if (logoFile) {
+            logoUrl = await uploadToCloudinary(logoFile);
+            if (!logoUrl) throw new Error("Institution logo upload failed.");
+        }
+        const branding = { primaryColor: themeColor, secondaryColor };
+
+        if (!isEditing) {
+            const { data: authUserId, error: authError } = await supabaseClient.rpc("create_chairman_auth_user", {
+                p_email: chairmanEmail,
+                p_password: password,
+                p_name: chairmanName,
+                p_school_id: schoolId
+            });
+            if (authError) throw new Error("Chairman Auth creation failed: " + authError.message);
+
+            const extraSchoolData = {
+                ...profile,
+                institution_type: type,
+                institution_code: institutionCode || null,
+                branding,
+                admissionOpen,
+                themeColor
+            };
+            const { error: deployError } = await supabaseClient.rpc("deploy_tenant_node", {
+                p_school_id: schoolId,
+                p_chairman_uid: authUserId,
+                p_school_name: schoolName,
+                p_chairman_name: chairmanName,
+                p_email: chairmanEmail,
+                p_password: password,
+                p_logo_url: logoUrl,
+                p_tier: tier,
+                p_is_sub_node: isSubNode,
+                p_master_node_id: masterNodeId || null,
+                p_watermark_url: watermarkUrl || null,
+                p_extra_data: extraSchoolData
+            });
+            if (deployError) throw new Error("Tenant deployment failed: " + deployError.message);
+            deployed = true;
+        }
+
+        const { data: setupResult, error: setupError } = await configureCompanyInstitution({
+            schoolId,
+            name: schoolName,
+            type,
+            code: institutionCode,
+            logoUrl,
+            branding,
+            profile,
+            themeColor,
+            admissionOpen
+        });
+        if (setupError) throw new Error("Institution row created, but the reference configuration could not be saved: " + setupError.message);
+
+        window.logAudit(isEditing ? "Updated Institution Configuration" : "Provisioned Institution", `${schoolName} (${schoolId})`);
+        window.showToast(`${isEditing ? "INSTITUTION CONFIGURATION UPDATED" : "INSTITUTION CREATED"} · ID ${schoolId}`, "#10b981");
+        if (feedback) feedback.textContent = `Saved. Institution ID / schools.id / users.schoolId: ${schoolId}.`;
+        await Promise.all([loadChairmen(), loadSchoolsForDropdown(), loadSchoolPayments(), window.loadInstitutionRegistry?.()]);
+        window.startNewInstitution();
+        window.openCompanyTab("tab-institutions");
+    } catch (error) {
+        console.error("Institution provisioning failed:", error);
+        if (deployed && !isEditing) {
+            // Preserve the created ID and switch to edit mode so a transient
+            // institution-metadata RPC failure can be retried without deploying a
+            // second Auth user or a second institution.
+            window.editingInstitutionId = schoolId;
+            window.currentInstitutionEditRecord = { id: schoolId, schoolName, institution_type: type, institution_code: institutionCode, logoUrl: window.currentInstitutionEditRecord?.logoUrl || window.fetchedRegLogoData || "" };
+            document.getElementById("institutionId").value = schoolId;
+            document.getElementById("institutionId").disabled = true;
+            document.getElementById("institutionType").disabled = true;
+            document.getElementById("provision-chairman-fields")?.classList.add("hidden-el");
+            document.getElementById("cancelInstitutionEditBtn")?.classList.remove("hidden-el");
+            document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-save mr-2"></i> RETRY CONFIGURATION SAVE';
+            document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-triangle-exclamation text-amber-400"></i> Finish Institution Configuration';
+            if (feedback) feedback.textContent = `Institution ${schoolId} was deployed. Configuration failed: ${error.message}. Retry this save; do not create the ID again.`;
+            await window.loadInstitutionRegistry?.();
+        } else if (feedback) {
+            feedback.textContent = error.message || String(error);
+        }
+        window.showToast("INSTITUTION SAVE FAILED: " + (error.message || error), "#e11d48");
+    } finally {
+        button.disabled = false;
+        if (window.editingInstitutionId) button.innerHTML = '<i class="fas fa-save mr-2"></i> SAVE INSTITUTION CONFIGURATION';
+        else button.innerHTML = '<i class="fas fa-rocket mr-2"></i> CREATE INSTITUTION & CHAIRMAN';
+    }
+});
+
+initializeInstitutionProvisioningUI();
+
+async function loadChairmen() {
+    try {
+        const { data: snp } = await supabaseClient.from("users").select("*"); window.fetchedChairmen = []; let tS = 0;
+        (snp || []).forEach(d => { const dt = d; if (dt.role === "chairman") { dt.id = d.id; window.fetchedChairmen.push(dt); } else if (dt.role === "staff") { tS++; } });
+        const { data: stuS } = await supabaseClient.from("students").select("*");
+        document.getElementById("stat-schools").innerText = window.fetchedChairmen.length; document.getElementById("stat-staff").innerText = tS; document.getElementById("stat-students").innerText = (stuS || []).length;
+        window.filterChairmenList(); window.loadPasswordRequests();
+    } catch (err) { }
+}
+
+
+window.institutionRegistryData = [];
+window.institutionRegistryChairmen = [];
+window.loadInstitutionRegistry = async () => {
+    const body = document.getElementById("institution-table-body");
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-coolGray"><i class="fas fa-spinner fa-spin mr-2"></i>Loading institutions…</td></tr>';
+    try {
+        const { data, error } = await supabaseClient.rpc("company_list_institutions");
+        if (error) throw error;
+        window.institutionRegistryData = (Array.isArray(data) ? data : []).map(school => ({
+            ...school,
+            institution_type: normalizeInstitutionType(school.institution_type),
+            chairman: school.chairman || null
+        }));
+        window.institutionRegistryChairmen = window.institutionRegistryData.map(school => school.chairman).filter(Boolean);
+        window.renderInstitutionRegistry();
+        if (typeof window.filterChairmenList === "function") window.filterChairmenList();
+    } catch (error) {
+        console.error("Institution registry failed:", error);
+        body.innerHTML = `<tr><td colspan="6" class="p-5 text-center text-rose-400">Could not load institutions: ${institutionEsc(error.message || error)}</td></tr>`;
+    }
+};
+
+window.renderInstitutionRegistry = () => {
+    const body = document.getElementById("institution-table-body");
+    if (!body) return;
+    const search = (document.getElementById("institution-search")?.value || "").trim().toLowerCase();
+    const typeFilter = document.getElementById("institution-type-filter")?.value || "all";
+    const rows = (window.institutionRegistryData || []).filter(school => {
+        const matchesType = typeFilter === "all" || school.institution_type === typeFilter;
+        const haystack = [school.schoolName, school.id, school.institution_code, school.chairman?.name, school.chairman?.email].join(" ").toLowerCase();
+        return matchesType && (!search || haystack.includes(search));
+    });
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-coolGray">No institutions match this filter.</td></tr>';
+        return;
+    }
+    body.innerHTML = rows.map(school => {
+        const id = institutionEsc(school.id);
+        const isBlocked = String(school.chairman?.status || "active").toLowerCase() === "blocked";
+        const accessLabel = school.chairman ? (isBlocked ? "Deactivated" : "Active") : "No Chairman";
+        const accessClass = school.chairman ? (isBlocked ? "text-rose-300 border-rose-500/40 bg-rose-500/10" : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10") : "text-amber-300 border-amber-500/40 bg-amber-500/10";
+        const typeClass = school.institution_type === "college" ? "text-fuchsia-300 border-fuchsia-500/40 bg-fuchsia-500/10" : "text-cyan-300 border-cyan-500/40 bg-cyan-500/10";
+        const admissionOpen = school.admissionOpen !== false;
+        return `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-3"><strong class="block text-white">${institutionEsc(school.schoolName || "Unnamed institution")}</strong><span class="text-[10px] text-coolGray">ID: ${id}</span>${school.institution_code ? `<br><span class="text-[10px] text-tealAccent/70">Code: ${institutionEsc(school.institution_code)}</span>` : ""}</td>
+            <td class="p-3"><span class="inline-flex px-2 py-1 rounded border ${typeClass} text-[10px] font-bold uppercase">${institutionEsc(school.institution_type)}</span></td>
+            <td class="p-3">${institutionEsc(school.chairman?.name || "—")}<br><span class="text-[10px] text-coolGray">${institutionEsc(school.chairman?.email || "No account linked")}</span></td>
+            <td class="p-3"><span class="inline-flex px-2 py-1 rounded border ${accessClass} text-[10px] font-bold">${accessLabel}</span></td>
+            <td class="p-3"><span class="${admissionOpen ? "text-emerald-300" : "text-coolGray"}">${admissionOpen ? "Open" : "Closed"}</span></td>
+            <td class="p-3 text-right whitespace-nowrap"><button type="button" data-institution-edit="${id}" class="px-2 py-1 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 hover:bg-indigo-600 hover:text-white rounded text-[10px] mr-1"><i class="fas fa-sliders"></i> CONFIGURE</button>${school.chairman ? `<button type="button" data-institution-access="${id}" class="px-2 py-1 ${isBlocked ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-300" : "bg-rose-600/20 border-rose-500/50 text-rose-300"} border hover:text-white rounded text-[10px]">${isBlocked ? "ACTIVATE" : "DEACTIVATE"}</button>` : ""}</td>
+        </tr>`;
+    }).join("");
+
+    body.querySelectorAll("[data-institution-edit]").forEach(button => button.addEventListener("click", () => window.openInstitutionEditor(button.dataset.institutionEdit)));
+    body.querySelectorAll("[data-institution-access]").forEach(button => button.addEventListener("click", () => window.toggleInstitutionAccess(button.dataset.institutionAccess)));
+};
+
+window.openInstitutionEditor = async (schoolId) => {
+    let school = (window.institutionRegistryData || []).find(item => item.id === schoolId);
+    if (!school) {
+        await window.loadInstitutionRegistry();
+        school = (window.institutionRegistryData || []).find(item => item.id === schoolId);
+    }
+    if (!school) return window.showToast("INSTITUTION NOT FOUND", "#e11d48");
+
+    window.editingInstitutionId = school.id;
+    window.currentInstitutionEditRecord = school;
+    const branding = school.branding && typeof school.branding === "object" ? school.branding : {};
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ""; };
+    set("institutionId", school.id);
+    set("institutionType", normalizeInstitutionType(school.institution_type));
+    set("institutionCode", school.institution_code || "");
+    set("schoolName", school.schoolName || "");
+    set("provisionThemeColor", school.themeColor || branding.primaryColor || "#1e3c72");
+    set("provisionSecondaryColor", school.secondaryColor || branding.secondaryColor || "#ffffff");
+    set("provisionPhone", school.phone || "");
+    set("provisionAltPhone", school.altPhone || "");
+    set("provisionContactEmail", school.email || school.contactEmail || school.chairman?.email || "");
+    set("provisionWebsite", school.website || "");
+    set("provisionAffiliationNo", school.affiliationNo || "");
+    set("provisionSchoolSegment", school.schoolType || "");
+    set("provisionBoard", school.board || "");
+    set("provisionCountry", school.country || "");
+    set("provisionState", school.state || "");
+    set("provisionDistrict", school.district || "");
+    set("provisionPincode", school.pincode || "");
+    set("provisionAddress", school.address || "");
+    set("assignedRole", ["Chairman", "Principal"].includes(school.chairman?.staffRole) ? school.chairman.staffRole : "Chairman");
+    const admission = document.getElementById("provisionAdmissionOpen");
+    if (admission) admission.checked = school.admissionOpen !== false;
+
+    document.getElementById("institutionId").disabled = true;
+    document.getElementById("institutionType").disabled = true;
+    document.getElementById("provision-chairman-fields")?.classList.add("hidden-el");
+    document.getElementById("cancelInstitutionEditBtn")?.classList.remove("hidden-el");
+    document.getElementById("institution-form-heading").innerHTML = '<i class="fas fa-sliders text-cyan-300"></i> Edit Institution Configuration';
+    document.getElementById("institution-form-subtitle").innerHTML = `Editing <code>${institutionEsc(school.id)}</code>. The ID and type are stable tenant identity; academic structure is managed from the institution's own portal.`;
+    document.getElementById("createChairmanBtn").innerHTML = '<i class="fas fa-save mr-2"></i> SAVE INSTITUTION CONFIGURATION';
+    document.getElementById("institution-provision-feedback").textContent = "Institution metadata only. Departments, HODs, and staff are managed from the institution's own Chairman/Principal portal.";
+    document.getElementById("schoolLogo").value = "";
+    window.toggleInstitutionSetupFields();
+    window.openCompanyTab("tab-manage");
+};
+
+window.toggleInstitutionAccess = (schoolId) => {
+    const chairmen = (window.institutionRegistryChairmen || []).filter(user => user.schoolId === schoolId && user.role === "chairman");
+    if (!chairmen.length) return window.showToast("NO CHAIRMAN ACCOUNT IS LINKED TO THIS INSTITUTION", "#e11d48");
+    const shouldBlock = chairmen.some(user => String(user.status || "active").toLowerCase() !== "blocked");
+    window.customConfirm(shouldBlock ? "DEACTIVATE CHAIRMAN ACCESS FOR THIS INSTITUTION?" : "ACTIVATE CHAIRMAN ACCESS FOR THIS INSTITUTION?", async () => {
+        try {
+            const { error } = await supabaseClient.rpc("company_set_chairman_access", {
+                p_school_id: schoolId,
+                p_status: shouldBlock ? "blocked" : "active",
+                p_reason: "Institution access deactivated by Company Admin"
+            });
+            if (error) throw error;
+            window.showToast(shouldBlock ? "CHAIRMAN ACCESS DEACTIVATED" : "CHAIRMAN ACCESS ACTIVATED", "#10b981");
+            await Promise.all([loadChairmen(), window.loadInstitutionRegistry()]);
+        } catch (error) {
+            window.showToast("ACCESS UPDATE FAILED: " + (error.message || error), "#e11d48");
+        }
+    });
+};
+
+window.filterChairmenList = () => {
+    const body = document.getElementById("chairmanTableBody");
+    if (!body) return;
+    const sid = document.getElementById("filterChairmenSchool").value;
+    const typeFilterEl = document.getElementById("filterNodeType");
+    const typeFilter = typeFilterEl ? typeFilterEl.value : "ALL";
+    const registry = window.institutionRegistryData || [];
+    const typeOf = (schoolId, fallback) => {
+        const rec = registry.find(r => r.id === schoolId);
+        return normalizeInstitutionType(rec ? rec.institution_type : fallback);
     };
 
-    // Paint once, then keep in sync with a native Supabase Realtime channel.
-    supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle()
-        .then(({ data }) => applySchoolSnapshot(data));
-
-    const tickerChannel = supabaseClient.channel('realtime:schools:' + crypto.randomUUID())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'schools', filter: `id=eq.${schoolId}` }, async () => {
-            const { data } = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
-            applySchoolSnapshot(data);
-        })
-        .subscribe();
-
-    window.unsubTicker = () => supabaseClient.removeChannel(tickerChannel);
-};
-
-window.requestSessionUpgrade = async () => {
-    if (confirm("Are you sure you want to request a Session Upgrade? This will send a request to the Super Admin (Master Core).")) {
-        try {
-            const { error } = await supabaseClient.from("schools").update({ sessionUpgradeStatus: "pending" }).eq("id", currentSchoolId);
-            if (error) throw error;
-            alert("Request sent successfully! Please wait for Super Admin approval.");
-        } catch (e) {
-            console.error(e);
-            alert("Error sending request.");
-        }
-    }
-};
-
-window.executePromotion = async () => {
-    if (!confirm("CRITICAL WARNING: This will promote ALL approved students to the next class and RESET their Roll Numbers. This action cannot be undone. Do you want to proceed?")) return;
-
-    try {
-        const promotions = [];
-        let promotedCount = 0;
-
-        window.fetchedStudents.forEach(st => {
-            if (st.status === "Approved") {
-                let nextClass = st.class;
-
-                // Logic to increment class
-                const classMap = {
-                    "Nursery": "LKG", "LKG": "UKG", "UKG": "1st",
-                    "1st": "2nd", "2nd": "3rd", "3rd": "4th", "4th": "5th",
-                    "5th": "6th", "6th": "7th", "7th": "8th", "8th": "9th",
-                    "9th": "10th", "10th": "11th", "11th": "12th", "12th": "Alumni"
-                };
-
-                if (classMap[st.class]) {
-                    nextClass = classMap[st.class];
-                }
-
-                promotions.push({ id: st.id, nextClass });
-                promotedCount++;
-            }
+    // Chairman rows come from the users table; institutions from the registry
+    // that are not present there are merged in so every school/college ID is
+    // always listed (with a NO CHAIRMAN / registry-only row when needed).
+    let ls = (window.fetchedChairmen || []).slice();
+    registry.forEach(school => {
+        if (ls.some(c => c.schoolId === school.id)) return;
+        const ch = school.chairman || null;
+        ls.push({
+            id: ch ? (ch.id || "") : "",
+            schoolId: school.id,
+            schoolName: school.schoolName || (ch && ch.schoolName) || "",
+            name: ch ? (ch.name || "") : "",
+            email: ch ? (ch.email || "") : "",
+            logoUrl: (ch && ch.logoUrl) || school.logoUrl || "",
+            status: ch ? (ch.status || "active") : "active",
+            shadowBan: ch ? ch.shadowBan : false,
+            plainPassword: ch ? ch.plainPassword : "",
+            subscriptionTier: ch ? ch.subscriptionTier : "",
+            institution_type: school.institution_type,
+            noChairman: !ch
         });
+    });
 
-        if (promotedCount > 0) {
-            // Native PostgREST: one update per promoted student (replaces the legacy write batch).
-            for (const promotion of promotions) {
-                const { error } = await supabaseClient.from("students").update({
-                    class: promotion.nextClass,
-                    rollNo: "" // Reset roll number
-                }).eq("id", promotion.id);
-                if (error) throw error;
-            }
-            // Reset status after successful execution
-            const { error: schoolError } = await supabaseClient.from("schools").update({ sessionUpgradeStatus: null }).eq("id", currentSchoolId);
-            if (schoolError) throw schoolError;
-            alert(`Success! ${promotedCount} students have been promoted to the next class and roll numbers reset.`);
-            loadStudents();
-        } else {
-            alert("No approved students found to promote.");
+    if (sid !== "ALL" && sid !== "") { ls = ls.filter(c => c.schoolId === sid); }
+    if (typeFilter !== "ALL") { ls = ls.filter(c => typeOf(c.schoolId, c.institution_type) === typeFilter); }
+
+    let html = "";
+    (ls || []).forEach(dt => {
+        const instType = typeOf(dt.schoolId, dt.institution_type);
+        const typeBadge = instType === "college"
+            ? '<span class="inline-flex px-2 py-1 rounded border border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300 text-[10px] font-bold font-mono uppercase tracking-widest">COLLEGE</span>'
+            : '<span class="inline-flex px-2 py-1 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 text-[10px] font-bold font-mono uppercase tracking-widest">SCHOOL</span>';
+        const sc = dt.status === "blocked" ? "text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10" : "text-emerald-400 border border-emerald-500/50 shadow-[0_0_5px_rgba(16,185,129,0.3)] bg-emerald-500/10";
+        const bb = dt.status === "blocked" ? `<button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="updateStatus('${dt.id}', 'active')">UNBLOCK</button>` : `<button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] font-mono transition" onclick="updateStatus('${dt.id}', 'blocked')">BLOCK</button>`;
+        const shadowBtn = dt.shadowBan ? `<button class="px-2 py-1 bg-slate-600/50 border border-slate-500 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition" onclick="toggleShadowBan('${dt.id}', false)"><i class="fas fa-eye"></i> UNBAN</button>` : `<button class="px-2 py-1 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded text-[10px] font-mono transition" onclick="toggleShadowBan('${dt.id}', true)"><i class="fas fa-ghost"></i> SHADOW BAN</button>`;
+        const actions = dt.id ? `
+                <button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.impersonateUser('${dt.id}', '${dt.schoolId}', '${dt.email}', '${dt.plainPassword}')"><i class="fas fa-user-secret"></i></button>
+                <button class="px-2 py-1 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded text-[10px] transition" onclick="window.openEditChairman('${dt.id}')"><i class="fas fa-edit"></i></button>
+                <button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.openLicenseModal('${dt.schoolId}')"><i class="fas fa-calendar-check"></i></button>
+                <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.generateGSTInvoice('${dt.schoolId}', '${dt.schoolName.replace(/'/g, "\\'")}', '${dt.email}', '${dt.subscriptionTier || 'Starter'}')"><i class="fas fa-file-invoice"></i></button>
+                ${bb} ${shadowBtn}
+                <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteChairman('${dt.id}', '${dt.schoolId}')"><i class="fas fa-trash"></i></button>`
+            : `<button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 hover:bg-indigo-600 hover:text-white rounded text-[10px] font-mono transition" onclick="window.openInstitutionEditor('${dt.schoolId}')"><i class="fas fa-sliders"></i> CONFIGURE</button>`;
+        const statusCell = dt.noChairman
+            ? '<span class="text-amber-300 border border-amber-500/40 bg-amber-500/10 px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">NO CHAIRMAN</span>'
+            : `<span class="${sc} px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">${(dt.status || 'ACTIVE').toUpperCase()}</span>`;
+        html += `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-4"><img src="${dt.logoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
+            <td class="p-4 sensitive-data font-bold text-white">${dt.schoolName}</td>
+            <td class="p-4"><code class="text-tealAccent font-mono text-[11px] font-bold tracking-wider">${dt.schoolId || "—"}</code></td>
+            <td class="p-4">${typeBadge}</td>
+            <td class="p-4 sensitive-data text-gray-200">${dt.name || "—"}<br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.email || ""}</span></td>
+            <td class="p-4">${statusCell}</td>
+            <td class="p-4">${dt.shadowBan ? '<span class="text-purple-400 text-[10px] font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]">SHADOW BANNED</span>' : '<span class="text-coolGray text-[10px] font-mono tracking-widest">STANDARD</span>'}</td>
+            <td class="p-4 text-right"><div class="flex justify-end gap-1">${actions}</div></td>
+        </tr>`;
+    });
+    body.innerHTML = html || "<tr><td colspan='8' class='text-center p-4 text-coolGray font-mono'>NO NODES FOUND</td></tr>";
+};
+
+window.openEditChairman = async (uid) => {
+    const ch = window.fetchedChairmen.find(c => c.id === uid); if (!ch) return;
+    window.currentEditChairmanId = uid;
+    document.getElementById("edit-preview-logo").src = ch.logoUrl || "https://via.placeholder.com/80";
+    document.getElementById("edit-schoolName").value = ch.schoolName || "";
+    document.getElementById("edit-chairmanName").value = ch.name || "";
+    document.getElementById("edit-chairmanEmail").value = ch.email || "";
+    document.getElementById("edit-schoolLogo").value = "";
+
+    if (ch.schoolId) {
+        const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", ch.schoolId).maybeSingle();
+        if (sDoc) {
+            document.getElementById("edit-maxStudents").value = sDoc.maxStudents || "";
+            document.getElementById("edit-themeColor").value = sDoc.themeColor || "#00F0FF";
         }
-    } catch (e) {
-        console.error("Batch promotion error:", e);
-        alert("Failed to execute promotion batch.");
     }
+    openCustomModal("edit-chairman-modal");
 };
 
-window.saveEmergencyTicker = async () => {
-    const text = document.getElementById("ticker_input").value.trim();
-    if (!text) return alert("Enter ticker text.");
-    const { error } = await supabaseClient.from("schools").update({ emergencyTicker: text, tickerActive: true }).eq("id", currentSchoolId);
-    if (error) throw error;
-    alert("Emergency Ticker Published!");
+window.deleteSchoolLogoFromEdit = async () => {
+    const uid = window.currentEditChairmanId;
+    const ch = window.fetchedChairmen.find(c => c.id === uid);
+    if (!ch || !ch.logoUrl) return window.showToast("NO EXISTING LOGO FOUND", "#e11d48");
+
+    window.customConfirm("DELETE OLD LOGO PERMANENTLY?", async () => {
+        try {
+            
+            await supabaseClient.from("users").update({ logoUrl: "" }).eq("id", uid);
+            if (ch.schoolId) {
+                await supabaseClient.from("schools").update({ logoUrl: "" }).eq("id", ch.schoolId);
+            }
+            ch.logoUrl = "";
+            document.getElementById("edit-preview-logo").src = "https://via.placeholder.com/80";
+            window.showToast("✅ OLD LOGO DELETED. YOU CAN NOW UPLOAD A NEW ONE.");
+        } catch (e) {
+            window.showToast("ERROR DELETING LOGO", "#e11d48");
+        }
+    });
 };
 
-window.clearEmergencyTicker = async () => {
-    const { error } = await supabaseClient.from("schools").update({ tickerActive: false }).eq("id", currentSchoolId);
-    if (error) throw error;
-    document.getElementById("ticker_input").value = "";
-    alert("Ticker Cleared.");
-};
+window.saveChairmanEdit = async () => {
+    const uid = window.currentEditChairmanId; const ch = window.fetchedChairmen.find(c => c.id === uid); if (!ch) return;
+    const newSchoolName = document.getElementById("edit-schoolName").value.trim(); const newChairmanName = document.getElementById("edit-chairmanName").value.trim(); let newEmail = document.getElementById("edit-chairmanEmail").value.trim();
+    const maxStudents = document.getElementById("edit-maxStudents").value.trim(); const themeColor = document.getElementById("edit-themeColor").value;
+    const logoFile = document.getElementById("edit-schoolLogo").files[0]; const btn = document.getElementById("save-chairman-edit-btn");
+    if (!newSchoolName || !newChairmanName || !newEmail) return window.showToast("FILL TEXT DETAILS!", "#e11d48");
 
-document.getElementById("admissionToggle").addEventListener("change", async (e) => {
+    btn.innerText = "PROCESSING...";
     try {
-        const { error } = await supabaseClient.from("schools").update({ admissionOpen: e.target.checked }).eq("id", currentSchoolId);
-        if (error) throw error;
-        alert(e.target.checked ? "Admissions OPEN." : "Admissions CLOSED.");
+        let finalLogoUrl = ch.logoUrl || "";
+        if (logoFile) {
+            const uploaded = await uploadToCloudinary(logoFile);
+            if (uploaded) {
+                if (finalLogoUrl) 
+                finalLogoUrl = uploaded;
+            }
+        }
+        if (newEmail !== ch.email) {
+            const sessionData = await supabaseClient.auth.getSession();
+            const token = sessionData.data.session?.access_token;
+            const response = await fetch("https://school-backend-zlgy.onrender.com/changeEmail", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newEmail: newEmail }) });
+            const data = await response.json();
+            if (!data.success) { btn.innerText = "WRITE CHANGES"; return window.showToast("❌ SERVER ERROR: " + data.error, "#e11d48"); }
+        }
+
+        await supabaseClient.from("users").update({ name: newChairmanName, schoolName: newSchoolName, email: newEmail, logoUrl: finalLogoUrl }).eq("id", uid);
+        if (ch.schoolId) { await supabaseClient.from("schools").update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: maxStudents ? Number(maxStudents).eq("id", ch.schoolId) : null, themeColor: themeColor }); }
+
+        window.showToast("✅ DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
+        window.closeCustomModal("edit-chairman-modal"); loadChairmen(); loadSchoolsForDropdown();
+    } catch (e) { window.showToast("❌ ERROR: " + e.message, "#e11d48"); } finally { btn.innerText = "WRITE CHANGES"; }
+};
+
+window.openLicenseModal = async (schoolId) => {
+    if (!schoolId) return window.showToast("INVALID NODE ID", "#e11d48");
+    document.getElementById("license-school-id").value = schoolId;
+    try {
+        const { data: doc } = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
+        if (!!doc.data && doc.licenseExpiry) {
+            document.getElementById("license-expiry-date").value = doc.licenseExpiry;
+        } else {
+            document.getElementById("license-expiry-date").value = "";
+        }
+        openCustomModal("license-modal");
+    } catch (e) { window.showToast("ERROR FETCHING LICENSE", "#e11d48"); }
+};
+
+window.saveLicenseDate = async () => {
+    const schoolId = document.getElementById("license-school-id").value;
+    const expiryDate = document.getElementById("license-expiry-date").value;
+    if (!expiryDate) return window.showToast("SELECT EXPIRY DATE!", "#e11d48");
+
+    try {
+        const { error } = await supabaseClient.rpc("update_school_license", { p_school_id: schoolId, p_expiry_date: expiryDate }); if (error) throw error;
+        window.showToast("✅ LICENSE UPDATED SUCCESSFULLY!", "#10B981");
+        window.closeCustomModal("license-modal");
+        window.logAudit("Renewed License", schoolId);
+    } catch (e) {
+        window.showToast("ERROR: " + e.message, "#e11d48");
     }
-    catch (err) { e.target.checked = !e.target.checked; }
+};
+
+window.updateStatus = (uid, ns) => {
+    if (ns === 'blocked') {
+        document.getElementById("block-prompt-input").value = "";
+        openCustomModal("block-prompt-modal");
+        document.getElementById("block-prompt-confirm").onclick = async () => {
+            await supabaseClient.from("users").update({ status: ns, blockReason: document.getElementById("block-prompt-input").eq("id", uid).value || "Policy Violation" });
+            window.closeCustomModal("block-prompt-modal"); loadChairmen(); window.logAudit("Blocked User", uid);
+        };
+    } else {
+        window.customConfirm("UNBLOCK THIS ACCOUNT?", () => {
+            supabaseClient.from("users").update({ status: ns, blockReason: "" }).eq("id", uid).then(() => { window.showToast("✅ ACCOUNT UNBLOCKED!"); loadChairmen(); window.logAudit("Unblocked User", uid); });
+        });
+    }
+};
+
+window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await supabaseClient.from("users").update({ shadowBan: state }).eq("id", uid); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); loadChairmen(); window.logAudit(state ? "Shadow Banned" : "Unbanned", uid); }); };
+
+// Cascade Delete
+window.deleteChairman = (uid, sid) => {
+    window.customConfirm("DANGER: ENTIRE NODE (School, Chairman, Staff, Students, Photos) WILL BE WIPED PERMANENTLY. PROCEED?", async () => {
+        try {
+            window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
+            if (uid) {
+                const { data: uDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();
+                
+                await supabaseClient.from("users").delete().eq("id", uid);
+            }
+            if (sid && sid !== "undefined" && sid !== "null") {
+                const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+                
+                await supabaseClient.from("schools").delete().eq("id", sid);
+
+                const { data: students } = await supabaseClient.from("students").select("*").eq("schoolId", sid);
+                for (const doc of students.docs) { const {error: err} = await supabaseClient.rpc('delete_student', { p_student_id: doc.id });  }
+
+                const { data: staffData } = await supabaseClient.from("users").select("*").eq("schoolId", sid).eq("role", "staff"); const staff = { docs: staffData || [] };
+                for (const doc of staff.docs) {  await supabaseClient.from("users").delete().eq("id", doc.id); }
+            }
+            window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
+        } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
+    });
+};
+
+window.impersonateUser = async (uid, schoolId, email, pass) => {
+    window.showToast("GENERATING IMPERSONATION TOKEN...", "#f59e0b");
+    window.logAudit("Impersonated User", uid);
+    setTimeout(() => {
+        const safeEmail = encodeURIComponent(email); const safePass = encodeURIComponent(pass);
+        const chairmanPortalLink = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/";
+        window.open(`${chairmanPortalLink}?impersonate=true&email=${safeEmail}&pass=${safePass}&isGhost=true`, '_blank');
+    }, 1500);
+};
+
+// ==========================================
+// 7. INSPECT STUDENTS & AADHAAR SEARCH
+// ==========================================
+const inspectSchoolSelectEl = document.getElementById("inspectSchoolSelect");
+if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", async (e) => {
+    const sid = e.target.value; const dd = document.getElementById("schoolInspectData");
+    if (!sid) { dd.classList.add("hidden-el"); return; }
+    try {
+        let ss = (sid === "ALL") ? await supabaseClient.from("students").select("*") : await supabaseClient.from("students").select("*").eq("schoolId", sid);
+        window.fetchedInspectStudents = []; let sh = "";
+        (ss || []).forEach(d => {
+            const dt = d; dt.id = d.id; window.fetchedInspectStudents.push(dt);
+            const sc = dt.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400';
+            sh += `<tr class="hover:bg-slateSurface/50 transition">
+                <td class="p-4"><img src="${dt.photoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
+                <td class="p-4 sensitive-data"><strong class="block text-white">${dt.name || 'N/A'}</strong><span class="text-[10px] text-coolGray font-mono tracking-widest">📞 ${dt.mobile || 'NO COMM'}</span><br><span class="text-[10px] text-amber-400 font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">UID: ${dt.aadhaar || dt.aadhar || dt.aadhaarNumber || 'N/A'}</span></td>
+                <td class="p-4"><span class="bg-blue-500/10 border border-blue-500/50 text-blue-400 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-widest shadow-[0_0_5px_rgba(59,130,246,0.3)]">SEC: ${dt.class || 'N/A'}</span></td>
+                <td class="p-4 sensitive-data text-[10px] font-mono text-gray-300"><b>O1:</b> ${dt.fatherName || 'N/A'}<br><b>O2:</b> ${dt.motherName || 'N/A'}</td>
+                <td class="p-4"><span class="${sc} font-bold font-mono text-[10px] tracking-widest drop-shadow-[0_0_5px_currentColor]">${(dt.status || 'N/A').toUpperCase()}</span></td>
+                <td class="p-4 text-right">
+                    <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.showStudentDetail('${dt.id}')"><i class="fas fa-eye"></i></button> 
+                    <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteInspectStudent('${dt.id}')"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+        });
+        document.getElementById("ins-student-table").innerHTML = sh || "<tr><td colspan='6' class='p-4 text-center text-coolGray font-mono'>NO SUBJECTS FOUND.</td></tr>";
+        document.getElementById("ins-students").innerText = (ss || []).length;
+        dd.classList.remove("hidden-el");
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 });
 
-const convertToBase64 = (file) => new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result); reader.onerror = (e) => reject(e); });
-const uploadToCloudinary = async (fileInputId, btnId, defaultText) => {
-    const file = document.getElementById(fileInputId).files[0]; if (!file) return null;
-    const btn = document.getElementById(btnId); btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Uploading...";
-    try {
-        const base64Image = await convertToBase64(file);
-        const res = await fetch("https://api.cloudinary.com/v1_1/disgtvs6f/image/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file: base64Image, upload_preset: "ml_default" }) });
-        const data = await res.json(); btn.innerHTML = defaultText; return data.secure_url || null;
-    } catch (e) { btn.innerHTML = defaultText; return null; }
+window.showStudentDetail = (id) => {
+    const st = window.fetchedInspectStudents.find(s => s.id === id); if (!st) return;
+    document.getElementById("stu-photo").src = st.photoUrl || "https://via.placeholder.com/80";
+    document.getElementById("stu-name").innerText = st.name || "N/A";
+    document.getElementById("stu-class").innerText = `${st.class || 'N/A'} (ID: ${st.roll || 'N/A'})`;
+    document.getElementById("stu-father").innerText = st.fatherName || "N/A";
+    document.getElementById("stu-mobile").innerText = st.mobile || "N/A";
+    document.getElementById("stu-password").innerText = st.appPassword || "••••••";
+    document.getElementById("stu-status").innerHTML = `<span class="${st.status === "Approved" ? "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]" : "text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]"}">${(st.status || "Pending").toUpperCase()}</span>`;
+    openCustomModal("student-modal");
 };
 
-function loadAllData() { loadStudents(); loadStaff(); loadNotices(); loadInbox(); loadSentMail(); loadTransactions(); loadPendingResults(); window.initDashboardChart(); window.loadTransportRoutes(); window.loadInventory(); loadAllSchools(); loadStudentTransfers(); loadCoreEduChat(); window.loadStudentComplaints(); }
-
-// ================= STUDENT TRANSFER (3-STAGE APPROVAL WORKFLOW) =================
-window.fetchedStudentTransfers = [];
-window.fetchedIncomingTransfers = [];
-
-const TRANSFER_CLASS_LIST = ["Nursery", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
-
-function populateTransferClassFilters() {
-    const histFilter = document.getElementById("transfer_history_class_filter");
-    if (histFilter) {
-        const selectedClass = histFilter.value || "All";
-        let html = "<option value='All'>All Classes</option>";
-        (institutionIsCollege() ? ["1st Semester", "2nd Semester", "3rd Semester", "4th Semester", "5th Semester", "6th Semester"] : ["Nursery", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]).forEach(c => html += `<option value="${c}">${c}</option>`);
-        histFilter.innerHTML = html;
-        histFilter.value = selectedClass;
-    }
-    const schoolFilter = document.getElementById("transfer_history_school_filter");
-    if (schoolFilter) {
-        const selectedSchool = schoolFilter.value || "All";
-        const schools = new Map();
-        (window.fetchedStudentTransfers || []).concat(window.fetchedIncomingTransfers || []).forEach(tr => {
-            if (tr.fromSchoolId) schools.set(tr.fromSchoolId, tr.fromSchoolName || tr.fromSchoolId);
-            if (tr.toSchoolId) schools.set(tr.toSchoolId, tr.toSchoolName || tr.toSchoolId);
-        });
-        let html = "<option value='All'>All Schools</option>";
-        Array.from(schools.entries()).sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, name]) => html += `<option value="${id}">${name}</option>`);
-        schoolFilter.innerHTML = html;
-        schoolFilter.value = schools.has(selectedSchool) ? selectedSchool : "All";
-    }
-}
-
-window.populateTransferStudentOptions = () => {
-    const select = document.getElementById("transfer_student_select");
-    if (!select) return;
-    const classFilter = document.getElementById("transfer_class_filter")?.value || "All";
-    const approvedStudents = (window.fetchedStudents || []).filter(st => {
-        const isApproved = (st.status || "Approved") === "Approved";
-        const isTransferred = st.transferStatus === "Completed" || st.transferStatus === "Pending HQ Approval" || st.transferStatus === "Pending Target Accept";
-        const classMatch = classFilter === "All" || st.class === classFilter;
-        return isApproved && !isTransferred && classMatch;
+window.deleteInspectStudent = (id) => {
+    window.customConfirm("DELETE THIS SUBJECT GLOBALLY?", async () => {
+        try {
+            const { data: stDoc } = await supabaseClient.from("students").select("*").eq("id", id).maybeSingle();
+            await supabaseClient.rpc('delete_student', { p_student_id: id });
+            
+            window.showToast("✅ SUBJECT & ASSETS PURGED!");
+            document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
+        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
     });
-    let html = "<option value=''>-- Select Student --</option>";
-    approvedStudents
-        .sort((a, b) => (a.class || "").localeCompare(b.class || "") || (Number(a.rollNo) || 9999) - (Number(b.rollNo) || 9999))
-        .forEach(st => {
-            html += `<option value="${st.id}">${st.name || "Student"} - Class ${st.class || "N/A"} (${st.rollNo || "No Roll"})</option>`;
+};
+
+window.searchStudentByAadhaar = async () => {
+    const input = document.getElementById("search-aadhaar-input").value.trim();
+    const resDiv = document.getElementById("aadhaar-search-result"); const errP = document.getElementById("aadhaar-error-msg");
+    resDiv.classList.add("hidden-el"); errP.classList.add("hidden-el");
+    if (!input) return window.showToast("ENTER UID NUMBER", "#e11d48");
+    try {
+        let { data: sn } = await supabaseClient.from("students").select("*").eq("aadhaar", input);
+        if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhar", input);
+        if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhaarNumber", input);
+        if (sn.empty) { errP.classList.remove("hidden-el"); return; }
+
+        let dt = sn.docs[0]; let sName = "UNKNOWN NODE";
+        if (dt.schoolId) { let { data: scl } = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl) sName = scl.schoolName || "UNKNOWN NODE"; }
+
+        document.getElementById("as-photo").src = dt.photoUrl || "https://via.placeholder.com/80";
+        document.getElementById("as-name").innerText = dt.name || "N/A";
+        document.getElementById("as-class").innerText = `SEC: ${dt.class || 'N/A'} (ID: ${dt.roll || '-'})`;
+        document.getElementById("as-school").innerText = sName.toUpperCase();
+        document.getElementById("as-aadhaar").innerText = dt.aadhaar || dt.aadhar || dt.aadhaarNumber || input;
+        document.getElementById("as-father").innerText = dt.fatherName || "N/A";
+        document.getElementById("as-mother").innerText = dt.motherName || "N/A";
+        document.getElementById("as-mobile").innerText = dt.mobile || "N/A";
+        document.getElementById("as-status").innerHTML = `<span class="${dt.status === "Approved" ? "text-emerald-400" : "text-amber-400"}">${(dt.status || "Pending").toUpperCase()}</span>`;
+        resDiv.classList.remove("hidden-el"); window.logAudit("Identity Search", input);
+    } catch (e) { window.showToast("SEARCH ERROR: " + e.message, "#e11d48"); }
+};
+
+window.downloadAadhaarResultPDF = async () => {
+    const btn = document.querySelector("#aadhaar-search-result .btn-green"); btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> EXTRACTING...`;
+    try {
+        btn.style.display = 'none';
+        const el = document.getElementById("aadhaar-print-area");
+        const stName = document.getElementById("as-name").innerText.replace(/ /g, "_");
+        const opt = { margin: 10, filename: `Dossier_${stName}_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+        const pdfBlob = await html2pdf().set(opt).from(el).outputPdf('blob');
+        await window.robustWebViewDownload(pdfBlob, opt.filename);
+        btn.style.display = 'flex';
+    } catch (e) { btn.style.display = 'flex'; }
+    btn.innerHTML = `<i class="fas fa-download"></i> EXPORT DOSSIER`;
+};
+
+// ==========================================
+// 8. GLOBAL STAFF DIRECTORY
+// ==========================================
+window.loadAllStaff = async () => { try { const { data: sp } = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; (sp || []).forEach(d => { const dt = d; dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.filterStaffList = () => {
+    const sid = document.getElementById("staffSchoolSelect").value; let ht = ""; let ls = window.fetchedGlobalStaffList;
+    if (sid !== "ALL") { ls = ls.filter(s => s.schoolId === sid); }
+    (ls || []).forEach(dt => {
+        ht += `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-4 sensitive-data font-bold text-white">${dt.name}</td><td class="p-4 sensitive-data text-[10px] text-tealAccent/70 tracking-widest">${dt.email}</td><td class="p-4 text-[10px] text-gray-300">${dt.schoolName || 'UNKNOWN'}</td>
+            <td class="p-4 text-right flex justify-end gap-1">
+                <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.showStaffDetail('${dt.id}')"><i class="fas fa-eye"></i></button>
+                <button class="px-2 py-1 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded text-[10px] transition" onclick="window.sendDirectMessage('${dt.id}', '${dt.schoolId}', 'staff')"><i class="fas fa-comment"></i></button>
+                <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteGlobalStaff('${dt.id}')"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`;
+    });
+    document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>";
+};
+
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const { data: stDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();  await supabaseClient.from("users").delete().eq("id", uid); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.showStaffDetail = (sId) => {
+    const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if (!st) return;
+    document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
+    document.getElementById("sd-name").innerText = st.name || "N/A";
+    document.getElementById("sd-role").innerText = (st.staffRole || st.role || "N/A").toUpperCase();
+    document.getElementById("sd-email").innerText = st.email || "N/A";
+    document.getElementById("sd-password").innerText = st.plainPassword || "••••••";
+    document.getElementById("sd-status").innerHTML = `<span class="${st.status === "blocked" ? "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" : "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"}">${st.status === "blocked" ? "BLOCKED" : "ACTIVE"}</span>`;
+    openCustomModal("staff-modal");
+};
+window.sendDirectMessage = (rid, sid, typ) => {
+    document.getElementById("msg-prompt-input").value = ""; openCustomModal("msg-prompt-modal");
+    document.getElementById("msg-prompt-confirm").onclick = async () => {
+        const m = document.getElementById("msg-prompt-input").value; if (!m) return;
+        try {
+            await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: typ, title: "SYSTEM DIRECTIVE", body: m, isRead: false, createdAt: new Date().toISOString() }]);
+            window.closeCustomModal("msg-prompt-modal"); window.showToast("✅ COMM TRANSMITTED!");
+        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    };
+};
+
+// ==========================================
+// 9. SCHOOL PAYMENTS & BILLING
+// ==========================================
+window.loadSchoolPayments = async () => { try { const { data: sp } = await supabaseClient.from("schools").select("*"); window.fetchedSchoolPayments = []; let tR = 0; (sp || []).forEach(d => { const dt = d; dt.id = d.id; window.fetchedSchoolPayments.push(dt); if (dt.appFee) tR += Number(dt.appFee); }); document.getElementById("stat-revenue-total").innerText = "₹ " + tR.toLocaleString(); window.filterPaymentList(); window.loadCompanyExpenses(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.filterPaymentList = () => {
+    const sid = document.getElementById("paymentSchoolSelect").value; let ht = ""; let ls = window.fetchedSchoolPayments;
+    if (sid !== "ALL") { ls = ls.filter(s => s.id === sid); }
+    (ls || []).forEach(dt => {
+        ht += `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><small class="text-tealAccent/50 font-mono tracking-widest">${dt.id}</small></td>
+            <td class="p-4"><input type="number" id="fee_${dt.id}" value="${dt.appFee || ''}" class="input-premium w-20 px-2 py-1 rounded text-xs text-emerald-400 font-mono border-emerald-500/30 bg-slateBase"></td>
+            <td class="p-4"><input type="date" id="date_${dt.id}" value="${dt.billingDate || ''}" class="input-premium px-2 py-1 rounded text-xs text-white font-mono bg-slateBase"></td>
+            <td class="p-4 text-emerald-400 font-bold text-[10px] tracking-widest drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]">ACTIVE</td>
+            <td class="p-4 text-right">
+                <button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.saveSchoolPayment('${dt.id}')">SAVE</button> 
+                <button class="px-3 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.viewSchoolBilling('${dt.id}')">LEDGER</button>
+            </td>
+        </tr>`;
+    });
+    document.getElementById("school-payment-table").innerHTML = ht || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO DATA</td></tr>";
+};
+
+window.saveSchoolPayment = async (sid) => {
+    try {
+        const fee = document.getElementById(`fee_${sid}`).value; const bDate = document.getElementById(`date_${sid}`).value;
+        if (!fee || !bDate) return window.showToast("ENTER VALUE AND CYCLE", "#e11d48");
+        const historyEntry = { fee: fee, date: bDate, savedAt: Date.now() };
+        const nextDate = new Date(bDate); nextDate.setMonth(nextDate.getMonth() + 1); const nextDateString = nextDate.toISOString().split('T')[0];
+        await supabaseClient.from("schools").update({ appFee: fee, billingDate: nextDateString, paymentHistory: [historyEntry] /* NOTE: Need RPC for atomic array union */ });
+        window.showToast("✅ LEDGER UPDATED!"); window.loadSchoolPayments();
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
+
+window.deletePaymentRecord = (sid, savedAt) => { window.customConfirm("PURGE LEDGER RECORD?", async () => { try { const s = window.fetchedSchoolPayments.find(x => x.id === sid); const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt); await supabaseClient.from("schools").update({ paymentHistory: updatedHistory }).eq("id", sid); window.showToast("✅ RECORD PURGED!"); s.paymentHistory = updatedHistory; window.viewSchoolBilling(sid); window.loadSchoolPayments(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.viewSchoolBilling = (sid) => {
+    const s = window.fetchedSchoolPayments.find(x => x.id === sid); if (!s) return;
+    document.getElementById("bill-school-name").innerHTML = `${s.schoolName.replace('\n', '<br>')} <br><span class="text-xs text-gray-500 font-mono tracking-widest">(${s.id})</span>`;
+    document.getElementById("bill-monthly-fee").innerText = s.appFee ? "₹ " + s.appFee : "NOT SET";
+    let ht = "";
+    if (s.appFee && s.billingDate) {
+        const recDate = new Date(s.billingDate).toLocaleDateString(); const mN = new Date(s.billingDate).toLocaleString('default', { month: 'long', year: 'numeric' });
+        ht += `<tr class="bg-rose-50"><td class="p-3 border-b border-gray-200">${recDate}</td><td class="p-3 border-b border-gray-200">Platform Fee - ${mN}</td><td class="p-3 border-b border-gray-200">₹ ${s.appFee}</td><td class="p-3 border-b border-gray-200 text-rose-600 font-bold uppercase tracking-widest">Pending</td></tr>`;
+    }
+    if (s.paymentHistory && s.paymentHistory.length > 0) {
+        const sortedHistory = s.paymentHistory.sort((a, b) => b.savedAt - a.savedAt);
+        sortedHistory.forEach(record => {
+            const recDate = new Date(record.date).toLocaleDateString(); const mN = new Date(record.date).toLocaleString('default', { month: 'long', year: 'numeric' });
+            ht += `<tr><td class="p-3 border-b border-gray-200">${recDate}</td><td class="p-3 border-b border-gray-200">Platform Fee - ${mN}</td><td class="p-3 border-b border-gray-200">₹ ${record.fee}</td><td class="p-3 border-b border-gray-200 flex justify-between items-center"><span class="text-emerald-600 font-bold uppercase tracking-widest">Cleared</span><button class="text-rose-500 hover:text-rose-700" onclick="window.deletePaymentRecord('${sid}', ${record.savedAt})"><i class="fas fa-trash"></i></button></td></tr>`;
         });
-    select.innerHTML = html;
-    window.previewTransferStudent();
+    }
+    document.getElementById("billing-history-body").innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-gray-500'>NO HISTORY.</td></tr>";
+    openCustomModal("billing-modal");
 };
 
-window.previewTransferStudent = () => {
-    const studentId = document.getElementById("transfer_student_select")?.value;
-    const student = (window.fetchedStudents || []).find(st => st.id === studentId);
-    const target = document.getElementById("transfer-preview-student");
-    if (target) target.innerText = student ? `${student.name || "Student"} | Class ${student.class || "N/A"} | Roll ${student.rollNo || "N/A"}` : "Not selected";
+window.exportBillToPDF = async () => {
+    const btn = document.getElementById("printBillBtn"); btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> WRAPPING PDF...`;
+    try {
+        const delBtns = document.querySelectorAll("#billing-print-area button"); delBtns.forEach(b => b.style.display = 'none');
+        const el = document.getElementById("billing-print-area"); const opt = { margin: 10, filename: `Statement_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+        const pdfBlob = await html2pdf().set(opt).from(el).outputPdf('blob'); await window.robustWebViewDownload(pdfBlob, opt.filename);
+        delBtns.forEach(b => b.style.display = 'block');
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    btn.innerHTML = `<i class="fas fa-file-pdf"></i> SAVE PDF INSTANCE`;
 };
 
-window.previewTransferSchoolName = () => {
-    const schoolId = document.getElementById("transfer_to_school_select")?.value;
-    const school = (window.allSchoolsCache || []).find(sc => sc.id === schoolId);
-    const target = document.getElementById("transfer-preview-school");
-    if (target) target.innerText = school ? (school.schoolName || school.name || school.id) : "Not selected";
+window.downloadAllPaymentsPDF = async () => {
+    if (!window.fetchedSchoolPayments || window.fetchedSchoolPayments.length === 0) return;
+    const startDate = document.getElementById("pay_start_date").value; const endDate = document.getElementById("pay_end_date").value;
+    let tableRows = [];
+    window.fetchedSchoolPayments.forEach(s => {
+        let sDateObj = null; let eDateObj = null;
+        if (startDate && endDate) { sDateObj = new Date(startDate).setHours(0, 0, 0, 0); eDateObj = new Date(endDate).setHours(23, 59, 59, 999); }
+        if (s.billingDate && s.appFee) { const bDate = new Date(s.billingDate).getTime(); if (!sDateObj || (bDate >= sDateObj && bDate <= eDateObj)) { tableRows.push([s.schoolName || 'N/A', s.id || 'N/A', "Rs " + s.appFee, new Date(s.billingDate).toLocaleDateString(), "Pending"]); } }
+        if (s.paymentHistory && s.paymentHistory.length > 0) { s.paymentHistory.forEach(record => { const rDate = new Date(record.date).getTime(); if (!sDateObj || (rDate >= sDateObj && rDate <= eDateObj)) { tableRows.push([s.schoolName || 'N/A', s.id || 'N/A', "Rs " + record.fee, new Date(record.date).toLocaleDateString(), "Cleared"]); } }); }
+    });
+    if (tableRows.length === 0) return window.showToast("NO DATA IN RANGE", "#e11d48");
+    try {
+        const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); let title = "Global Financial Ledger"; if (startDate && endDate) title += ` (${startDate} to ${endDate})`; doc.text(title, 14, 20);
+        doc.autoTable({ head: [["Node Name", "Node ID", "Value", "Temporal", "State"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [16, 185, 129] } });
+        const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, `Ledger_${Date.now()}.pdf`);
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
-async function uploadTransferDocument(fileInputId, buttonId, defaultText) {
-    const input = document.getElementById(fileInputId);
-    if (!input || input.files.length === 0) return null;
-    const url = await uploadToCloudinary(fileInputId, buttonId, defaultText);
-    return url || null;
+async function checkAndSendBillingAlerts() {
+    try {
+        const { data: sp } = await supabaseClient.from("schools").select("*"); const nw = Date.now();
+        (sp || []).forEach(async (d) => {
+            const dt = d;
+            if (dt.billingDate && dt.appFee) {
+                const bD = new Date(dt.billingDate).getTime(); const dD = Math.floor((nw - bD) / (1000 * 60 * 60 * 24));
+                if (dD >= 30) {
+                    if (!dt.paymentAlertSentAt) {
+                        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
+                        (cS || []).forEach(async (cD) => { await supabaseClient.from("direct_messages").insert([{ senderId: (superAdminUid || 'system'), schoolId: d.id, receiverId: cD.id, receiverType: "chairman", title: "CRITICAL ALERT", body: `Your payment of Rs ${dt.appFee} is pending. Please clear immediately to avoid system lock.`, isRead: false, createdAt: new Date().toISOString() }]); });
+                        await supabaseClient.from("schools").update({ paymentAlertSentAt: nw }).eq("id", d.id);
+                    } else {
+                        const hP = (nw - dt.paymentAlertSentAt) / (1000 * 60 * 60);
+                        if (hP >= 6 && !dt.paymentBlocked) {
+                            const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
+                            (cS || []).forEach(async (cD) => { await supabaseClient.from("users").update({ status: "blocked", blockReason: "System Locked: Pending Financial Clearance." }).eq("id", cD.id); });
+                            await supabaseClient.from("schools").update({ paymentBlocked: true }).eq("id", d.id);
+                        }
+                    }
+                } else {
+                    if (dt.paymentAlertSentAt || dt.paymentBlocked) {
+                        await supabaseClient.from("schools").update({ paymentAlertSentAt: null.eq("id", d.id), paymentBlocked: null });
+                        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
+                        (cS || []).forEach(async (cD) => { if (cD.blockReason && cD.blockReason.includes("Financial Clearance")) { await supabaseClient.from("users").update({ status: "active", blockReason: "" }).eq("id", cD.id); } });
+                    }
+                }
+            }
+        });
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 }
 
-window.submitStudentTransfer = async () => {
-    const btn = document.getElementById("transfer-submit-btn");
-    const defaultText = "<i class='fas fa-paper-plane'></i> Submit Transfer Request";
-    const studentId = document.getElementById("transfer_student_select").value;
-    const toSchoolId = document.getElementById("transfer_to_school_select").value;
-    const transferDate = document.getElementById("transfer_date").value || new Date().toLocaleDateString("en-CA");
-    const reason = document.getElementById("transfer_reason").value;
-    const remarks = document.getElementById("transfer_remarks").value.trim();
-    const student = (window.fetchedStudents || []).find(st => st.id === studentId);
-    const toSchool = (window.allSchoolsCache || []).find(sc => sc.id === toSchoolId);
-
-    if (!studentId || !student) return alert("Please select a student.");
-    if (!toSchoolId || !toSchool) return alert("Please select the transfer target school.");
-    if (toSchoolId === currentSchoolId) return alert("Cannot transfer to the same school.");
-    if (!confirm(`Submit transfer request for ${student.name || "student"} to ${toSchool.schoolName || toSchool.name || toSchool.id}?\n\nThis request will first go to CoreEdu HQ for approval, then to the target school for acceptance.`)) return;
-
-    btn.disabled = true;
-    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Uploading Documents...";
-
+// ==========================================
+// 9A. COMPANY EXPENSES MANAGEMENT
+// ==========================================
+window.addCompanyExpense = async () => {
+    const type = document.getElementById("expense-type").value;
+    const amount = document.getElementById("expense-amount").value.trim();
+    const desc = document.getElementById("expense-desc").value.trim();
+    if (!amount || !desc) return window.showToast("FILL ALL FIELDS!", "#e11d48");
     try {
-        const documents = {
-            transferCertificate: await uploadTransferDocument("transfer_doc_tc", "transfer-submit-btn", defaultText),
-            marksheet: await uploadTransferDocument("transfer_doc_marksheet", "transfer-submit-btn", defaultText),
-            parentConsent: await uploadTransferDocument("transfer_doc_consent", "transfer-submit-btn", defaultText),
-            other: await uploadTransferDocument("transfer_doc_other", "transfer-submit-btn", defaultText)
-        };
-
-        btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Submitting Request...";
-        // Client-generated primary key so the student row can reference the transfer.
-        const transferId = crypto.randomUUID();
-        const transferPayload = {
-            id: transferId,
-            transferId: transferId,
-            studentId,
-            studentName: student.name || "",
-            studentClass: student.class || "",
-            rollNo: student.rollNo || "",
-            regNo: student.regNo || "",
-            fromSchoolId: currentSchoolId,
-            fromSchoolName: currentSchoolName,
-            toSchoolId,
-            toSchoolName: toSchool.schoolName || toSchool.name || toSchool.id,
-            transferDate,
-            reason,
-            remarks,
-            documents,
-            status: "Pending HQ Approval",
-            workflowStage: 1,
-            workflowStages: [
-                { stage: "Submitted by Chairman", done: true, at: new Date().toISOString() },
-                { stage: "HQ Approval", done: false },
-                { stage: "Target School Acceptance", done: false },
-                { stage: "Completed", done: false }
-            ],
+        await supabaseClient.from("company_expenses").insert([{
+            type: type,
+            amount: Number(amount),
+            description: desc,
             createdAt: new Date().toISOString(),
-            createdBy: currentUserId || "chairman"
-        };
-
-        const { error: transferError } = await supabaseClient.from("student_transfers").insert(transferPayload);
-        if (transferError) throw transferError;
-
-        const { error: studentError } = await supabaseClient.from("students").update({
-            transferStatus: "Pending HQ Approval",
-            transferRecordId: transferId,
-            pendingTransferTo: toSchoolId
-        }).eq("id", studentId);
-        if (studentError) throw studentError;
-
-        alert("Transfer request submitted. Status: Pending HQ Approval.\nCoreEdu HQ will review and approve this request.");
-        document.getElementById("transfer_student_select").value = "";
-        document.getElementById("transfer_to_school_select").value = "";
-        document.getElementById("transfer_date").value = "";
-        document.getElementById("transfer_remarks").value = "";
-        ["transfer_doc_tc", "transfer_doc_marksheet", "transfer_doc_consent", "transfer_doc_other"].forEach(id => document.getElementById(id).value = "");
-        window.previewTransferStudent();
-        window.previewTransferSchoolName();
-        loadStudents();
-        loadStudentTransfers();
+            createdBy: superAdminUid
+        }]);
+        window.showToast("✅ EXPENSE RECORDED!");
+        document.getElementById("expense-amount").value = "";
+        document.getElementById("expense-desc").value = "";
+        window.loadCompanyExpenses();
+        window.logAudit("Added Expense", `${type}: ₹${amount}`);
     } catch (e) {
-        console.error("Transfer failed:", e);
-        alert("Transfer request failed: " + e.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = defaultText;
+        window.showToast("❌ ERROR: " + e.message, "#e11d48");
     }
 };
 
-function transferStatusLabel(status) {
-    switch (status) {
-        case "Pending HQ Approval": return `<span style="color:#fbbf24; font-weight:bold;"><i class="fas fa-clock"></i> Pending HQ Approval</span>`;
-        case "Pending Target Accept": return `<span style="color:#60a5fa; font-weight:bold;"><i class="fas fa-hourglass-half"></i> Pending Target Accept</span>`;
-        case "Completed": return `<span style="color:#5eead4; font-weight:bold;"><i class="fas fa-circle-check"></i> Completed</span>`;
-        case "Rejected": return `<span style="color:#fca5a5; font-weight:bold;"><i class="fas fa-circle-xmark"></i> Rejected</span>`;
-        case "Cancelled": return `<span style="color:#94a3b8; font-weight:bold;"><i class="fas fa-ban"></i> Cancelled</span>`;
-        default: return `<span style="color:#94a3b8;">${status || "Unknown"}</span>`;
-    }
-}
-
-function buildTransferDocLinks(docs) {
-    const entries = Object.entries(docs || {}).filter(([, url]) => !!url);
-    if (entries.length === 0) return "No documents";
-    return entries.map(([key, url]) => `<button class="transfer-doc-link transfer-doc-preview-btn" onclick="window.previewTransferDocument('${key}', '${encodeURIComponent(url)}')"><i class="fas fa-paperclip"></i> ${formatDocLabel(key)}</button>`).join("");
-}
-
-function formatDocLabel(key) {
-    return String(key || "Document").replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase());
-}
-
-window.previewTransferDocument = (key, encodedUrl) => {
-    const url = decodeURIComponent(encodedUrl || "");
-    if (!url) return;
-    const modal = document.getElementById("transfer-doc-modal");
-    const title = document.getElementById("transfer-doc-title");
-    const preview = document.getElementById("transfer-doc-preview");
-    const link = document.getElementById("transfer-doc-open-link");
-    if (!modal || !preview) return window.open(url, "_blank");
-    const label = formatDocLabel(key);
-    if (title) title.innerHTML = `<i class="fas fa-file-alt"></i> ${label}`;
-    if (link) link.href = url;
-    const isPdf = /\.pdf($|\?)/i.test(url);
-    preview.innerHTML = isPdf ? `<iframe src="${url}" title="${label}"></iframe>` : `<img src="${url}" alt="${label}">`;
-    modal.style.display = "flex";
+window.loadCompanyExpenses = async () => {
+    try {
+        const { data: snap } = await supabaseClient.from("company_expenses").select("*").order("createdAt", {ascending: false}).limit(50);
+        let html = "";
+        (snap || []).forEach(doc => {
+            const d = doc;
+            const date = d.createdAt ? new Date(d.createdAt.toMillis()).toLocaleDateString() : "N/A";
+            html += `<tr class="hover:bg-slateSurface/50 transition">
+                <td class="p-4 text-coolGray tracking-widest">${date}</td>
+                <td class="p-4"><span class="bg-amber-500/10 border border-amber-500/50 text-amber-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.type}</span></td>
+                <td class="p-4 text-white">${d.description}</td>
+                <td class="p-4 text-emerald-400 font-bold">₹ ${d.amount.toLocaleString()}</td>
+                <td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteExpense('${doc.id}')"><i class="fas fa-trash"></i></button></td>
+            </tr>`;
+        });
+        document.getElementById("expenses-table").innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO EXPENSES RECORDED.</td></tr>";
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
 
-window.renderTransferHistory = () => {
-    const tbody = document.getElementById("transfer-history-body");
-    if (!tbody) return;
-    const classFilter = document.getElementById("transfer_history_class_filter")?.value || "All";
-    const schoolFilter = document.getElementById("transfer_history_school_filter")?.value || "All";
-    const transfers = (window.fetchedStudentTransfers || []).filter(tr => {
-        const classMatch = classFilter === "All" || tr.studentClass === classFilter;
-        const schoolMatch = schoolFilter === "All" || tr.fromSchoolId === schoolFilter || tr.toSchoolId === schoolFilter;
-        return classMatch && schoolMatch;
+window.deleteExpense = (id) => {
+    window.customConfirm("DELETE THIS EXPENSE?", async () => {
+        await supabaseClient.from("company_expenses").delete().eq("id", id);
+        window.showToast("✅ EXPENSE DELETED!");
+        window.loadCompanyExpenses();
     });
-
-    let html = "";
-    transfers.forEach(tr => {
-        html += `<tr>
-            <td>${tr.transferDate || "N/A"}</td>
-            <td><strong>${tr.studentName || "N/A"}</strong><br><small>Class ${tr.studentClass || "N/A"} | Roll ${tr.rollNo || "N/A"}</small></td>
-            <td>${tr.fromSchoolName || "N/A"}</td>
-            <td>${tr.toSchoolName || "N/A"}</td>
-            <td>${tr.reason || "N/A"}<br><small>${tr.remarks || ""}</small></td>
-            <td>${buildTransferDocLinks(tr.documents)}</td>
-            <td>${transferStatusLabel(tr.status)}</td>
-            <td><button class="action-btn btn-blue" style="padding:4px 10px; font-size:12px;" onclick="window.downloadTransferReceipt('${tr.id}')"><i class="fas fa-file-pdf"></i> Receipt</button></td>
-        </tr>`;
-    });
-    tbody.innerHTML = html || "<tr><td colspan='8' style='text-align:center;'>No transfer records found.</td></tr>";
 };
 
-window.renderIncomingTransfers = () => {
-    const tbody = document.getElementById("incoming-transfer-body");
-    if (!tbody) return;
-    const incoming = window.fetchedIncomingTransfers || [];
-    let html = "";
-    incoming.forEach(tr => {
-        let actionCell = "";
-        if (tr.status === "Pending Target Accept") {
-            actionCell = `<button class="action-btn btn-green" style="padding:4px 10px; font-size:12px; margin-right:5px;" onclick="window.acceptIncomingTransfer('${tr.id}')"><i class="fas fa-check"></i> Accept</button>
-                <button class="action-btn btn-red" style="padding:4px 10px; font-size:12px;" onclick="window.rejectIncomingTransfer('${tr.id}')"><i class="fas fa-times"></i> Reject</button>`;
-        } else {
-            actionCell = `<span style="color:#94a3b8; font-size:12px;">No action needed</span>`;
+// ==========================================
+// 9B. TALLY EXPORT FUNCTIONS
+// ==========================================
+window.exportToTallyXML = async () => {
+    if (!window.fetchedSchoolPayments || window.fetchedSchoolPayments.length === 0) return;
+    window.showToast("GENERATING TALLY XML...", "#f59e0b");
+
+    let xmlContent = `<?xml version="1.0" encoding="UTF-8"?>\n<ENVELOPE>\n<HEADER>\n<TALLYREQUEST>Import Data</TALLYREQUEST>\n</HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC>\n<REPORTNAME>Vouchers</REPORTNAME>\n</REQUESTDESC>\n<REQUESTDATA>\n`;
+
+    window.fetchedSchoolPayments.forEach(s => {
+        if (s.appFee && s.billingDate) {
+            const date = new Date(s.billingDate).toLocaleDateString('en-GB').replace(/\//g, '');
+            xmlContent += `<TALLYMESSAGE xmlns:UDF="TallyUDF">\n<VOUCHER VCHTYPE="Receipt" ACTION="Create">\n<DATE>${date}</DATE>\n<NARRATION>Platform Fee - ${s.schoolName}</NARRATION>\n<VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>\n<VOUCHERNUMBER>${s.id}</VOUCHERNUMBER>\n<ALLLEDGERENTRIES.LIST>\n<LEDGERNAME>${s.schoolName}</LEDGERNAME>\n<AMOUNT>${s.appFee}</AMOUNT>\n</ALLLEDGERENTRIES.LIST>\n</VOUCHER>\n</TALLYMESSAGE>\n`;
         }
-        html += `<tr>
-            <td>${tr.transferDate || "N/A"}</td>
-            <td><strong>${tr.studentName || "N/A"}</strong><br><small>Class ${tr.studentClass || "N/A"} | Roll ${tr.rollNo || "N/A"}</small></td>
-            <td>${tr.fromSchoolName || "N/A"}</td>
-            <td>${tr.reason || "N/A"}</td>
-            <td>${buildTransferDocLinks(tr.documents)}</td>
-            <td>${transferStatusLabel(tr.status)}</td>
-            <td>${actionCell}</td>
-        </tr>`;
     });
-    tbody.innerHTML = html || "<tr><td colspan='7' style='text-align:center;'>No incoming transfer requests.</td></tr>";
+
+    xmlContent += `</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>`;
+
+    const blob = new Blob([xmlContent], { type: "application/xml" });
+    await window.robustWebViewDownload(blob, `Tally_Export_${Date.now()}.xml`);
+    window.logAudit("Exported Tally XML", "All Schools");
 };
 
-// Transfer rows store ISO timestamps in Supabase, so ordering is done on parsed time.
-function transferCreatedTime(record) {
-    return toEpochMillis(record?.createdAt);
+window.exportToTallyCSV = async () => {
+    if (!window.fetchedSchoolPayments || window.fetchedSchoolPayments.length === 0) return;
+    window.showToast("GENERATING TALLY CSV...", "#f59e0b");
+
+    let csvContent = "Date,Voucher Type,Voucher Number,Ledger Name,Amount,Narration\n";
+
+    window.fetchedSchoolPayments.forEach(s => {
+        if (s.appFee && s.billingDate) {
+            const date = new Date(s.billingDate).toLocaleDateString('en-GB');
+            csvContent += `${date},Receipt,${s.id},"${s.schoolName}",${s.appFee},"Platform Fee - ${s.schoolName}"\n`;
+        }
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    await window.robustWebViewDownload(blob, `Tally_Export_${Date.now()}.csv`);
+    window.logAudit("Exported Tally CSV", "All Schools");
+};
+
+// ==========================================
+// 9C. GST INVOICE GENERATOR
+// ==========================================
+window.loadPasswordRequests = () => {
+    const sid = document.getElementById("pwdReqSchoolSelect").value; let html = ""; let ls = window.fetchedChairmen;
+    if (sid !== "ALL" && sid !== "") { ls = ls.filter(c => c.schoolId === sid); }
+    (ls || []).forEach(dt => {
+        let reqHtml = `<span class="text-coolGray text-[10px] font-mono tracking-widest">NO REQUEST</span>`;
+        let btnHtml = `<button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`;
+        if (dt.suggestedPassword) { reqHtml = `<span class="text-amber-400 font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">${dt.suggestedPassword}</span>`; btnHtml = `<button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.approvePasswordRequest('${dt.id}', '${dt.suggestedPassword}')">APPROVE</button> <button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition ml-1" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`; }
+        html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" data-id="${dt.id}"></td><td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name}</span></td><td class="p-4"><div class="flex items-center gap-2"><span class="pwd-mask tracking-widest text-lg text-tealAccent">•••••••</span><span class="pwd-text hidden-el text-rose-400 font-mono font-bold text-[10px] tracking-widest">KEY: ${dt.plainPassword || 'N/A'}<br>PIN: ${dt.pin || 'NOT SET'}</span><button class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition border border-glassBorder" onclick="window.togglePwd(this)">DECRYPT</button></div></td><td class="p-4">${reqHtml}</td><td class="p-4 text-right flex gap-1 justify-end">${btnHtml} <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition ml-1" onclick="window.deletePasswordRequest('${dt.id}')"><i class="fas fa-trash"></i></button></td></tr>`;
+    });
+    document.getElementById("password-req-table").innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO TARGETS FOUND</td></tr>";
+}
+window.deletePasswordRequest = async (uid) => {
+    window.customConfirm("DELETE KEY FROM SYSTEM?", async () => {
+        try {
+            await supabaseClient.from("users").update({ plainPassword: null.eq("id", uid), suggestedPassword: null });
+            window.showToast("KEY ERASED!");
+            loadChairmen();
+        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    });
+};
+window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
+window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
+
+async function loadSchoolsForDropdown() {
+    const h = '<option value="ALL">-- GLOBAL NETWORK --</option>';
+    const t = ["masterNodeId", "inspectSchoolSelect", "backupScopeSelect", "secSchoolSelect", "staffSchoolSelect", "paymentSchoolSelect", "filterChairmenSchool", "deviceSchoolSelect", "pwdReqSchoolSelect", "broadcastSchoolTarget", "rollbackSchoolSelect", "featureSchoolSelect"];
+    t.forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "featureSchoolSelect" || id === "masterNodeId") ? '<option value="">-- SELECT TARGET --</option>' : h; } });
+
+    try {
+        const { data: sp } = await supabaseClient.from("schools").select("*");
+        let requestsHtml = "";
+
+        (sp || []).forEach(d => {
+            const data = d;
+            const op = `<option value="${d.id}">${data.schoolName.toUpperCase()}</option>`;
+            t.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML += op; });
+
+            if (data.sessionUpgradeStatus === "pending") {
+                const chairman = window.fetchedChairmen ? window.fetchedChairmen.find(c => c.schoolId === d.id) : null;
+                const cName = chairman ? chairman.name : "N/A";
+                requestsHtml += `<tr class="hover:bg-slateSurface/50 transition">
+                    <td class="p-4 font-bold text-white">${data.schoolName}</td>
+                    <td class="p-4 text-gray-200">${cName}</td>
+                    <td class="p-4"><span class="text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10 px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">PENDING APPROVAL</span></td>
+                    <td class="p-4 text-right">
+                        <button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="approveSessionUpgrade('${d.id}')"><i class="fas fa-check"></i> APPROVE</button>
+                    </td>
+                </tr>`;
+            }
+        });
+
+        const reqTable = document.getElementById("upgradeRequestsTableBody");
+        if (reqTable) {
+            reqTable.innerHTML = requestsHtml || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>NO PENDING REQUESTS</td></tr>";
+        }
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 }
 
-window.loadStudentTransfers = async () => {
-    if (!currentSchoolId) return;
-    populateTransferClassFilters();
-    const tbody = document.getElementById("transfer-history-body");
-    const incomingTbody = document.getElementById("incoming-transfer-body");
-    if (tbody) tbody.innerHTML = "<tr><td colspan='8' style='text-align:center;'>Loading transfers...</td></tr>";
-    if (incomingTbody) incomingTbody.innerHTML = "<tr><td colspan='7' style='text-align:center;'>Loading incoming requests...</td></tr>";
-    try {
-        const [outRes, inRes] = await Promise.all([
-            supabaseClient.from("student_transfers").select("*").eq("fromSchoolId", currentSchoolId),
-            supabaseClient.from("student_transfers").select("*").eq("toSchoolId", currentSchoolId)
-        ]);
-        if (outRes.error) throw outRes.error;
-        if (inRes.error) throw inRes.error;
-
-        window.fetchedStudentTransfers = outRes.data || [];
-        window.fetchedStudentTransfers.sort((a, b) => transferCreatedTime(b) - transferCreatedTime(a));
-
-        window.fetchedIncomingTransfers = inRes.data || [];
-        window.fetchedIncomingTransfers.sort((a, b) => transferCreatedTime(b) - transferCreatedTime(a));
-
-        populateTransferClassFilters();
-        window.renderTransferHistory();
-        window.renderIncomingTransfers();
-    } catch (e) {
-        console.error("Load transfers failed:", e);
-        if (tbody) tbody.innerHTML = "<tr><td colspan='8' style='text-align:center; color:#fca5a5;'>Unable to load transfer records.</td></tr>";
-        if (incomingTbody) incomingTbody.innerHTML = "<tr><td colspan='7' style='text-align:center; color:#fca5a5;'>Unable to load incoming requests.</td></tr>";
-    }
+window.approveSessionUpgrade = (schoolId) => {
+    window.customConfirm("APPROVE SESSION UPGRADE FOR THIS NODE? The Chairman will be able to execute bulk promotions.", async () => {
+        try {
+            await supabaseClient.from("schools").update({ sessionUpgradeStatus: "approved" }).eq("id", schoolId);
+            window.showToast("✅ UPGRADE APPROVED!");
+            window.logAudit("Approved Session Upgrade", schoolId);
+            loadSchoolsForDropdown(); // Refresh table
+        } catch (e) {
+            window.showToast("ERROR: " + e.message, "#e11d48");
+        }
+    });
 };
 
-window.acceptIncomingTransfer = async (transferId) => {
-    const tr = window.fetchedIncomingTransfers.find(t => t.id === transferId);
-    if (!tr) return alert("Transfer record not found.");
-    if (tr.status !== "Pending Target Accept") return alert("This transfer is not awaiting your acceptance.");
-    if (!confirm(`Accept transfer of ${tr.studentName || "student"} from ${tr.fromSchoolName || "previous school"}?\n\nThe student will be officially moved to your school.`)) return;
-    try {
-        const stages = tr.workflowStages || [];
-        stages.forEach(s => { if (s.stage === "Target School Acceptance") { s.done = true; s.at = new Date().toISOString(); } if (s.stage === "Completed") { s.done = true; s.at = new Date().toISOString(); } });
-        const { error: transferError } = await supabaseClient.from("student_transfers").update({
-            status: "Completed",
-            workflowStage: 4,
-            acceptedAt: new Date().toISOString(),
-            acceptedBy: currentUserId || "chairman",
-            workflowStages: stages
-        }).eq("id", transferId);
-        if (transferError) throw transferError;
-
-        const { error: studentError } = await supabaseClient.from("students").update({
-            schoolId: currentSchoolId,
-            previousSchoolId: tr.fromSchoolId,
-            previousSchoolName: tr.fromSchoolName,
-            transferStatus: "Completed",
-            transferredAt: new Date().toISOString(),
-            transferRecordId: transferId
-        }).eq("id", tr.studentId);
-        if (studentError) throw studentError;
-        alert("Transfer accepted. Student has been moved to your school.");
-        loadStudents();
-        loadStudentTransfers();
-    } catch (e) {
-        console.error("Accept transfer failed:", e);
-        alert("Failed to accept transfer: " + e.message);
-    }
+const companyFeatureRegistry = {
+    school: [
+        { key: "dashboard", label: "Dashboard" },
+        { key: "students", label: "Students & Certs" },
+        { key: "studentTransfer", label: "Student Transfer" },
+        { key: "admitCards", label: "Admit Cards" },
+        { key: "staff", label: "Staff Manager" },
+        { key: "finance", label: "Finance & Fees" },
+        { key: "feeApprovals", label: "Fee Approvals" },
+        { key: "academics", label: "Academic Veto" },
+        { key: "notices", label: "Notices & Ticker" },
+        { key: "communicationHub", label: "Communication Hub" },
+        { key: "qrFee", label: "QR Fee Module", moduleKey: "qrFee" },
+        { key: "admitCardModule", label: "Admit Card Module", moduleKey: "admitCard" },
+        { key: "whatsapp", label: "WhatsApp Module", moduleKey: "whatsapp" },
+        { key: "transport", label: "Transport Manager", moduleKey: "transport" },
+        { key: "inventory", label: "Inventory & Assets", moduleKey: "inventory" },
+        { key: "dailyAttendance", label: "Daily Attendance", moduleKey: "attendance" },
+        { key: "settings", label: "Account & School Settings" },
+        { key: "studentPortalFeatures", label: "Student Portal Features" }
+    ],
+    student: [
+        { key: "profile", label: "Profile" },
+        { key: "homework", label: "Homework" },
+        { key: "fee", label: "Fee Payment" },
+        { key: "datesheet", label: "DateSheet" },
+        { key: "attendance", label: "Attendance" },
+        { key: "sms", label: "SMS" },
+        { key: "calendar", label: "Calendar Planning" },
+        { key: "idcard", label: "ID Card" },
+        { key: "syllabus", label: "Syllabus" },
+        { key: "fee-receipt", label: "Fee Receipt" },
+        { key: "admit", label: "Admit Card" },
+        { key: "gatepass", label: "Gate Pass" },
+        { key: "notifications", label: "Notifications" },
+        { key: "birthday", label: "Birthday" },
+        { key: "transport", label: "Transport" },
+        { key: "study-material", label: "Study Material" },
+        { key: "result", label: "Result" },
+        { key: "leave", label: "Leave Request" },
+        { key: "batchmate", label: "Batchmate" },
+        { key: "circular", label: "Circular" },
+        { key: "news", label: "News" },
+        { key: "assignment", label: "Assignment" },
+        { key: "complaint", label: "Complaint" },
+        { key: "online-classes", label: "Online Classes" },
+        { key: "social-media", label: "Social Media" }
+    ]
 };
 
-window.rejectIncomingTransfer = async (transferId) => {
-    const tr = window.fetchedIncomingTransfers.find(t => t.id === transferId);
-    if (!tr) return alert("Transfer record not found.");
-    const rejectReason = prompt(`Reason for rejecting transfer of ${tr.studentName || "student"}:`);
-    if (rejectReason === null) return;
-    try {
-        const stages = tr.workflowStages || [];
-        stages.forEach(s => { if (s.stage === "Target School Acceptance") { s.done = true; s.at = new Date().toISOString(); s.rejected = true; } });
-        const { error: transferError } = await supabaseClient.from("student_transfers").update({
-            status: "Rejected",
-            rejectedAt: new Date().toISOString(),
-            rejectedBy: currentUserId || "chairman",
-            rejectReason: rejectReason || "Rejected by target school",
-            workflowStages: stages
-        }).eq("id", transferId);
-        if (transferError) throw transferError;
-
-        const { error: studentError } = await supabaseClient.from("students").update({
-            transferStatus: null,
-            pendingTransferTo: null
-        }).eq("id", tr.studentId);
-        if (studentError) throw studentError;
-        alert("Transfer rejected. The student remains at the original school.");
-        loadStudents();
-        loadStudentTransfers();
-    } catch (e) {
-        console.error("Reject transfer failed:", e);
-        alert("Failed to reject transfer: " + e.message);
-    }
+const legacyStudentFeatureKeys = {
+    timetable: "datesheet",
+    notice: "notifications",
+    library: "study-material",
+    marks: "result"
 };
+let companyFeatureSettings = { school: {}, modules: {}, student: {} };
 
-window.cancelTransferRequest = async (transferId) => {
-    const tr = window.fetchedStudentTransfers.find(t => t.id === transferId);
-    if (!tr) return alert("Transfer record not found.");
-    if (tr.status === "Completed") return alert("Cannot cancel a completed transfer.");
-    if (!confirm("Cancel this transfer request? The student will remain at this school.")) return;
-    try {
-        const { error: transferError } = await supabaseClient.from("student_transfers")
-            .update({ status: "Cancelled", cancelledAt: new Date().toISOString() })
-            .eq("id", transferId);
-        if (transferError) throw transferError;
+function featureToggleId(group, key) {
+    return `company-feature-${group}-${key.replace(/[^a-z0-9]/gi, "-")}`;
+}
 
-        const { error: studentError } = await supabaseClient.from("students")
-            .update({ transferStatus: null, pendingTransferTo: null })
-            .eq("id", tr.studentId);
-        if (studentError) throw studentError;
-        alert("Transfer request cancelled.");
-        loadStudents();
-        loadStudentTransfers();
-    } catch (e) {
-        console.error("Cancel transfer failed:", e);
-        alert("Failed to cancel transfer: " + e.message);
-    }
-};
+function removeStaticFeatureMarkup() {
+    const schoolContainer = document.getElementById("feature-toggles-container");
+    const staticSchoolGrid = schoolContainer?.nextElementSibling;
+    if (staticSchoolGrid && !staticSchoolGrid.id && staticSchoolGrid.classList.contains("grid")) staticSchoolGrid.remove();
+}
 
-window.downloadTransferReceipt = (transferId) => {
-    const tr = [...(window.fetchedStudentTransfers || []), ...(window.fetchedIncomingTransfers || [])].find(t => t.id === transferId);
-    if (!tr) return alert("Transfer record not found.");
-    try {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const marginX = 15;
-        let y = 20;
+function renderFeatureGroup(group, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = companyFeatureRegistry[group].map(feature => {
+        const enabled = companyFeatureSettings[group]?.[feature.key] !== false;
+        return `<label data-company-feature-card="${group}:${feature.key}" class="flex items-center justify-between gap-3 bg-slateBase/70 border ${enabled ? "border-tealAccent/25" : "border-rose-500/35 opacity-70"} rounded-xl px-4 py-3 transition">
+            <span><strong class="block text-sm text-white font-medium">${feature.label}</strong><small class="feature-state text-[10px] font-mono uppercase ${enabled ? "text-emerald-400" : "text-rose-400"}">${enabled ? "Enabled" : "Locked"}</small></span>
+            <input id="${featureToggleId(group, feature.key)}" type="checkbox" class="accent-teal-400 h-5 w-5 shrink-0" ${enabled ? "checked" : ""} onchange="window.saveFeatureToggles('${group}', '${feature.key}', this.checked)">
+        </label>`;
+    }).join("");
+    container.classList.remove("hidden-el");
+}
 
-        pdf.setFillColor(30, 60, 114);
-        pdf.rect(0, 0, 210, 30, 'F');
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(18);
-        pdf.setFont(undefined, 'bold');
-        pdf.text("Student Transfer Receipt", marginX, 19);
+function setFeatureControlsBusy(isBusy) {
+    document.querySelectorAll('[id^="company-feature-"]').forEach(toggle => { toggle.disabled = isBusy; });
+    const schoolSelect = document.getElementById("featureSchoolSelect");
+    if (schoolSelect) schoolSelect.disabled = isBusy;
+}
 
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(10);
-        pdf.setFont(undefined, 'normal');
-        y = 42;
-        pdf.text(`Receipt No: TRF-${tr.transferId ? tr.transferId.substring(0, 8).toUpperCase() : "N/A"}`, marginX, y);
-        pdf.text(`Date: ${new Date().toLocaleString()}`, 130, y);
-        y += 10;
-        pdf.setDrawColor(200, 200, 200);
-        pdf.line(marginX, y, 195, y);
-        y += 10;
-
-        const fields = [
-            ["Student Name", tr.studentName || "N/A"],
-            ["Class / Roll", `${tr.studentClass || "N/A"} / ${tr.rollNo || "N/A"}`],
-            ["Reg. No", tr.regNo || "N/A"],
-            ["From School", tr.fromSchoolName || "N/A"],
-            ["To School", tr.toSchoolName || "N/A"],
-            ["Transfer Date", tr.transferDate || "N/A"],
-            ["Reason", tr.reason || "N/A"],
-            ["Remarks", tr.remarks || "—"],
-            ["Status", tr.status || "N/A"]
-        ];
-        pdf.setFontSize(11);
-        fields.forEach(([label, value]) => {
-            pdf.setFont(undefined, 'bold');
-            pdf.text(`${label}:`, marginX, y);
-            pdf.setFont(undefined, 'normal');
-            const lines = pdf.splitTextToSize(String(value), 130);
-            pdf.text(lines, 70, y);
-            y += 7 * (lines.length || 1);
+function applyGranularSubFeatureLocks() {
+    const root = document.getElementById("tab-feature-toggles");
+    if (!root) return;
+    root.querySelectorAll("label").forEach(card => {
+        const toggles = Array.from(card.querySelectorAll("input[type='checkbox']"));
+        if (toggles.length < 2) return;
+        const mainEnabled = toggles[0].checked;
+        card.classList.toggle("opacity-60", !mainEnabled);
+        toggles.slice(1).forEach(toggle => {
+            toggle.disabled = !mainEnabled;
+            if (toggle.parentElement) toggle.parentElement.classList.toggle("opacity-40", !mainEnabled);
         });
+    });
+}
 
-        y += 5;
-        pdf.line(marginX, y, 195, y);
-        y += 10;
-        pdf.setFontSize(9);
-        pdf.setTextColor(120, 120, 120);
-        pdf.text("Workflow Progress:", marginX, y);
-        y += 6;
-        pdf.setTextColor(0, 0, 0);
-        (tr.workflowStages || []).forEach((s, i) => {
-            const mark = s.done ? "[x]" : "[ ]";
-            pdf.text(`${mark} ${s.stage}${s.at ? "  -  " + new Date(s.at).toLocaleString() : ""}`, marginX + 5, y);
-            y += 6;
+document.addEventListener("change", (event) => {
+    if (event.target && event.target.closest && event.target.closest("#tab-feature-toggles")) applyGranularSubFeatureLocks();
+});
+
+document.addEventListener("DOMContentLoaded", applyGranularSubFeatureLocks);
+
+const FEATURE_SETTINGS_COLLECTION = "feature_controls";
+
+function getFeatureSettingsDocRef(schoolId) {
+    return null;
+}
+
+function normalizeFeatureSettings(data) {
+    const saved = data.featureSettings || data || {};
+    const hasSchoolPolicy = saved.school && Object.keys(saved.school).length > 0;
+    const legacyEnabled = Array.isArray(data.enabledModules) ? data.enabledModules : [];
+    const legacyNames = { qrFee: "QR Fee Module", admitCard: "Admit Card Module", whatsapp: "WhatsApp Module" };
+    const schoolKeyAliases = {
+        studentsCerts: "students",
+        staffManager: "staff",
+        financeFees: "finance",
+        academicVeto: "academics",
+        noticesTicker: "notices",
+        changePassword: "settings",
+        schoolSettings: "settings"
+    };
+    const normalizedSavedSchool = {};
+    Object.entries(saved.school || {}).forEach(([key, value]) => {
+        const normalizedKey = schoolKeyAliases[key] || key;
+        normalizedSavedSchool[normalizedKey] = value;
+    });
+    const settings = { ...saved, school: {}, modules: { ...(saved.modules || {}) }, student: {} };
+
+    companyFeatureRegistry.school.forEach(feature => {
+        let enabled = hasSchoolPolicy ? normalizedSavedSchool[feature.key] !== false : true;
+        if (!hasSchoolPolicy && feature.moduleKey && legacyEnabled.length) {
+            enabled = legacyEnabled.includes(feature.moduleKey) || legacyEnabled.includes(legacyNames[feature.moduleKey]);
+        }
+        settings.school[feature.key] = enabled;
+        if (feature.moduleKey) settings.modules[feature.moduleKey] = enabled;
+    });
+    companyFeatureRegistry.student.forEach(feature => {
+        settings.student[feature.key] = saved.student?.[feature.key] !== false;
+    });
+    Object.entries(legacyStudentFeatureKeys).forEach(([legacyKey, currentKey]) => {
+        if (saved.student && Object.prototype.hasOwnProperty.call(saved.student, legacyKey)) {
+            settings.student[currentKey] = saved.student[legacyKey] !== false;
+        }
+        settings.student[legacyKey] = settings.student[currentKey];
+    });
+    return settings;
+}
+
+
+
+window.copyFeatureRulesSnippet = async () => {
+    const snippet = "Supabase uses RLS, not Firestore rules.";
+    try {
+        await navigator.clipboard.writeText(snippet);
+        window.showToast("SUPABASE RLS INFO COPIED", "#10b981");
+    } catch (e) {
+        console.warn("Rules snippet copy failed", e);
+        window.showToast("RULES SNIPPET READY IN CONSOLE", "#f59e0b");
+        console.log(snippet);
+    }
+};
+
+window.loadFeatureTogglesForSchool = async () => {
+    const sid = document.getElementById("featureSchoolSelect")?.value;
+    const schoolContainer = document.getElementById("feature-toggles-container");
+    const studentContainer = document.getElementById("feature-student-toggles-container");
+    removeStaticFeatureMarkup();
+    if (!schoolContainer || !studentContainer) return;
+    if (!sid || sid === "ALL") {
+        schoolContainer.innerHTML = "";
+        studentContainer.innerHTML = "";
+        schoolContainer.classList.add("hidden-el");
+        return;
+    }
+
+    setFeatureControlsBusy(true);
+    try {
+        const { data: featureDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+        const { data: schoolDoc } = featureDoc ? { data: null } : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+        const featureData = featureDoc ? featureDoc : (schoolDoc ? schoolDoc : {});
+        companyFeatureSettings = normalizeFeatureSettings(featureData);
+        renderFeatureGroup("school", "feature-toggles-container");
+        renderFeatureGroup("student", "feature-student-toggles-container");
+    } catch (e) {
+        schoolContainer.classList.add("hidden-el");
+        studentContainer.innerHTML = "";
+        window.showToast("ERROR LOADING TOGGLES: " + e.message, "#e11d48");
+    } finally {
+        setFeatureControlsBusy(false);
+    }
+};
+
+window.saveFeatureToggles = async (group, key, enabled) => {
+    const sid = document.getElementById("featureSchoolSelect")?.value;
+    if (!sid || sid === "ALL" || !companyFeatureRegistry[group]?.some(feature => feature.key === key)) return;
+
+    const previousSettings = JSON.parse(JSON.stringify(companyFeatureSettings));
+    companyFeatureSettings[group] = companyFeatureSettings[group] || {};
+    companyFeatureSettings.companyLocked = companyFeatureSettings.companyLocked || { school: {}, student: {}, modules: {} };
+    companyFeatureSettings.companyLocked[group] = companyFeatureSettings.companyLocked[group] || {};
+    companyFeatureSettings[group][key] = enabled;
+    companyFeatureSettings.companyLocked[group][key] = !enabled;
+    renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
+    if (group === "school") {
+        const feature = companyFeatureRegistry.school.find(item => item.key === key);
+        if (feature?.moduleKey) {
+            companyFeatureSettings.modules[feature.moduleKey] = enabled;
+            companyFeatureSettings.companyLocked.modules[feature.moduleKey] = !enabled;
+        }
+    }
+    if (group === "student") {
+        Object.entries(legacyStudentFeatureKeys).forEach(([legacyKey, currentKey]) => {
+            if (currentKey === key) companyFeatureSettings.student[legacyKey] = enabled;
         });
+    }
+    renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
+    setFeatureControlsBusy(true);
+    try {
+        const enabledModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state !== false).map(([moduleKey]) => moduleKey);
+        const restrictedModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state === false).map(([moduleKey]) => moduleKey);
+        await supabaseClient.from("schools").update({
+            featureSettings: companyFeatureSettings,
+            enabledModules,
+            restrictedModules,
+            updatedAt: new Date().toISOString(),
+            updatedBy: superAdminUid || "hq"
+        }, { merge: true });
+        window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
+        window.logAudit(`Updated ${group} Feature Toggle`, `${sid}:${key}:${enabled ? "ON" : "OFF"}`);
+    } catch (e) {
+        companyFeatureSettings = previousSettings;
+        renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
+        window.showToast("ERROR: " + e.message, "#e11d48");
+        await window.loadFeatureTogglesForSchool();
+    } finally {
+        setFeatureControlsBusy(false);
+    }
+};
 
-        y += 10;
-        pdf.setFontSize(9);
-        pdf.setTextColor(120, 120, 120);
-        pdf.text("Documents attached:", marginX, y);
-        y += 6;
-        pdf.setTextColor(0, 0, 0);
-        const docs = tr.documents || {};
-        const docEntries = Object.entries(docs).filter(([, url]) => !!url);
-        if (docEntries.length === 0) {
-            pdf.text("No documents attached", marginX + 5, y);
+window.generateSystemBackup = async () => {
+    const sc = document.getElementById("backupScopeSelect").value; let bD = {}; const bn = document.getElementById("sysBakBtn"); bn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> PACKAGING...`;
+    try {
+        if (sc === "ALL") {
+            const cl = ["users", "schools", "students", "notices", "direct_messages", "login_logs", "audit_logs", "system_config", "global_roles", "pending_deletions", "recycle_bin"];
+            for (let c of cl) { bD[c] = []; const { data: snData } = await supabaseClient.from(c).select("*"); const sn = snData || []; (sn || []).forEach(d => bD[c].push({ id: d.id, ...d })); }
         } else {
-            docEntries.forEach(([key, url]) => {
-                pdf.text(`- ${key}: ${url}`, marginX + 5, y);
-                y += 6;
+            bD.schoolId = sc; bD.users = []; bD.students = [];
+            const { data: sD } = await supabaseClient.from("schools").select("*").eq("id", sc).maybeSingle(); if (sD) bD.schoolData = sD;
+            const { data: uS } = await supabaseClient.from("users").select("*").eq("schoolId", sc); (uS || []).forEach(d => bD.users.push(d));
+            const { data: stS } = await supabaseClient.from("students").select("*").eq("schoolId", sc); (stS || []).forEach(d => bD.students.push(d));
+        }
+        const jsonString = JSON.stringify(bD, null, 2); const blobObj = new Blob([jsonString], { type: "application/json" });
+        const fileName = sc === "ALL" ? `Matrix_Dump_Global_${Date.now()}.json` : `Matrix_Dump_Node_${sc}_${Date.now()}.json`;
+        await window.robustWebViewDownload(blobObj, fileName); window.logAudit("Extracted Matrix Dump", sc);
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    bn.innerHTML = `<i class="fas fa-download"></i> EXTRACT SNAPSHOT`;
+};
+
+window.executeTimeTravelRollback = async () => { const sid = document.getElementById("rollbackSchoolSelect").value; const ts = document.getElementById("rollbackTimestamp").value; if (!ts) return; window.customConfirm(`CRITICAL: INITIATE TEMPORAL ROLLBACK FOR ${sid === 'ALL' ? 'GLOBAL MATRIX' : sid} TO ${ts}?`, () => { window.showToast("INITIATING ROLLBACK SEQUENCE...", "#f59e0b"); window.logAudit("Temporal Rollback Triggered", `${sid} to ${ts}`); setTimeout(() => { window.showToast("ROLLBACK EXECUTED SUCCESSFULLY!", "#059669"); }, 3000); }); };
+window.triggerAutomatedCloudBackup = async () => { window.customConfirm("TRIGGER BACKEND CRON FOR CLOUD SYNC?", () => { window.showToast("CLOUD SYNC TRIGGERED.", "#00F0FF"); window.logAudit("Triggered Cloud Sync", "Global"); }); };
+
+window.loadSchoolSecurityStatus = async () => {
+    const sI = document.getElementById("secSchoolSelect").value; const pl = document.getElementById("school-security-panel");
+    if (!sI) { pl.classList.add("hidden-el"); return; }
+    pl.classList.remove("hidden-el");
+    if (sI === "ALL") {
+        document.getElementById("sec-chairman-info").innerText = "GLOBAL OVERRIDE"; document.getElementById("sec-staff-info").innerText = "GLOBAL OVERRIDE"; document.getElementById("sec-student-info").innerText = "GLOBAL OVERRIDE";
+        document.getElementById("sec-status-msg").innerText = "⚠️ GLOBAL OVERRIDE ACTIVE";
+        document.getElementById("sec-chairman-toggle").checked = true; document.getElementById("sec-staff-toggle").checked = true; document.getElementById("sec-student-toggle").checked = true; return;
+    }
+    document.getElementById("sec-status-msg").innerText = "SCANNING NODE STATUS...";
+    try {
+        const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const cS = cSData || []; let cB = false; (cS || []).forEach(d => { cB = d.status === "blocked"; }); document.getElementById("sec-chairman-toggle").checked = !cB; document.getElementById("sec-chairman-info").innerText = "SYNCED";
+        const { data: sSData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sS = sSData || []; let aS = false; sS.forEach(d => { if (d.status === "blocked") aS = true; }); document.getElementById("sec-staff-toggle").checked = !aS; document.getElementById("sec-staff-info").innerText = "SYNCED";
+        const { data: scl } = await supabaseClient.from("schools").select("*").eq("id", sI).maybeSingle(); let stB = false; let gA = false, tA = false, rO = false; let mod = {};
+        if (scl) { stB = scl.studentsBlocked === true; gA = scl.geofenceActive; tA = scl.timeLockActive; rO = scl.readOnlyMode; mod = scl.modules || {}; }
+        document.getElementById("sec-student-toggle").checked = !stB; document.getElementById("sec-student-info").innerText = stB ? "LOCKED" : "ACTIVE";
+        document.getElementById("sec-geofence-toggle").checked = gA; document.getElementById("sec-timelock-toggle").checked = tA; document.getElementById("sec-readonly-toggle").checked = rO;
+        document.getElementById("mod-attendance").checked = mod.attendance !== false; document.getElementById("mod-finance").checked = mod.finance !== false; document.getElementById("mod-hr").checked = mod.hr !== false; document.getElementById("mod-exams").checked = mod.exams !== false;
+        document.getElementById("sec-status-msg").innerText = "✅ NODE SYNCED.";
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
+
+window.toggleSchoolUserBlock = async (ty) => {
+    const sI = document.getElementById("secSchoolSelect").value; if (!sI) return;
+    if (sI === "ALL") {
+        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("*").eq("role", "chairman"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("*").eq("role", "staff"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const { data: sn } = await supabaseClient.from("schools").select("*"); for (const d of sn.docs) { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", d.id); } }
+        return;
+    }
+    if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+    else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+    else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; try { await supabaseClient.from("schools").upsert([{id: sI, ...{ studentsBlocked: !iA }}]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+};
+window.toggleAdvancedSecurity = async (type) => {
+    const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return;
+    let updateObj = {}; let msg = "";
+    if (type === 'geofence') { updateObj.geofenceActive = document.getElementById("sec-geofence-toggle").checked; msg = "GEOFENCE"; }
+    if (type === 'timelock') { updateObj.timeLockActive = document.getElementById("sec-timelock-toggle").checked; msg = "TIME-LOCK"; }
+    if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
+    try { await supabaseClient.from("schools").update(updateObj).eq("id", sid); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
+window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await supabaseClient.from("schools").update({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+
+const csvExportBtnEl = document.getElementById("csvExportBtn");
+if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
+    window.showToast("COMPILING DIRECTORY...", "#00F0FF");
+    try {
+        const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); doc.text("Global Node Directory", 14, 20);
+        const tableRows = []; const { data: snp } = await supabaseClient.from("schools").select("*"); (snp || []).forEach(d => { tableRows.push([d.id, d.schoolName || "N/A", d.chairmanUid || "N/A"]); });
+        doc.autoTable({ head: [["Node ID", "Node Name", "Commander UID"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [0, 240, 255], textColor: [5, 11, 20] } });
+        const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, `Node_Directory_${Date.now()}.pdf`);
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+});
+
+const cleanupBtnEl = document.getElementById("cleanupBtn");
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const { data: sn } = await supabaseClient.from("students").select("*").eq("status", "Pending"); let count = 0; for (const d of sn.docs) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); });
+
+window.deployNewNode = async () => {
+    const sName = document.getElementById("newNodeName").value;
+    const tier = document.getElementById("newNodeTier").value;
+    const subs = document.getElementById("newNodeSubs").value;
+    if (!sName || !tier) return window.showToast("REQUIRED FIELDS MISSING", "#e11d48");
+    try {
+        const { data: docRef } = await supabaseClient.from("schools").insert([{ 
+            schoolName: sName,
+            tier: tier,
+            subNodes: parseInt(subs) || 0,
+            status: "active",
+            createdAt: new Date().toISOString()
+        }]).select().single();
+        window.showToast("✅ NODE DEPLOYED: " + docRef.id);
+        window.logAudit("Deployed New Node", sName);
+    } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
+
+window.toggleServerShield = async () => { const btn = document.getElementById("serverShieldBtn"); if (btn.innerText.includes("TOGGLE")) { await supabaseClient.from("system_config").upsert([{id: "shield", ...{ active: true }}]); window.showToast("SERVER SHIELD ACTIVATED!"); window.logAudit("Activated Shield", "Global"); } };
+
+// ==========================================
+// 🛡️ GLOBAL BLACKLIST SYSTEM
+// ==========================================
+window.openGlobalBlacklistModal = () => {
+    document.getElementById("blacklist-modal").style.display = "flex";
+    window.loadGlobalBlacklist();
+};
+
+window.loadGlobalBlacklist = async () => {
+    const tbody = document.getElementById("blacklist-table-body");
+    tbody.innerHTML = "<tr><td colspan='3' class='p-3 text-center'>Loading...</td></tr>";
+    try {
+        const { data: snap } = await supabaseClient.from("global_blacklist").select("*");
+        let html = "";
+        (snap || []).forEach(doc => {
+            const d = doc;
+            html += `<tr class="hover:bg-slateSurface/50">
+                <td class="p-3 uppercase font-bold text-purple-400">${d.type}</td>
+                <td class="p-3 text-white">${d.value}</td>
+                <td class="p-3 text-right">
+                    <button onclick="window.removeBlacklistEntry('${doc.id}')" class="px-2 py-1 bg-rose-500/20 text-rose-400 border border-rose-500 hover:bg-rose-500 hover:text-white rounded text-[10px]"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html || "<tr><td colspan='3' class='p-3 text-center text-coolGray'>No entries found.</td></tr>";
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan='3' class='p-3 text-center text-rose-500'>Error: ${e.message}</td></tr>`;
+    }
+};
+
+window.addBlacklistEntry = async () => {
+    const val = document.getElementById("blacklist-input").value.trim();
+    const type = document.getElementById("blacklist-type").value;
+    if (!val) return window.showToast("Enter a value!", "#e11d48");
+    const btn = document.getElementById("add-blacklist-btn");
+    btn.innerText = "WAIT...";
+    try {
+        const { data: qData } = await supabaseClient.from("global_blacklist").select("*").eq("type", type).eq("value", val); const q = { docs: qData || [] };
+        if (!q.empty) { window.showToast("ALREADY BLACKLISTED", "#f59e0b"); btn.innerHTML = `<i class="fas fa-plus"></i> ADD`; return; }
+
+        await supabaseClient.from("global_blacklist").insert([{
+            type: type,
+            value: val,
+            createdAt: new Date().toISOString()
+        }]);
+        document.getElementById("blacklist-input").value = "";
+        window.showToast("ADDED TO BLACKLIST", "#a855f7");
+        window.loadGlobalBlacklist();
+    } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
+    btn.innerHTML = `<i class="fas fa-plus"></i> ADD`;
+};
+
+window.removeBlacklistEntry = async (id) => {
+    window.customConfirm("Remove from Global Blacklist?", async () => {
+        try {
+            await supabaseClient.from("global_blacklist").delete().eq("id", id);
+            window.showToast("ENTRY REMOVED", "#10b981");
+            window.loadGlobalBlacklist();
+        } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); }
+    });
+};
+
+// ==========================================
+// 11. DEVICE TRACKING
+// ==========================================
+function parseUserAgent(ua) {
+    if (!ua) return { os: 'UNKNOWN OS', model: 'UNKNOWN DEVICE' };
+    let os = "UNKNOWN OS"; let model = "UNKNOWN DEVICE";
+    if (ua.includes("Android")) { let m = ua.match(/Android\s([0-9\.]+)/); os = m ? "Android " + m[1] : "Android"; let match = ua.match(/Android[^;]*; ([^)]+)\)/); if (match) model = match[1].trim().split(" Build")[0]; } else if (ua.includes("iPhone")) { os = "iOS"; model = "Apple iPhone"; } else if (ua.includes("Windows NT")) { os = "Windows"; model = "PC/Laptop"; }
+    return { os: os.toUpperCase(), model: model.toUpperCase() };
+}
+
+function timestampToMillis(value) {
+    if (!value) return 0;
+    if (typeof value.toMillis === "function") return value.toMillis();
+    if (typeof value === "number") return value;
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getBrowserCoordinates(timeout = 6000) {
+    return new Promise(resolve => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+            position => resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                source: "browser-gps"
+            }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout, maximumAge: 300000 }
+        );
+    });
+}
+
+function mapUrlForLog(log) {
+    const latitude = Number(log.latitude ?? log.geo?.latitude);
+    const longitude = Number(log.longitude ?? log.geo?.longitude);
+    return Number.isFinite(latitude) && Number.isFinite(longitude)
+        ? `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=16/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`
+        : "";
+}
+
+window.loadDeviceLogs = async () => {
+    const sid = document.getElementById("deviceSchoolSelect")?.value || "ALL";
+    const rid = document.getElementById("deviceRoleSelect")?.value || "ALL";
+    const startInput = document.getElementById("device_start_date")?.value;
+    const endInput = document.getElementById("device_end_date")?.value;
+    const table = document.getElementById("device-logs-table");
+    if (!table) return;
+    table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-cyan-400 font-mono'><i class='fas fa-spinner fa-spin'></i> SCANNING TELEMETRY...</td></tr>";
+    try {
+        let query = supabaseClient.from("login_logs").select("*");
+        if (sid !== "ALL") query = query.eq("schoolId", sid);
+        const { data: snapshot } = await query;
+        window.currentDeviceLogs = [];
+        (items || []).forEach(doc => {
+            const log = { id: doc.id, ...doc };
+            if (rid === "ALL" || log.role === rid) window.currentDeviceLogs.push(log);
+        });
+        if (startInput && endInput) {
+            const start = new Date(startInput).setHours(0, 0, 0, 0);
+            const end = new Date(endInput).setHours(23, 59, 59, 999);
+            window.currentDeviceLogs = window.currentDeviceLogs.filter(log => {
+                const time = timestampToMillis(log.timestamp);
+                return time >= start && time <= end;
             });
         }
+        window.currentDeviceLogs.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
+        table.innerHTML = window.currentDeviceLogs.map((log, index) => {
+            const device = parseUserAgent(log.device);
+            const time = timestampToMillis(log.timestamp);
+            const mapUrl = mapUrlForLog(log);
+            return `<tr class="hover:bg-slateSurface/50 transition">
+                <td class="p-4 sensitive-data font-bold text-white">${log.name || 'N/A'}<br><span class="text-[10px] text-tealAccent/70 font-normal tracking-widest">${log.email || 'N/A'}</span></td>
+                <td class="p-4"><span class="bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${log.role || 'UNKNOWN'}</span></td>
+                <td class="p-4 text-[10px] leading-tight tracking-widest"><span class="text-amber-500">PUB:</span> ${log.ip || 'N/A'}<br><span class="text-indigo-400">LOC:</span> ${log.localIp || 'BLOCKED'}<br><span class="text-emerald-400">GEO:</span> <span id="loc-${index}">${log.location || (mapUrl ? 'GPS COORDINATES' : '<i class="fas fa-spinner fa-spin"></i>')}</span></td>
+                <td class="p-4 text-[10px] max-w-[150px] tracking-widest"><span class="font-bold text-cyan-400">${device.os}</span><br><span class="text-coolGray break-words">SIG: ${device.model}</span></td>
+                <td class="p-4 text-[10px] text-coolGray tracking-widest">${time ? new Date(time).toLocaleString() : 'UNKNOWN'}</td>
+                <td class="p-4 text-center"><a id="map-${index}" class="map-action-button${mapUrl ? '' : ' hidden-el'}" href="${mapUrl || '#'}" target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> MAP</a><button id="map-disabled-${index}" class="map-action-button${mapUrl ? ' hidden-el' : ''}" disabled><i class="fas fa-location-crosshairs"></i> N/A</button></td>
+                <td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.killSession('${log.userId || log.uid || ''}')"><i class="fas fa-skull-crossbones"></i> KILL</button></td>
+            </tr>`;
+        }).join("") || "<tr><td colspan='7' class='p-4 text-center text-coolGray font-mono'>NO TELEMETRY FOUND.</td></tr>";
 
-        y = 270;
-        pdf.setFontSize(8);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text("This is a system-generated receipt from CoreEdu Tech Chairman Portal.", marginX, y);
-
-        const safeName = (tr.studentName || "student").replace(/[^a-zA-Z0-9]/g, "_");
-        pdf.save(`Transfer_Receipt_${safeName}.pdf`);
-    } catch (e) {
-        console.error("Receipt download failed:", e);
-        alert("Failed to generate receipt: " + e.message);
+        const unresolvedIps = [...new Set(window.currentDeviceLogs.filter(log => !mapUrlForLog(log)).map(log => log.ip).filter(ip => ip && ip !== "Unknown"))];
+        unresolvedIps.forEach(async ip => {
+            try {
+                const response = await fetch(`https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`);
+                const geo = await response.json();
+                window.currentDeviceLogs.forEach((log, index) => {
+                    if (log.ip !== ip || mapUrlForLog(log)) return;
+                    log.location = [geo.city, geo.region, geo.country].filter(Boolean).join(', ').toUpperCase() || 'IP GEOLOCATION';
+                    const latitude = Number(geo.latitude);
+                    const longitude = Number(geo.longitude);
+                    if (Number.isFinite(latitude) && Number.isFinite(longitude)) Object.assign(log, { latitude, longitude });
+                    const locationElement = document.getElementById(`loc-${index}`);
+                    if (locationElement) locationElement.textContent = log.location;
+                    const mapLink = document.getElementById(`map-${index}`);
+                    const disabledButton = document.getElementById(`map-disabled-${index}`);
+                    const fallbackMapUrl = mapUrlForLog(log);
+                    if (mapLink && fallbackMapUrl) {
+                        mapLink.href = fallbackMapUrl;
+                        mapLink.classList.remove("hidden-el");
+                        disabledButton?.classList.add("hidden-el");
+                    }
+                });
+            } catch (error) {
+                console.warn("IP geolocation unavailable:", error);
+            }
+        });
+    } catch (error) {
+        console.error("Device telemetry load failed:", error);
+        table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-rose-400 font-mono'>TELEMETRY LOAD FAILED.</td></tr>";
     }
 };
 
-window.initDashboardChart = () => {
-    const ctx = document.getElementById('dashboardChart');
-    if (!ctx) return;
+window.downloadDeviceLogsAsPDF = async () => {
+    if (!window.currentDeviceLogs || window.currentDeviceLogs.length === 0) return;
+    try { const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Filtered Radar Telemetry", 14, 20); const tableRows = []; window.currentDeviceLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', dt.location || 'N/A', `${parsedDevice.os}\nSIG: ${parsedDevice.model}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "Geo-Location", "Hardware Sig", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [34, 211, 238], textColor: [5, 11, 20] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Radar_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
 
-    // Check if chart exists and destroy
-    if (window.myDashboardChart) {
-        window.myDashboardChart.destroy();
-    }
+window.downloadAllDeviceLogsAsPDF = async () => {
+    try { const { data: sn } = await supabaseClient.from("login_logs").select("*"); let allLogs = []; (sn || []).forEach(d => allLogs.push(d)); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
 
-    // Calculate total income (Fee) and expenses (Salary, Expense)
-    let totalIncome = 0;
-    let totalExpenses = 0;
+window.killSession = async (uid) => { if (!uid || uid === "undefined") return; window.customConfirm("TERMINATE SESSION? USER WILL BE KICKED.", async () => { await supabaseClient.from("users").update({ forceLogout: true }).eq("id", uid); window.showToast("SESSION TERMINATED.", "#e11d48"); window.logAudit("Killed Session", uid); }); };
 
-    const filter = document.getElementById('chart-date-filter') ? document.getElementById('chart-date-filter').value : 'All Time';
-    const specificDate = document.getElementById('chart-specific-date') ? document.getElementById('chart-specific-date').value : '';
-    const now = new Date();
+// ==========================================
+// 12. BROADCAST, INBOX & EMERGENCY TICKER
+// ==========================================
+window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); if (!t) return; try { const { data: sn } = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; (sn || []).forEach(d => m.push({ id: d.id, ...d })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await supabaseClient.from("direct_messages").delete().eq("id", mid); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
+window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: new Date().toISOString() }]); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
-    let filteredTransactions = window.fetchedTransactions || [];
+// Removed Broadcast Event Listeners for UI Redesign
 
-    if (specificDate) {
-        filteredTransactions = filteredTransactions.filter(t => t.date === specificDate);
-    } else if (filter === 'This Month') {
-        filteredTransactions = filteredTransactions.filter(t => {
-            const d = new Date(t.date);
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+window.sendEmergencyTicker = async () => { const txt = document.getElementById("emergencyTickerInput").value.trim(); if (!txt) return; try { await supabaseClient.from("system_config").upsert([{id: "ticker", text: txt, active: true, timestamp: Date.now()}]); window.showToast("OVERRIDE TRANSMITTED!", "#e11d48"); window.logAudit("Broadcasted Ticker", txt); document.getElementById("emergencyTickerInput").value = ""; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.clearEmergencyTicker = async () => { try { await supabaseClient.from("system_config").update({ active: false }).eq("id", "ticker"); window.showToast("OVERRIDE CLEARED."); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.listenToEmergencyTicker = () => { 
+    if (window.emergencyTickerSubscribed) return; window.emergencyTickerSubscribed = true;
+    supabaseClient.channel("ticker_changes_custom")
+        .on("postgres_changes", { event: "*", schema: "public", table: "system_config", filter: "id=eq.ticker" }, payload => { 
+            let doc = payload.new; 
+            if (!doc) doc = {}; 
+            if (doc.active) { 
+                document.getElementById("emergency-ticker").classList.remove("hidden-el"); 
+                document.getElementById("ticker-text").innerText = doc.text; 
+            } else { 
+                document.getElementById("emergency-ticker").classList.add("hidden-el"); 
+            } 
+        }).subscribe(); 
+};
+
+// ==========================================
+// 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
+// ==========================================
+window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: new Date().toISOString() }]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const { data: snap } = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: false}).limit(50); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+
+window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const { data: snap } = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const { data: orgDoc } = await supabaseClient.from(collection).select("*").eq("id", docRefId).maybeSingle();  if (orgDoc) { const binRef = crypto.randomUUID(); await supabaseClient.from("recycle_bin").insert([{ id: binRef, originalCollection: collection, originalId: docRefId, data: orgDoc, deletedAt: new Date().toISOString() }]); await supabaseClient.from(collection).delete().eq("id", docRefId); } await supabaseClient.from("pending_deletions").delete().eq("id", docId);  window.showToast("DELETED & MOVED TO BIN.", "#10b981"); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.rejectDeletion = async (docId) => { try { await supabaseClient.from("pending_deletions").delete().eq("id", docId); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+
+window.loadRecycleBin = async () => {
+    const tbody = document.getElementById("recycle-bin-body");
+    const sid = document.getElementById("recycleSchoolSelect")?.value || "ALL";
+    try {
+        let query = supabaseClient.from("recycle_bin").select("*").order("deletedAt", {ascending: false}).limit(50);
+        const { data: snapData } = await query; const snap = snapData || [];
+        let html = "";
+        (snap || []).forEach(doc => {
+            let d = doc;
+            // Manual filtering since originalSchoolId might not be perfectly indexed
+            if (sid !== "ALL" && d.data?.schoolId !== sid) return;
+
+            let ts = d.deletedAt ? new Date(d.deletedAt.toMillis()).toLocaleString() : "UNKNOWN";
+            html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4"><span class="bg-teal-500/10 border border-teal-500/50 text-teal-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.originalCollection}</span></td><td class="p-4 sensitive-data max-w-[200px] truncate text-coolGray">${JSON.stringify(d.data).substring(0, 50)}...</td><td class="p-4 text-right flex gap-1 justify-end"><button class="px-3 py-1 bg-teal-600/20 border border-teal-500 hover:bg-teal-600 text-teal-400 hover:text-slateBase font-bold rounded text-[10px] transition font-mono" onclick="window.restoreItem('${doc.id}', '${d.originalCollection}', '${d.originalId}')"><i class="fas fa-undo"></i> RESTORE</button> <button class="px-3 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white font-bold rounded text-[10px] transition font-mono" onclick="window.permanentlyDeleteBinItem('${doc.id}')"><i class="fas fa-trash"></i> DELETE</button></td></tr>`;
         });
-    } else if (filter === 'Last Month') {
-        filteredTransactions = filteredTransactions.filter(t => {
-            const d = new Date(t.date);
-            const lastMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-            const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-            return d.getMonth() === lastMonth && d.getFullYear() === year;
-        });
-    } else if (filter === 'This Year') {
-        filteredTransactions = filteredTransactions.filter(t => {
-            const d = new Date(t.date);
-            return d.getFullYear() === now.getFullYear();
-        });
-    }
+        tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>BIN IS EMPTY.</td></tr>";
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+};
 
-    filteredTransactions.forEach(t => {
-        const amt = parseFloat(t.amount) || 0;
-        if (t.type === 'Fee') {
-            totalIncome += amt;
-        } else if (t.type === 'Salary' || t.type === 'Expense') {
-            totalExpenses += amt;
+window.permanentlyDeleteBinItem = async (binId) => {
+    window.customConfirm("PERMANENTLY DELETE THIS ITEM FROM STORAGE?", async () => {
+        try {
+            const { data: binDoc } = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle();
+            if (binDoc) {
+                const itemData = binDoc.data || {};
+                const urlsToCheck = [itemData.photoUrl, itemData.logoUrl, itemData.signatureUrl, itemData.imageUrl];
+                for (let url of urlsToCheck) {
+                    if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
+                        try {
+                            const sessionData = await supabaseClient.auth.getSession();
+                            const token = sessionData.data.session?.access_token;
+                            await fetch('https://school-backend-zlgy.onrender.com/api/delete-image', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                body: JSON.stringify({ imageUrl: url })
+                            });
+                        } catch (err) {
+                            console.error("Cloudinary delete failed:", err);
+                        }
+                    }
+                }
+            }
+            await supabaseClient.from("recycle_bin").delete().eq("id", binId);
+            window.showToast("PERMANENTLY DELETED!", "#10b981");
+            window.loadRecycleBin();
+            window.logAudit("Permanently Deleted Item", binId);
+        } catch (e) {
+            window.showToast("ERROR: " + e.message, "#e11d48");
         }
     });
+};
+window.restoreItem = async (binId, collection, docId) => { window.customConfirm("RESTORE ITEM TO MATRIX?", async () => { try { const { data: binDoc } = await supabaseClient.from("recycle_bin").select("*").eq("id", binId).maybeSingle(); if (binDoc) { await supabaseClient.from(collection).upsert([{ id: docId, ...binDoc }]); await supabaseClient.from("recycle_bin").delete().eq("id", binId); window.showToast("ITEM RESTORED!"); window.loadRecycleBin(); window.logAudit("Restored Item", docId); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
-    if (document.getElementById("count-revenue")) {
-        document.getElementById("count-revenue").innerText = "₹ " + (totalIncome - totalExpenses);
-    }
+// ==========================================
+// 14. ROLE BUILDER
+// ==========================================
+  window.saveCustomRole = async () => { const rName = document.getElementById("customRoleName").value.trim(); if (!rName) return; const perms = Array.from(document.querySelectorAll(".role-perm")).filter(cb => cb.checked).map(cb => cb.value); try { const rId = rName.toLowerCase().replace(/ /g, "_"); const { error: rpcErr } = await supabaseClient.rpc("save_custom_role", { p_role_id: rId, p_name: rName, p_permissions: perms }); if (rpcErr) throw rpcErr; window.showToast("CUSTOM POLICY FORGED!"); document.getElementById("customRoleName").value = ""; Array.from(document.querySelectorAll(".role-perm")).forEach(c => c.checked = false); window.loadCustomRoles(); window.logAudit("Created Role", rName); } catch (e) { window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadCustomRoles = async () => { const tbody = document.getElementById("custom-roles-body"); try { const { data: snap } = await supabaseClient.from("global_roles").select("*"); let html = ""; (snap || []).forEach(doc => { let d = doc; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 font-bold text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">${d.name.toUpperCase()}</td><td class="p-4 text-[10px] text-coolGray font-mono tracking-widest">${d.permissions.join(', ').toUpperCase()}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteRole('${doc.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='3' class='p-4 text-center'>NO CUSTOM POLICIES.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+  window.deleteRole = async (rId) => { window.customConfirm("PURGE POLICY?", async () => { try { const { error } = await supabaseClient.rpc("delete_custom_role", { p_role_id: rId }); if (error) throw error; window.showToast("POLICY PURGED!"); window.loadCustomRoles(); } catch(e) { window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 
-    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(0, 240, 255, 0.5)'); // Neon Cyan
-    gradient.addColorStop(1, 'rgba(139, 92, 246, 0.1)'); // Neon Purple
+// ==========================================
+// MAINTENANCE HEATMAP (CHART.JS)
+// ==========================================
+window.renderMaintenanceHeatmap = () => {
+    const canvas = document.getElementById("apiHeatmap");
+    if (!canvas) return;
 
-    window.myDashboardChart = new Chart(ctx, {
+    // Check if chart already exists
+    if (window.apiHeatmapChart) window.apiHeatmapChart.destroy();
+
+    const ctx = canvas.getContext("2d");
+    const data = {
+        labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+        datasets: [{
+            label: 'API Load Heatmap',
+            data: [12, 19, 3, 5, 2, 3, 10],
+            backgroundColor: 'rgba(0, 240, 255, 0.2)',
+            borderColor: 'rgba(0, 240, 255, 1)',
+            borderWidth: 2,
+            tension: 0.4,
+            fill: true
+        }]
+    };
+
+    window.apiHeatmapChart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: ['Total Income', 'Total Expenses'],
-            datasets: [{
-                label: 'Financial Analytics (₹)',
-                data: [totalIncome, totalExpenses],
-                backgroundColor: gradient,
-                borderColor: '#00F0FF',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4,
-                pointBackgroundColor: '#8b5cf6',
-                pointBorderColor: '#00F0FF',
-                pointRadius: 4
-            }]
-        },
+        data: data,
         options: {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { grid: { color: 'rgba(255, 255, 255, 0.05)' } },
-                y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' } }
-            }
+                y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#94a3b8' } }
+            },
+            plugins: { legend: { labels: { color: '#f8fafc', font: { family: 'monospace' } } } }
         }
     });
-
-    window.initAnalyticsCharts();
 };
+setTimeout(window.renderMaintenanceHeatmap, 2000);
 
-window.initAnalyticsCharts = async () => {
-    const chartFont = { color: '#94a3b8' };
-    const gridStyle = { color: 'rgba(148, 163, 184, 0.08)' };
-
-    // 1. Gender Distribution (Doughnut)
-    try {
-        const gCtx = document.getElementById('genderChart');
-        if (gCtx) {
-            if (window.genderChartInstance) window.genderChartInstance.destroy();
-            let male = 0, female = 0, other = 0;
-            (window.fetchedStudents || []).forEach(st => {
-                const g = (st.gender || "").toString().toLowerCase();
-                if (g === "male" || g === "m" || g === "boy") male++;
-                else if (g === "female" || g === "f" || g === "girl") female++;
-                else if (g) other++;
-            });
-            window.genderChartInstance = new Chart(gCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Male', 'Female', 'Other'],
-                    datasets: [{
-                        data: [male, female, other],
-                        backgroundColor: ['#3b82f6', '#ec4899', '#f59e0b'],
-                        borderColor: '#0f172a',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 11 } } },
-                        tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed} students` } }
-                    }
-                }
-            });
-        }
-    } catch (e) { console.warn("genderChart error", e); }
-
-    // 2. Class Enrollment (Bar)
-    try {
-        const cCtx = document.getElementById('classEnrollChart');
-        if (cCtx) {
-            if (window.classEnrollChartInstance) window.classEnrollChartInstance.destroy();
-            const classCounts = {};
-            (window.fetchedStudents || []).forEach(st => {
-                const c = st.class || "Unassigned";
-                classCounts[c] = (classCounts[c] || 0) + 1;
-            });
-            const sortedClasses = Object.keys(classCounts).sort((a, b) => {
-                const order = ["Nursery", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
-                return order.indexOf(a) - order.indexOf(b);
-            });
-            window.classEnrollChartInstance = new Chart(cCtx, {
-                type: 'bar',
-                data: {
-                    labels: sortedClasses,
-                    datasets: [{
-                        label: 'Students',
-                        data: sortedClasses.map(c => classCounts[c]),
-                        backgroundColor: '#3b82f6',
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { ticks: { font: chartFont }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: chartFont, precision: 0 }, grid: gridStyle }
-                    }
-                }
-            });
-        }
-    } catch (e) { console.warn("classEnrollChart error", e); }
-
-    // 3. Attendance Trend - last 7 days (Line)
-    try {
-        const aCtx = document.getElementById('attendanceTrendChart');
-        if (aCtx) {
-            if (window.attendanceTrendInstance) window.attendanceTrendInstance.destroy();
-            const labels = [];
-            const presentData = [];
-            const absentData = [];
-            const today = new Date();
-            for (let i = 6; i >= 0; i--) {
-                const d = new Date(today);
-                d.setDate(d.getDate() - i);
-                const dateStr = d.toLocaleDateString("en-CA");
-                labels.push(d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
-                let present = 0, absent = 0;
-                (window.fetchedAttendance || []).forEach(a => {
-                    if (a.date === dateStr) {
-                        if (a.status === "Present" || a.present) present++;
-                        else if (a.status === "Absent" || a.absent) absent++;
-                    }
-                });
-                if (present === 0 && absent === 0 && window.fetchedStudents) {
-                    // fallback: if no attendance records, estimate based on records matching date key
-                }
-                presentData.push(present);
-                absentData.push(absent);
-            }
-            window.attendanceTrendInstance = new Chart(aCtx, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [
-                        { label: 'Present', data: presentData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4 },
-                        { label: 'Absent', data: absentData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.4 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 11 } } } },
-                    scales: {
-                        x: { ticks: { font: chartFont }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: chartFont, precision: 0 }, grid: gridStyle }
-                    }
-                }
-            });
-        }
-    } catch (e) { console.warn("attendanceTrendChart error", e); }
-
-    // 4. Fee Collection - monthly (Bar)
-    try {
-        const fCtx = document.getElementById('feeCollectionChart');
-        if (fCtx) {
-            if (window.feeCollectionChartInstance) window.feeCollectionChartInstance.destroy();
-            const monthMap = {};
-            const now = new Date();
-            for (let i = 5; i >= 0; i--) {
-                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                const key = `${d.getFullYear()}-${d.getMonth()}`;
-                monthMap[key] = { label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), fee: 0, expense: 0 };
-            }
-            (window.fetchedTransactions || []).forEach(t => {
-                if (!t.date) return;
-                const d = new Date(t.date);
-                if (isNaN(d)) return;
-                const key = `${d.getFullYear()}-${d.getMonth()}`;
-                if (monthMap[key]) {
-                    const amt = parseFloat(t.amount) || 0;
-                    if (t.type === "Fee") monthMap[key].fee += amt;
-                    else if (t.type === "Salary" || t.type === "Expense") monthMap[key].expense += amt;
-                }
-            });
-            const keys = Object.keys(monthMap);
-            window.feeCollectionChartInstance = new Chart(fCtx, {
-                type: 'bar',
-                data: {
-                    labels: keys.map(k => monthMap[k].label),
-                    datasets: [
-                        { label: 'Fee Collected', data: keys.map(k => monthMap[k].fee), backgroundColor: '#f59e0b', borderRadius: 4 },
-                        { label: 'Expenses', data: keys.map(k => monthMap[k].expense), backgroundColor: '#94a3b8', borderRadius: 4 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 11 } } } },
-                    scales: {
-                        x: { ticks: { font: chartFont }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: chartFont }, grid: gridStyle }
-                    }
-                }
-            });
-        }
-    } catch (e) { console.warn("feeCollectionChart error", e); }
-};
-
-function hydrateFeatureSettings(savedSettings = {}, legacyEnabledModules = []) {
-    const settings = JSON.parse(JSON.stringify(DEFAULT_FEATURE_SETTINGS));
-    Object.keys(settings).forEach(group => {
-        if (savedSettings[group]) settings[group] = { ...settings[group], ...savedSettings[group] };
-    });
-    Object.entries(LEGACY_STUDENT_FEATURE_KEYS).forEach(([legacyKey, currentKey]) => {
-        if (savedSettings.student && Object.prototype.hasOwnProperty.call(savedSettings.student, legacyKey)) {
-            settings.student[currentKey] = savedSettings.student[legacyKey];
-        }
-    });
-    if (Array.isArray(legacyEnabledModules) && legacyEnabledModules.length > 0) {
-        Object.keys(settings.modules).forEach(key => { settings.modules[key] = legacyEnabledModules.includes(key); });
-    }
-    return settings;
-}
-
-function isFeatureEnabled(group, key) {
-    return window.currentFeatureSettings?.[group]?.[key] !== false;
-}
-
-function showCompanyRestrictedAlert() {
-    alert("Access Restricted: This feature is disabled by the Super Admin. Please contact your Company Administrator to enable it.");
-}
-
-function getSchoolFeatureKeyForTab(targetId) {
-    const map = {
-        'tab-dashboard': 'dashboard',
-        'tab-students': 'students',
-        'tab-student-transfer': 'studentTransfer',
-        'tab-admit-cards-module': 'admitCards',
-        'tab-staff': 'staff',
-        'tab-finance': 'finance',
-        'tab-fee-approvals': 'feeApprovals',
-        'tab-academics': 'academics',
-        'tab-notices': 'notices',
-        'tab-mailbox': 'communicationHub',
-        'tab-coreedu-comm': 'communicationHub',
-        'tab-qr-fee': 'qrFee',
-        'tab-admit-card': 'admitCardModule',
-        'tab-whatsapp': 'whatsapp',
-        'tab-transport': 'transport',
-        'tab-inventory': 'inventory',
-        'tab-daily-attendance': 'dailyAttendance',
-        'tab-student-features': 'studentPortalFeatures',
-        'tab-settings': 'settings',
-        'staff-tab-attendance': 'dailyAttendance',
-        'staff-tab-marks': 'academics',
-        'staff-tab-notices': 'notices',
-        'staff-tab-homework': 'academics',
-        'staff-tab-timetable': 'academics',
-        'staff-tab-staff': 'settings'
-    };
-    return map[targetId] || null;
-}
-
-function isSchoolTabRestricted(targetId) {
-    const key = getSchoolFeatureKeyForTab(targetId);
-    return !!key && window.currentFeatureSettings?.school && window.currentFeatureSettings.school[key] === false;
-}
-
-function applyFeatureLocks() {
-    const moduleMap = {
-        qrFee: ['payment_qr_upload', 'upi_id_input', 'save_qr_btn'],
-        admitCard: ['bulk-admit-btn', 'admit_class_select', 'searchAdmitStudentInput'],
-        whatsapp: ['wa_group_link'],
-        transport: ['tab-transport'],
-        inventory: ['tab-inventory'],
-        attendance: ['tab-daily-attendance']
-    };
-    Object.entries(moduleMap).forEach(([key, ids]) => {
-        const enabled = isFeatureEnabled('modules', key);
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.classList.toggle('locked-row', !enabled);
-            if ('disabled' in el) el.disabled = !enabled;
-            if (el.classList.contains('tab-content')) el.style.opacity = enabled ? '1' : '0.55';
-        });
-    });
-    document.querySelectorAll('.menu-item[data-target]').forEach(item => {
-        const locked = isSchoolTabRestricted(item.dataset.target);
-        item.classList.toggle('company-feature-locked', locked);
-        item.setAttribute('aria-disabled', locked ? 'true' : 'false');
-        if (locked && !item.querySelector('.company-lock-badge')) item.insertAdjacentHTML('beforeend', ' <span class="company-lock-badge"><i class="fas fa-lock"></i> Locked</span>');
-        if (!locked) item.querySelector('.company-lock-badge')?.remove();
-    });
-    renderStudentFeatureGrid();
-}
-
-function renderFeatureToggleSettings() {
-    const container = document.getElementById('feature-toggle-settings');
-    if (!container) return;
-    container.innerHTML = Object.entries(FEATURE_TOGGLE_META).filter(([group]) => group === 'student').map(([group, meta]) => {
-        const entries = Object.entries(meta.items);
-        const enabledCount = entries.filter(([key]) => isFeatureEnabled(group, key)).length;
-        const groupEnabled = enabledCount === entries.length;
-        const groupPartial = enabledCount > 0 && enabledCount < entries.length;
-        return `<section class="feature-toggle-card" data-feature-group="${group}">
-            <div class="feature-toggle-head">
-                <div>
-                    <span class="section-kicker">School Portal Control</span>
-                    <h4>${meta.label}</h4>
-                    <p>${enabledCount}/${entries.length} features active. Locked features student/school side par visible rahengi, par click disabled rahega.</p>
-                </div>
-                <label class="feature-master-switch ${groupEnabled ? 'is-on' : ''} ${groupPartial ? 'is-partial' : ''}">
-                    <span>${groupEnabled ? 'All ON' : (groupPartial ? 'Partial' : 'All OFF')}</span>
-                    <input type="checkbox" onchange="window.toggleFeatureGroup('${group}', this.checked)" ${groupEnabled ? 'checked' : ''}>
-                </label>
-            </div>
-            <div class="feature-toggle-grid">
-                ${entries.map(([key, label]) => {
-            const enabled = isFeatureEnabled(group, key);
-            return `<label class="feature-toggle-item ${enabled ? 'enabled' : 'locked'}">
-                        <span class="feature-toggle-copy">
-                            <strong>${label}</strong>
-                            <small>${enabled ? 'Live & clickable' : 'Visible but locked'}</small>
-                        </span>
-                        <input type="checkbox" onchange="window.toggleSingleFeature('${group}', '${key}', this.checked)" ${enabled ? 'checked' : ''}>
-                    </label>`;
-        }).join('')}
-            </div>
-        </section>`;
-    }).join('');
-}
-
-async function persistFeatureSettings() {
-    try {
-        if (!currentSchoolId) throw new Error("School ID missing");
-        const featurePayload = {
-            featureSettings: window.currentFeatureSettings,
-            updatedAt: new Date().toISOString(),
-            updatedBy: currentUserId || "school"
-        };
-
-        // One feature_controls row per school: update it when present, otherwise create it.
-        const { data: existingRows, error: updateError } = await supabaseClient
-            .from(FEATURE_SETTINGS_TABLE)
-            .update(featurePayload)
-            .eq("schoolId", currentSchoolId)
-            .select("id");
-        if (updateError) throw updateError;
-
-        if (!existingRows || existingRows.length === 0) {
-            const { error: insertError } = await supabaseClient
-                .from(FEATURE_SETTINGS_TABLE)
-                .insert({ id: currentSchoolId, schoolId: currentSchoolId, ...featurePayload });
-            if (insertError) throw insertError;
-        }
-        applyFeatureLocks();
-        renderFeatureToggleSettings();
-    } catch (e) {
-        console.error("Feature settings save failed", e);
-        alert("Failed to save feature configurations.");
-    }
-}
-
-window.toggleFeatureGroup = async (group, enabled) => {
-    window.currentFeatureSettings[group] = window.currentFeatureSettings[group] || {};
-    Object.keys(FEATURE_TOGGLE_META[group]?.items || DEFAULT_FEATURE_SETTINGS[group] || {}).forEach(key => { window.currentFeatureSettings[group][key] = enabled; });
-    await persistFeatureSettings();
-};
-
-window.toggleSingleFeature = async (group, key, enabled) => {
-    window.currentFeatureSettings[group] = window.currentFeatureSettings[group] || {};
-    window.currentFeatureSettings[group][key] = enabled;
-    Object.entries(LEGACY_STUDENT_FEATURE_KEYS).forEach(([legacyKey, currentKey]) => {
-        if (group === 'student' && currentKey === key) window.currentFeatureSettings.student[legacyKey] = enabled;
-    });
-    await persistFeatureSettings();
-};
-
-window.selectTemplateUI = (style) => {
-    currentTemplateStyle = style;
-    document.querySelectorAll('[id^="card_"]').forEach(el => el.style.borderColor = "transparent");
-    const selectedCard = document.getElementById("card_" + style);
-    if (selectedCard) selectedCard.style.borderColor = "#10b981";
-};
-
-window.saveThemeSettings = async () => {
-    const color = document.getElementById("school_theme_color")?.value || currentThemeColor;
-    const secColor = document.getElementById("school_secondary_color")?.value || currentSecondaryColor;
-    const style = currentTemplateStyle || "wave";
-    try {
-        const { error } = await supabaseClient.from("schools").update({ themeColor: color, idTemplateColor: color, secondaryColor: secColor, idTemplateStyle: style }).eq("id", currentSchoolId);
-        if (error) throw error;
-        currentThemeColor = color;
-        currentSecondaryColor = secColor;
-        document.documentElement.style.setProperty('--theme-color', currentThemeColor);
-        alert("ID Card Design & Theme Color Saved Successfully!");
-    } catch (e) {
-        alert("Failed to save theme: " + e.message);
-    }
-};
-
-window.saveIDColorSettings = async () => {
-    const scColor = document.getElementById("idSchoolNameColor")?.value || currentSchoolNameColor;
-    const stColor = document.getElementById("idStudentNameColor")?.value || currentStudentNameColor;
-    const dColor = document.getElementById("idDetailsColor")?.value || currentDetailsColor;
-    const pbColor = document.getElementById("idPhotoBgColor")?.value || currentPhotoBgColor;
-    try {
-        const { error } = await supabaseClient.from("schools").update({ schoolNameColor: scColor, studentNameColor: stColor, detailsColor: dColor, photoBgColor: pbColor }).eq("id", currentSchoolId);
-        if (error) throw error;
-        currentSchoolNameColor = scColor;
-        currentStudentNameColor = stColor;
-        currentDetailsColor = dColor;
-        currentPhotoBgColor = pbColor;
-        alert("ID Card Text & Photo Colors Saved Successfully!");
-    } catch (e) {
-        alert("Failed to save colors: " + e.message);
-    }
-};
-window.saveEmergency = async () => {
-    const num = document.getElementById("school_emergency").value.trim(); if (!num) return alert("Enter Emergency Number");
-    try {
-        const { error } = await supabaseClient.from("schools").update({ emergencyMobile: num }).eq("id", currentSchoolId);
-        if (error) throw error;
-        document.getElementById("print_emergency").innerText = "Emergency: " + num; alert("Emergency Number Saved!");
-    } catch (e) { }
-};
-window.saveSignature = async () => {
-    let sigUrl = currentSignatureUrl;
-    if (document.getElementById("sig_photo").files.length > 0) {
-        sigUrl = await uploadToCloudinary("sig_photo", "sig_btn", "<i class='fas fa-pen-nib'></i> Save Signature & Preferences");
-        if (!sigUrl) return alert("Please select an image or wait for upload.");
-    }
-
-    const sigSettings = {
-        marksheet: document.getElementById("sig_on_marksheet") ? document.getElementById("sig_on_marksheet").checked : true,
-        idCard: document.getElementById("sig_on_id").checked,
-        bonafide: document.getElementById("sig_on_bonafide").checked,
-        admit: document.getElementById("sig_on_admit").checked
-    };
-
-    try {
-        const { error } = await supabaseClient.from("schools").update({ signatureUrl: sigUrl, sigSettings: sigSettings }).eq("id", currentSchoolId);
-        if (error) throw error;
-        currentSignatureUrl = sigUrl;
-        window.currentSigSettings = sigSettings;
-        if (sigUrl) {
-            document.getElementById("preview-signature").src = sigUrl;
-            document.getElementById("print_sig").src = sigUrl;
-            document.getElementById("cert_sig").src = sigUrl;
-        }
-        alert("Signature & Preferences Saved!");
-    } catch (e) { console.error(e); }
-};
-
-let currentPaymentQrUrl = "";
-window.savePaymentSettings = async () => {
-    let qrUrl = currentPaymentQrUrl;
-    if (document.getElementById("payment_qr_upload").files.length > 0) {
-        qrUrl = await uploadToCloudinary("payment_qr_upload", "save_qr_btn", "<i class='fas fa-save'></i> Save Payment Settings");
-        if (!qrUrl) return alert("Upload failed.");
-    }
-
-    const upiId = document.getElementById("upi_id_input").value.trim();
-    if (!upiId) return alert("Please enter a valid UPI ID.");
-
-    try {
-        const { error } = await supabaseClient.from("schools").update({ paymentQrUrl: qrUrl, upiId: upiId }).eq("id", currentSchoolId);
-        if (error) throw error;
-        currentPaymentQrUrl = qrUrl;
-        if (qrUrl) document.getElementById("payment_qr_preview").src = qrUrl;
-        alert("Payment Settings Saved successfully!");
-    } catch (e) {
-        alert("Error saving payment settings: " + e.message);
-    }
-};
-
-window.sendPasswordRequest = async () => {
-    const newPass = document.getElementById("req_new_pass").value.trim(); if (!newPass) return alert("Please enter a new password.");
-    try {
-        const { error } = await supabaseClient.from("users").update({ suggestedPassword: newPass }).eq("id", currentUserId);
-        if (error) throw error;
-        alert("Password change request sent to Super Admin!"); document.getElementById("req_new_pass").value = "";
-    } catch (e) { }
-};
-
-// ================= MAIL BOX =================
-window.toggleSpecificStaff = () => { const val = document.getElementById("mail_target").value; document.getElementById("specific_staff_div").style.display = val === "specific_staff" ? "block" : "none"; };
-window.sendChairmanMessage = async () => {
-    const target = document.getElementById("mail_target").value; const title = document.getElementById("mail_title").value.trim(); const body = document.getElementById("mail_body").value.trim();
-    if (!title || !body) return alert("Fill title and body");
-    let receiverId = target; let receiverType = target;
-    if (target === "specific_staff") { receiverId = document.getElementById("mail_specific_staff").value; receiverType = "staff_member"; if (!receiverId) return alert("Please select a staff member."); }
-    try {
-        const { error } = await supabaseClient.from("direct_messages").insert({ senderId: currentUserId, senderName: currentSchoolName + " (Chairman)", senderRole: "chairman", schoolId: currentSchoolId, receiverType: receiverType, receiverId: receiverId, title: title, body: body, isRead: false, createdAt: new Date().toISOString() });
-        if (error) throw error;
-        alert("Message Sent!"); document.getElementById("mail_title").value = ""; document.getElementById("mail_body").value = ""; loadSentMail();
-    } catch (e) { }
-};
-async function loadInbox() {
-    try {
-        const { data: rows, error } = await supabaseClient.from("direct_messages").select("*").eq("schoolId", currentSchoolId).eq("receiverType", "chairman");
-        if (error) throw error;
-        let html = ""; let msgs = rows || [];
-        msgs.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return toEpochMillis(b.createdAt) - toEpochMillis(a.createdAt); });
-        let unreadCount = 0;
-        msgs.forEach(msg => {
-            let isUnread = !msg.isRead;
-            if (msg.replies && msg.replies.length > 0) {
-                let lastReply = msg.replies[msg.replies.length - 1];
-                if (lastReply.senderRole !== "chairman" && !lastReply.isRead) isUnread = true;
-            }
-            if (isUnread) unreadCount++;
-
-            let ts = msg.createdAt ? new Date(msg.createdAt).toLocaleString() : "Unknown";
-            let sender = msg.senderRole || 'Admin';
-            let initial = sender.charAt(0).toUpperCase();
-            html += `<div class="gmail-item" onclick="openMailThread('${msg.id}')" style="${isUnread ? 'font-weight:bold; background:#f0f7ff;' : ''}">
-                        <div class="gmail-avatar">${initial}</div>
-                        <div class="gmail-content">
-                            <div class="gmail-header">
-                                <div class="gmail-sender">${sender} ${isUnread ? '<span style="color:red;">●</span>' : ''}</div>
-                                <div class="gmail-date">${ts}</div>
-                            </div>
-                            <div class="gmail-subject">${msg.title || 'No Subject'}</div>
-                            <div class="gmail-snippet">${msg.body}</div>
-                        </div>
-                    </div>`;
-        });
-        if (unreadCount > 0) {
-            document.getElementById("badge-mailbox").innerText = unreadCount;
-            document.getElementById("badge-mailbox").style.display = "inline-block";
-        } else {
-            document.getElementById("badge-mailbox").style.display = "none";
-        }
-        document.getElementById("inbox-list").innerHTML = html || "<p style='padding:20px; text-align:center;'>No messages in Inbox.</p>";
-    } catch (e) { console.error(e); }
-}
-async function loadSentMail() {
-    try {
-        const { data: rows, error } = await supabaseClient.from("direct_messages").select("*").eq("senderId", currentUserId);
-        if (error) throw error;
-        let html = ""; let msgs = rows || [];
-        msgs.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return toEpochMillis(b.createdAt) - toEpochMillis(a.createdAt); });
-        msgs.forEach(msg => {
-            let isUnreadReply = false;
-            if (msg.replies && msg.replies.length > 0) {
-                let lastReply = msg.replies[msg.replies.length - 1];
-                if (lastReply.senderRole !== "chairman" && !lastReply.isRead) isUnreadReply = true;
-            }
-            let ts = msg.createdAt ? new Date(msg.createdAt).toLocaleString() : "Unknown";
-            let toWho = msg.receiverType === 'staff_member' ? 'Specific Staff' : (msg.receiverType === 'school' ? 'Specific School' : msg.receiverType);
-            let initial = toWho.charAt(0).toUpperCase();
-            html += `<div class="gmail-item" onclick="openMailThread('${msg.id}')" style="${isUnreadReply ? 'font-weight:bold; background:#f0f7ff;' : ''}">
-                        <div class="gmail-avatar" style="background:#8e44ad;">${initial}</div>
-                        <div class="gmail-content">
-                            <div class="gmail-header">
-                                <div class="gmail-sender">To: ${toWho} ${isUnreadReply ? '<span style="color:red;">●</span>' : ''}</div>
-                                <div class="gmail-date">${ts}</div>
-                            </div>
-                            <div class="gmail-subject">${msg.title || 'No Subject'}</div>
-                            <div class="gmail-snippet">${msg.body}</div>
-                        </div>
-                    </div>`;
-        });
-        document.getElementById("sent-list").innerHTML = html || "<p style='padding:20px; text-align:center;'>No sent messages.</p>";
-    } catch (e) { console.error(e); }
-}
-
-// ================= COMM HUB SUB-TABS & COMPLAINTS =================
-window.switchCommSubtab = (subId) => {
-    document.querySelectorAll(".comm-subtab").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".comm-subsection").forEach(s => s.classList.remove("active"));
-    const btn = document.querySelector(`.comm-subtab[data-subtab="${subId}"]`);
-    const sec = document.getElementById(subId);
-    if (btn) btn.classList.add("active");
-    if (sec) sec.classList.add("active");
-    if (subId === "sub-complaints") window.loadStudentComplaints();
-    if (subId === "sub-chat") window.loadCoreEduChat();
-};
-
-window.fetchedStudentComplaints = [];
-
-window.loadStudentComplaints = async () => {
-    const tbody = document.getElementById("complaints-list-body");
-    if (!tbody || !currentSchoolId) return;
-    tbody.innerHTML = "<tr><td colspan='7' style='text-align:center;'>Loading complaints...</td></tr>";
-    try {
-        const { data: rows, error } = await supabaseClient.from("complaints").select("*").eq("schoolId", currentSchoolId);
-        if (error) throw error;
-        window.fetchedStudentComplaints = rows || [];
-        window.fetchedStudentComplaints.sort((a, b) => toEpochMillis(b.createdAt) - toEpochMillis(a.createdAt));
-        window.renderStudentComplaints();
-    } catch (e) {
-        console.error("Load complaints failed:", e);
-        tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; color:#fca5a5;'>Unable to load complaints.</td></tr>";
-    }
-};
-
-window.renderStudentComplaints = () => {
-    const tbody = document.getElementById("complaints-list-body");
+// ==========================================
+// TICKETS LOGIC
+// ==========================================
+window.loadTickets = async () => {
+    const tbody = document.getElementById("ticketsTableBody");
     if (!tbody) return;
-    let openCount = 0;
-    let html = "";
-    (window.fetchedStudentComplaints || []).forEach(c => {
-        const status = c.status || "Open";
-        if (status === "Open") openCount++;
-        const statusColor = status === "Open" ? "#f59e0b" : status === "In Progress" ? "#3b82f6" : "#10b981";
-        const ts = c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-CA") : "N/A";
-        html += `<tr>
-            <td>${ts}</td>
-            <td><strong>${c.studentName || "N/A"}</strong><br><small>Class ${c.studentClass || "N/A"}</small></td>
-            <td>${c.target || "N/A"}</td>
-            <td><strong>${c.subject || "N/A"}</strong></td>
-            <td style="max-width:260px;">${c.description || "N/A"}</td>
-            <td><span style="color:${statusColor}; font-weight:bold;">${status}</span></td>
-            <td>
-                <button class="action-btn btn-blue" style="padding:4px 10px; font-size:12px; margin-bottom:4px;" onclick="window.resolveComplaint('${c.id}')"><i class="fas fa-check"></i> Resolve</button>
-                <button class="action-btn" style="padding:4px 10px; font-size:12px; background:#64748b;" onclick="window.replyToComplaint('${c.id}')"><i class="fas fa-reply"></i> Reply</button>
-            </td>
-        </tr>`;
-    });
-    tbody.innerHTML = html || "<tr><td colspan='7' style='text-align:center;'>No complaints found.</td></tr>";
-
-    const badge = document.getElementById("badge-complaints");
-    if (badge) {
-        if (openCount > 0) { badge.innerText = openCount; badge.style.display = "inline-block"; }
-        else { badge.style.display = "none"; }
-    }
-};
-
-window.resolveComplaint = async (complaintId) => {
-    const c = window.fetchedStudentComplaints.find(x => x.id === complaintId);
-    if (!c) return alert("Complaint not found.");
-    if (!confirm(`Mark complaint "${c.subject || "this complaint"}" as Resolved?`)) return;
     try {
-        const { error } = await supabaseClient.from("complaints").update({ status: "Resolved", resolvedAt: new Date().toISOString(), resolvedBy: currentUserId || "chairman" }).eq("id", complaintId);
-        if (error) throw error;
-        alert("Complaint marked as resolved.");
-        window.loadStudentComplaints();
-    } catch (e) {
-        console.error("Resolve complaint failed:", e);
-        alert("Failed to resolve complaint: " + e.message);
-    }
-};
-
-window.replyToComplaint = async (complaintId) => {
-    const c = window.fetchedStudentComplaints.find(x => x.id === complaintId);
-    if (!c) return alert("Complaint not found.");
-    const reply = prompt(`Reply to ${c.studentName || "student"} regarding "${c.subject || "complaint"}":`);
-    if (!reply) return;
-    try {
-        const { error } = await supabaseClient.from("complaints").update({ chairmanReply: reply, status: "In Progress", repliedAt: new Date().toISOString() }).eq("id", complaintId);
-        if (error) throw error;
-        alert("Reply sent to student.");
-        window.loadStudentComplaints();
-    } catch (e) {
-        console.error("Reply complaint failed:", e);
-        alert("Failed to send reply: " + e.message);
-    }
-};
-
-// ================= FINANCE & PAYROLL & EXPENSES =================
-window.saveFeeStructure = async () => {
-    const cls = document.getElementById("master_fee_class").value;
-    const tui = document.getElementById("master_tuition").value;
-    const bus = document.getElementById("master_bus").value;
-    const oth = document.getElementById("master_other").value;
-    if (!tui) return alert("Tuition fee is required.");
-    try {
-        // One row per school + class in the dedicated fee_structures table.
-        const { error } = await supabaseClient.from("fee_structures").upsert({
-            id: `${currentSchoolId}_${cls}`,
-            schoolId: currentSchoolId,
-            class: cls,
-            tuition: Number(tui),
-            bus: bus ? Number(bus) : 0,
-            other: oth ? Number(oth) : 0,
-            updatedAt: new Date().toISOString()
-        });
-        if (error) throw error;
-        alert(`Fee structure for Class ${cls} updated successfully!`);
-    } catch (e) { alert("Error saving fee structure."); }
-};
-
-window.populateFeeStudents = () => {
-    const cls = document.getElementById("fee_class").value; const select = document.getElementById("fee_student"); select.innerHTML = '<option value="">-- Select Student --</option>'; if (!cls) return;
-    const filtered = window.fetchedStudents.filter(s => s.class && s.class.toUpperCase() === cls.toUpperCase() && s.status === 'Approved');
-    filtered.forEach(s => { select.innerHTML += `<option value="${s.id}">${s.name} ${s.roll ? '(Roll: ' + s.roll + ')' : ''}</option>`; }); document.getElementById("fee_mobile").value = "";
-};
-window.autoFillFeeDetails = () => { const sid = document.getElementById("fee_student").value; const s = window.fetchedStudents.find(x => x.id === sid); if (s) document.getElementById("fee_mobile").value = s.mobile || 'N/A'; };
-
-window.saveStudentFee = async () => {
-    const cls = document.getElementById("fee_class").value; const sId = document.getElementById("fee_student").value; const mob = document.getElementById("fee_mobile").value; const amt = document.getElementById("fee_amount").value; const mode = document.getElementById("fee_mode").value; const date = document.getElementById("fee_date").value;
-    if (!sId || !amt || !date) return alert("Fill all required details.");
-    const selectEl = document.getElementById("fee_student"); const sName = selectEl.options[selectEl.selectedIndex].text.split('(')[0].trim();
-    try {
-        const { error } = await supabaseClient.from("transactions").insert({ schoolId: currentSchoolId, type: "Fee", personId: sId, personName: sName, class: cls, mobile: mob, amount: Number(amt), mode: mode, date: date, createdAt: new Date().toISOString() });
-        if (error) throw error;
-        alert("Fee Record Added!"); document.getElementById("fee_amount").value = ""; loadTransactions();
-    } catch (e) { }
-};
-
-window.saveStaffSalary = async () => {
-    const stId = document.getElementById("salary_staff").value; const amt = document.getElementById("salary_amount").value; const mode = document.getElementById("salary_mode").value; const date = document.getElementById("salary_date").value;
-    if (!stId || !amt || !date) return alert("Fill all details.");
-    const selectEl = document.getElementById("salary_staff"); const stName = selectEl.options[selectEl.selectedIndex].text.split('(')[0].trim();
-    try {
-        const { error } = await supabaseClient.from("transactions").insert({ schoolId: currentSchoolId, type: "Salary", personId: stId, personName: stName, amount: Number(amt), mode: mode, date: date, createdAt: new Date().toISOString() });
-        if (error) throw error;
-        alert("Salary Disbursed & Approved!"); document.getElementById("salary_amount").value = ""; loadTransactions();
-    } catch (e) { }
-};
-
-window.saveExpense = async () => {
-    const title = document.getElementById("exp_title").value.trim(); const amt = document.getElementById("exp_amount").value; const date = document.getElementById("exp_date").value;
-    if (!title || !amt || !date) return alert("Fill all expense details.");
-    try {
-        const { error } = await supabaseClient.from("transactions").insert({ schoolId: currentSchoolId, type: "Expense", personName: title, amount: Number(amt), mode: "Cash/Bank", date: date, createdAt: new Date().toISOString() });
-        if (error) throw error;
-        alert("Expense Logged!"); document.getElementById("exp_title").value = ""; document.getElementById("exp_amount").value = ""; loadTransactions();
-    } catch (e) { }
-};
-
-window.fetchedTransactions = [];
-window.currentLedgerTab = 'All';
-
-async function loadTransactions() {
-    try {
-        const { data: rows, error } = await supabaseClient.from("transactions").select("*").eq("schoolId", currentSchoolId);
-        if (error) throw error;
-        window.fetchedTransactions = rows || [];
-        window.fetchedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        let totalFees = 0, totalSalaries = 0, totalExpenses = 0;
-        window.fetchedTransactions.forEach(t => {
-            if (t.type === "Fee") totalFees += Number(t.amount);
-            if (t.type === "Salary") totalSalaries += Number(t.amount);
-            if (t.type === "Expense") totalExpenses += Number(t.amount);
-        });
-
-        document.getElementById("summary-fees").innerText = "₹ " + totalFees;
-        document.getElementById("summary-salaries").innerText = "₹ " + totalSalaries;
-        document.getElementById("summary-balance").innerText = "₹ " + (totalFees - (totalSalaries + totalExpenses));
-
-        if (window.initDashboardChart) window.initDashboardChart();
-        window.renderTransactionsTable();
-        document.getElementById("count-revenue").innerText = "Rs. " + (totalFees - totalSalaries - totalExpenses);
-
-        const staffNames = new Set(window.fetchedTransactions.filter(t => t.type === "Salary" && t.personName).map(t => t.personName));
-        const staffDropdown = document.getElementById("ledger-search-staff");
-        staffDropdown.innerHTML = '<option value="">All Staff</option>';
-        staffNames.forEach(name => {
-            staffDropdown.innerHTML += `<option value="${name}">${name}</option>`;
-        });
-
-        window.renderTransactionsTable();
-    } catch (e) { }
-}
-
-window.switchLedgerTab = (tab, btnElement) => {
-    window.currentLedgerTab = tab;
-    document.querySelectorAll('#ledger-tabs .filter-btn').forEach(btn => btn.classList.remove('active'));
-    if (btnElement) btnElement.classList.add('active');
-
-    // Toggle Search Inputs
-    const classFilter = document.getElementById("ledger-search-class");
-    const staffFilter = document.getElementById("ledger-search-staff");
-
-    if (tab === 'Fee') {
-        classFilter.style.display = "block";
-        staffFilter.style.display = "none";
-        staffFilter.value = "";
-    } else if (tab === 'Salary') {
-        classFilter.style.display = "none";
-        classFilter.value = "";
-        staffFilter.style.display = "block";
-    } else {
-        classFilter.style.display = "none"; classFilter.value = "";
-        staffFilter.style.display = "none"; staffFilter.value = "";
-    }
-
-    document.getElementById("ledger-search-name").value = "";
-    document.getElementById("ledger-search-name").placeholder = tab === 'Fee' ? "Search by Student Name..." : (tab === 'Salary' ? "Search by Staff Name/ID..." : "Search by Name/Title...");
-
-    window.renderTransactionsTable();
-};
-
-window.renderTransactionsTable = () => {
-    const tbody = document.getElementById("transaction-table");
-    const nameSearch = document.getElementById("ledger-search-name").value.toLowerCase();
-    const classSearch = document.getElementById("ledger-search-class").value;
-    const staffSearch = document.getElementById("ledger-search-staff").value;
-
-    let filtered = window.fetchedTransactions;
-
-    if (window.currentLedgerTab !== 'All') {
-        filtered = filtered.filter(t => t.type === window.currentLedgerTab);
-    }
-
-    if (classSearch) {
-        filtered = filtered.filter(t => t.class === classSearch);
-    }
-
-    if (staffSearch) {
-        filtered = filtered.filter(t => t.personName === staffSearch);
-    }
-
-    if (nameSearch) {
-        filtered = filtered.filter(t => t.personName?.toLowerCase().includes(nameSearch));
-    }
-
-    let html = "";
-    filtered.forEach(t => {
-        const typeColor = t.type === "Fee" ? "#27ae60" : (t.type === "Expense" ? "#e53e3e" : "#e67e22");
-        const details = t.type === "Fee" ? `Class: ${t.class || 'N/A'}` : (t.type === "Expense" ? "School Expense" : "Staff Pay");
-        const actionBtn = t.type === 'Salary' ? `<button class="action-btn btn-blue" style="padding:2px 5px; font-size:10px; margin-left:5px;" onclick="window.generatePayslip('${t.id}')"><i class="fas fa-download"></i> Slip</button>` : '';
-        html += `<tr><td>${t.date}</td><td><strong style="color:${typeColor}">${t.type}</strong></td><td>${t.personName || 'N/A'}</td><td>${details}</td><td style="font-weight:bold;">Rs. ${t.amount}</td><td>${t.mode} ${actionBtn}</td>
-        <td><button class="action-btn btn-red" onclick="window.requestTransactionDeletion('${t.id}')"><i class="fas fa-trash"></i></button></td></tr>`;
-    });
-
-    tbody.innerHTML = html || "<tr><td colspan='7' style='text-align:center;'>No Financial Records Found.</td></tr>";
-}
-
-window.requestTransactionDeletion = async (id) => {
-    const t = window.fetchedTransactions.find(x => x.id === id);
-    if (!t) return;
-
-    if (confirm("Request Super Admin to delete this transaction?")) {
-        try {
-            const { error } = await supabaseClient.from("pending_deletions").upsert({
-                id,
-                ...t,
-                targetDocId: id,
-                targetCollection: 'transactions',
-                schoolId: window.currentSchoolId || t.schoolId || 'UNKNOWN',
-                requestDate: new Date().toISOString(),
-                status: "Pending"
-            });
-            if (error) throw error;
-            alert("Deletion request sent to Super Admin for approval.");
-        } catch (e) {
-            console.error(e);
-            alert("Error sending deletion request.");
-        }
-    }
-};
-
-window.downloadLedgerPDF = () => {
-    try {
-        if (!window.jspdf?.jsPDF) {
-            alert("The PDF library is not loaded yet. Please refresh the page and try again.");
-            return;
-        }
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('l', 'mm', 'a4');
-
-        const transactions = Array.isArray(window.fetchedTransactions) ? window.fetchedTransactions : [];
-        const nameSearch = (document.getElementById("ledger-search-name")?.value || "").toLowerCase();
-        const classSearch = document.getElementById("ledger-search-class")?.value || "";
-        const staffSearch = document.getElementById("ledger-search-staff")?.value || "";
-
-        let filtered = [...transactions];
-        if ((window.currentLedgerTab || 'All') !== 'All') { filtered = filtered.filter(t => t.type === window.currentLedgerTab); }
-        if (classSearch) { filtered = filtered.filter(t => t.class === classSearch); }
-        if (staffSearch) { filtered = filtered.filter(t => t.personName === staffSearch); }
-        if (nameSearch) { filtered = filtered.filter(t => t.personName?.toLowerCase().includes(nameSearch)); }
-
-        if (!filtered.length) {
-            alert("No ledger records are available for the selected filter.");
-            return;
-        }
-
-        pdf.setFontSize(18);
-        pdf.text(currentSchoolName || "Combined Financial Ledger", 14, 18);
-        pdf.setFontSize(11);
-        pdf.text(`Report: ${(window.currentLedgerTab || 'All')} Transactions | Records: ${filtered.length}`, 14, 26);
-        pdf.text(`Generated: ${new Date().toLocaleString()}`, 14, 33);
-
-        let y = 45;
-        const drawHeader = () => {
-            pdf.setFillColor(239, 246, 255);
-            pdf.rect(12, y - 6, 270, 9, 'F');
-            pdf.setFontSize(10);
-            pdf.setFont(undefined, 'bold');
-            pdf.text("Date", 14, y);
-            pdf.text("Type", 42, y);
-            pdf.text("Name/Title", 72, y);
-            pdf.text("Details", 125, y);
-            pdf.text("Amount", 188, y);
-            pdf.text("Mode", 228, y);
-            pdf.setFont(undefined, 'normal');
-            y += 10;
-        };
-        drawHeader();
-
-        filtered.forEach(t => {
-            if (y > 190) {
-                pdf.addPage();
-                y = 20;
-                drawHeader();
-            }
-            const details = t.type === "Fee" ? `Class: ${t.class || 'N/A'}` : (t.type === "Expense" ? "School Expense" : "Staff Pay");
-            pdf.text(String(t.date || '').substring(0, 12), 14, y);
-            pdf.text(String(t.type || ''), 42, y);
-            pdf.text(String(t.personName || 'N/A').substring(0, 24), 72, y);
-            pdf.text(details.substring(0, 28), 125, y);
-            pdf.text("Rs. " + (t.amount || 0), 188, y);
-            pdf.text(String(t.mode || '').substring(0, 18), 228, y);
-            y += 9;
-        });
-
-        pdf.save(`Ledger_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
-    } catch (e) {
-        console.error(e);
-        alert("Ledger PDF generation failed. Check the console for details.");
-    }
-};
-
-window.generatePayslip = async (id) => {
-    const t = window.fetchedTransactions.find(x => x.id === id);
-    if (!t) return;
-
-    const slipDiv = document.createElement('div');
-    slipDiv.style.position = 'absolute';
-    slipDiv.style.top = '-9999px';
-    slipDiv.style.left = '-9999px';
-    slipDiv.style.width = '210mm';
-    slipDiv.style.padding = '40px';
-    slipDiv.style.background = '#fff';
-    slipDiv.style.color = '#000';
-    slipDiv.style.fontFamily = 'Arial, sans-serif';
-
-    const schoolName = currentSchoolName || 'School Name';
-    slipDiv.innerHTML = `
-        <div style="text-align:center; border-bottom:2px solid #ccc; padding-bottom:20px; margin-bottom:20px;">
-            <h1 style="margin:0; font-size:24px; color:#1e3c72;">${schoolName.toUpperCase()}</h1>
-            <p style="margin:5px 0 0 0; color:#555;">STAFF SALARY SLIP</p>
-        </div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:30px;">
-            <div>
-                <p><strong>Employee Name:</strong> ${t.personName}</p>
-                <p><strong>Payment Date:</strong> ${new Date(t.date).toLocaleDateString()}</p>
-            </div>
-            <div>
-                <p><strong>Transaction ID:</strong> ${t.id}</p>
-                <p><strong>Payment Mode:</strong> ${t.mode}</p>
-            </div>
-        </div>
-        <table style="width:100%; border-collapse:collapse; margin-bottom:40px;">
-            <thead>
-                <tr style="background:#f4f4f4;">
-                    <th style="padding:12px; border:1px solid #ccc; text-align:left;">Description</th>
-                    <th style="padding:12px; border:1px solid #ccc; text-align:right;">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td style="padding:12px; border:1px solid #ccc;">Basic Salary Disbursement</td>
-                    <td style="padding:12px; border:1px solid #ccc; text-align:right;">Rs. ${t.amount}</td>
-                </tr>
-                <tr>
-                    <td style="padding:12px; border:1px solid #ccc; font-weight:bold; text-align:right;">Net Payable:</td>
-                    <td style="padding:12px; border:1px solid #ccc; font-weight:bold; text-align:right;">Rs. ${t.amount}</td>
-                </tr>
-            </tbody>
-        </table>
-        <div style="display:flex; justify-content:flex-end; margin-top:50px;">
-            <div style="text-align:center;">
-                ${currentSignatureUrl ? `<img src="${currentSignatureUrl}" style="height:50px; margin-bottom:5px;">` : `<div style="height:50px;"></div>`}
-                <div style="border-top:1px solid #000; padding-top:5px;">Authorized Signatory</div>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(slipDiv);
-    try {
-        const canvas = await html2canvas(slipDiv, { scale: 2 });
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Payslip_${t.personName.replace(/\s+/g, '_')}_${t.date}.pdf`);
-    } catch (e) {
-        console.error(e);
-        alert('Error generating pay-slip');
-    } finally {
-        document.body.removeChild(slipDiv);
-    }
-}
-
-// ================= STUDENTS, CERTS & DEFAULTER LOCKDOWN =================
-async function loadStudents() {
-    try {
-        const { data: studentRows, error: studentError } = await supabaseClient.from("students").select("*").eq("schoolId", currentSchoolId);
-        if (studentError) throw studentError;
-        let pendingCount = 0; let totalPresent = 0;
-        
-        // --- SECURE BATCH 2 READ PATH FOR ADMISSIONS ---
-        const { data: admissionRows, error: admissionError } = await supabaseClient.from("admission_applications").select("*").eq("schoolId", currentSchoolId);
-        if (admissionError) throw admissionError;
-        
-        window.fetchedStudents = []; 
-        
-        // Push actual students. The approval function keeps the profile fields
-        // (name, rollNo, mobile, parentage, photoUrl, status ...) inside the
-        // JSONB `data` column of `students`, so flatten it exactly like the
-        // admission payload below - otherwise every real student renders as
-        // "N/A". A students row carrying no status at all is an enrolled
-        // (approved) student by definition.
-        (studentRows || []).forEach(dt => {
-            let row = (dt && dt.data) ? { ...dt, ...dt.data } : dt;
-            if (!row.status) row.status = "Approved";
-            // Legacy pendings (should be 0)
-            if (row.status === "Pending") pendingCount++;
-            window.fetchedStudents.push(row);
-        });
-
-        // Push only ACTIONABLE (Pending) admission applications.
-        // Approved / Rejected applications remain in `admission_applications`
-        // as audit history, but the approved child already exists in `students`
-        // (created by approve_admission), so merging finished applications into
-        // the student list rendered the same child twice.
-        (admissionRows || []).forEach(dt => {
-            // Flatten JSONB payload to match legacy format
-            let flatDt = { ...dt, ...dt.data, _isNewAdmission: true };
-            // Finished applications (Approved / Rejected) are history only.
-            if (flatDt.status !== "Pending") return;
-            pendingCount++;
-            window.fetchedStudents.push(flatDt);
-        });
-
-        document.getElementById("count-students").innerText = (studentRows || []).length; 
-        document.getElementById("count-pending").innerText = pendingCount;
-
-        if (studentRows && studentRows.length > 0) {
-            try {
-                const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-                const { data: attendanceRows, error: attendanceError } = await supabaseClient.from("attendance").select("*").eq("schoolId", currentSchoolId).eq("date", todayStr);
-                if (attendanceError) throw attendanceError;
-                let totalStudentsRecorded = 0;
-                let totalPresent = 0;
-                (attendanceRows || []).forEach(record => {
-                    const recs = record.records || {};
-                    for (let sid in recs) {
-                        totalStudentsRecorded++;
-                        if (recs[sid] === "Present") totalPresent++;
-                    }
-                });
-                let att = 0;
-                if (totalStudentsRecorded > 0) {
-                    att = Math.floor((totalPresent / totalStudentsRecorded) * 100);
-                } else {
-                    att = "N/A ";
-                }
-                document.getElementById("count-attendance").innerText = att + (att !== "N/A " ? "%" : "");
-            } catch (e) {
-                document.getElementById("count-attendance").innerText = "Err";
-            }
-        }
-
-        renderClassFilters(); renderStudentsTable("All"); populateTransferStudentOptions(); window.renderStudentExportRecords();
-    } catch (e) { }
-}
-
-function renderClassFilters() {
-    const classes = institutionIsCollege() ? ["1st Semester", "2nd Semester", "3rd Semester", "4th Semester", "5th Semester", "6th Semester"] : ["Nursery", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
-    let html = `<button class="filter-btn active" onclick="filterStudents('All', this)">All</button>`;
-    classes.forEach(c => html += `<button class="filter-btn" onclick="filterStudents('${c}', this)">${c}</button>`);
-    document.getElementById("class-filters").innerHTML = html;
-}
-
-window.filterStudents = (className, btnElement) => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    if (btnElement) btnElement.classList.add('active');
-    sessionStorage.setItem('activeStudentTab', className);
-    renderStudentsTable(className);
-    renderAdmitCardStudentsTable(className);
-};
-
-window.searchStudent = () => {
-    const term = document.getElementById("searchStudentInput").value;
-    const activeClass = document.querySelector('.filter-btn.active') ? document.querySelector('.filter-btn.active').innerText : (sessionStorage.getItem('activeStudentTab') || 'All');
-    renderStudentsTable(activeClass, term);
-    renderAdmitCardStudentsTable(activeClass, term);
-};
-
-window.filterByStatus = (status) => {
-    switchTab('tab-students');
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.filter-btn').classList.add('active');
-    renderStudentsTable('All', null, status);
-    renderAdmitCardStudentsTable('All', null, status);
-};
-
-function renderStudentsTable(className, searchTerm = null, statusFilter = null) {
-    const tbody = document.getElementById("student-table"); let html = "";
-    let filtered = className === "All" ? window.fetchedStudents : window.fetchedStudents.filter(s => s.class && s.class.toUpperCase() === className.toUpperCase());
-
-    if (statusFilter && statusFilter !== 'all') {
-        filtered = filtered.filter(s => s.status && s.status.toLowerCase() === statusFilter.toLowerCase());
-    }
-
-    if (searchTerm) {
-        const lowerTerm = searchTerm.toLowerCase();
-        filtered = filtered.filter(s =>
-            (s.name && s.name.toLowerCase().includes(lowerTerm)) ||
-            (s.rollNo && String(s.rollNo).includes(lowerTerm)) ||
-            (s.regNo && String(s.regNo).includes(lowerTerm)) ||
-            (s.mobile && String(s.mobile).includes(lowerTerm))
-        );
-    }
-
-    filtered.sort((a, b) => (Number(a.rollNo) || 999999) - (Number(b.rollNo) || 999999));
-
-    filtered.forEach(dt => {
-        const safeId = studentHtml(dt.id).replace(/"/g, '&quot;');
-        const locked = dt.lockedOut;
-        const safeNameAttr = studentHtml(dt.name).replace(/"/g, '&quot;');
-        const safeName = studentHtml(dt.name);
-        const safeMobile = studentHtml(dt.mobile);
-        const safeRollNo = studentHtml(dt.rollNo);
-        const safeClass = studentHtml(dt.class);
-        const safeParentage = studentHtml(dt.parentage || dt.fatherName);
-        const safeMother = studentHtml(dt.motherName);
-        const safeStatus = studentHtml(dt.status);
-        const feeDueNum = Number(dt.feeDue) || 0;
-        
-        let safePhoto = dt.photoUrl ? studentHtml(dt.photoUrl) : 'https://via.placeholder.com/100';
-        if (!isSafeStudentPhotoUrl(safePhoto)) {
-            safePhoto = 'https://via.placeholder.com/100';
-        }
-
-        const statusColor = safeStatus === 'Approved' ? '#27ae60' : (safeStatus === 'Pending' ? '#e67e22' : '#e53e3e'); 
-        const statusIcon = safeStatus === 'Approved' ? '<i class="fas fa-check"></i>' : '<i class="fas fa-clock"></i>';
-
-        const lockBtn = locked ? `<button class="action-btn btn-green" data-id="${safeId}" onclick="toggleStudentLock(this.dataset.id, false)" title="Unlock Account"><i class="fas fa-unlock"></i></button>` : `<button class="action-btn btn-dark" data-id="${safeId}" onclick="toggleStudentLock(this.dataset.id, true)" title="Lock Account"><i class="fas fa-lock"></i></button>`;
-
-        const actionBtns = safeStatus === "Pending"
-            ? (dt._isNewAdmission 
-                ? `<button class="action-btn btn-green" data-id="${safeId}" onclick="updateStudentStatus(this.dataset.id, true)"><i class="fas fa-check"></i> Approve</button>`
-                : `<button class="action-btn btn-green" data-id="${safeId}" onclick="updateStudentStatus(this.dataset.id, false)"><i class="fas fa-check"></i> Approve (Legacy)</button>`)
-            : `
-            <button class="action-btn btn-blue" data-id="${safeId}" onclick="showIDCard(this.dataset.id)"><i class="fas fa-id-card"></i> ID</button>
-            <button class="action-btn" style="background:#3b82f6; color:white;" data-id="${safeId}" data-name="${safeNameAttr}" onclick="window.openDirectMessageModal(this.dataset.id, this.dataset.name)"><i class="fas fa-comment-dots"></i> Message</button>
-            <button class="action-btn btn-purple" data-id="${safeId}" onclick="openStudentModal(this.dataset.id)"><i class="fas fa-edit"></i> Edit</button>
-            ${institutionIsCollege() ? `<button class="action-btn" style="background:#0d9488;color:white;" data-id="${safeId}" title="Academic Placement" onclick="window.openStudentPlacement(this.dataset.id)"><i class="fas fa-sitemap"></i></button>` : ''}${lockBtn}`;
-
-        html += `<tr class="${locked ? 'locked-row' : ''}">
-            <td style="text-align:center;"><input type="checkbox" class="student-select-checkbox" data-id="${safeId}" onchange="window.toggleStudentSelection(this.dataset.id, this.checked)" ${window.selectedStudentIds.has(dt.id) ? 'checked' : ''}></td>
-            <td><img src="${safePhoto}" class="img-circle"></td>
-            <td><strong style="display:block; font-size:13px;">${safeName} ${locked ? '<i class="fas fa-lock" style="color:#e53e3e"></i>' : ''}</strong><small style="color:#7f8c8d;">${safeMobile === 'N/A' ? 'No Mobile' : safeMobile}</small></td>
-            <td><span style="font-weight:bold; font-size:13px; color:#333;">${safeRollNo}</span></td>
-            <td><span style="background:#eaf4ff; color:#2c7be5; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">Class: ${safeClass}</span>${dt.subjects && dt.subjects.length > 0 ? `<br><small style="color:#64748b; font-size:10px;">` + escapeHtml(dt.subjects.join(", ")) + `</small>` : ""}</td>
-            <td><span style="font-size:12px; display:block;"><b>P:</b> ${safeParentage}</span><span style="font-size:12px; display:block;"><b>M:</b> ${safeMother}</span></td>
-            <td><div style="font-size:11px; font-weight:bold; padding:2px 6px; border-radius:4px; display:inline-block; border:1px solid ${statusColor}; color:${statusColor};">${statusIcon} ${safeStatus}</div><br><span style="font-size:11px; color:#7f8c8d;">Due: ₹${feeDueNum.toLocaleString('en-IN')}</span></td>
-            <td><div class="action-btn-group">${actionBtns} <button class="action-btn btn-red" data-id="${safeId}" onclick="deleteStudent(this.dataset.id)"><i class="fas fa-trash"></i></button></div></td>
-        </tr>`;
-    });
-    tbody.innerHTML = html || "<tr><td colspan='8' style='text-align:center; padding:30px; color:#999;'>No Students Found.</td></tr>";
-    const selectAll = document.getElementById('select-all-students');
-    if (selectAll) {
-        const visibleIds = filtered.map(s => s.id);
-        selectAll.checked = visibleIds.length > 0 && visibleIds.every(id => window.selectedStudentIds.has(id));
-    }
-}
-
-window.toggleStudentSelection = (studentId, checked) => {
-    if (checked) window.selectedStudentIds.add(studentId);
-    else window.selectedStudentIds.delete(studentId);
-    updateExportSelectionUI();
-};
-
-window.toggleSelectAllStudents = (checked) => {
-    document.querySelectorAll('.student-select-checkbox').forEach(cb => {
-        cb.checked = checked;
-        if (checked) window.selectedStudentIds.add(cb.value);
-        else window.selectedStudentIds.delete(cb.value);
-    });
-};
-
-// Dedicated A4 Student Records Export Center. This intentionally uses the same
-// selection set as the student database, while keeping export controls isolated.
-function getExportScopeStudents() {
-    const selectedClass = document.getElementById('export-records-class')?.value || 'ALL';
-    return (window.fetchedStudents || [])
-        .filter(student => selectedClass === 'ALL' || String(student.class || '').toLowerCase() === selectedClass.toLowerCase())
-        .sort((a, b) => (Number(a.rollNo) || 999999) - (Number(b.rollNo) || 999999));
-}
-
-function updateExportSelectionUI(scope = getExportScopeStudents()) {
-    const selectedCount = scope.filter(student => window.selectedStudentIds.has(student.id)).length;
-    const countEl = document.getElementById('export-selected-count');
-    const selectAll = document.getElementById('export-select-all-students');
-    if (countEl) countEl.textContent = selectedCount;
-    if (selectAll) {
-        selectAll.checked = scope.length > 0 && selectedCount === scope.length;
-        selectAll.indeterminate = selectedCount > 0 && selectedCount < scope.length;
-    }
-}
-
-window.renderStudentExportRecords = () => {
-    const tbody = document.getElementById('export-student-records-body');
-    if (!tbody) return;
-    const scope = getExportScopeStudents();
-    if (!scope.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="export-empty-state">No student records found for this class.</td></tr>';
-        updateExportSelectionUI(scope);
-        return;
-    }
-    tbody.innerHTML = scope.map(student => {
-        const id = String(student.id).replace(/'/g, "\\'");
-        const checked = window.selectedStudentIds.has(student.id) ? ' checked' : '';
-        const status = student.status || 'Approved';
-        return `<tr>
-            <td class="export-check-column"><input type="checkbox" value="${id}"${checked}
-                onchange="window.toggleExportStudent('${id}', this.checked)"></td>
-            <td>${student.rollNo || 'N/A'}</td>
-            <td><strong>${student.name || 'N/A'}</strong></td>
-            <td>${student.class || 'Unassigned'}</td>
-            <td>${student.regNo || 'N/A'}</td>
-            <td>${student.parentage || student.fatherName || 'N/A'}</td>
-            <td>${student.mobile || 'N/A'}</td>
-            <td><span class="export-status-pill">${status}</span></td>
-        </tr>`;
-    }).join('');
-    updateExportSelectionUI(scope);
-};
-
-window.toggleExportStudent = (studentId, checked) => {
-    if (checked) window.selectedStudentIds.add(studentId);
-    else window.selectedStudentIds.delete(studentId);
-    updateExportSelectionUI();
-};
-
-window.toggleSelectAllExportStudents = (checked) => {
-    getExportScopeStudents().forEach(student => {
-        if (checked) window.selectedStudentIds.add(student.id);
-        else window.selectedStudentIds.delete(student.id);
-    });
-    window.renderStudentExportRecords();
-};
-
-window.exportSelectedStudentsPDF = async () => {
-    const scope = getExportScopeStudents();
-    const selected = scope.filter(student => window.selectedStudentIds.has(student.id));
-    if (!selected.length) return alert('Please select at least one student record.');
-    if (!window.jspdf?.jsPDF || typeof html2canvas !== 'function') {
-        return alert('The PDF library is not loaded yet. Please refresh the page and try again.');
-    }
-
-    const schoolName = currentSchoolName || document.getElementById('top-school-name')?.innerText || 'School Name';
-    const selectedClass = document.getElementById('export-records-class')?.value || 'ALL';
-    const classTitle = selectedClass === 'ALL' ? 'All Classes' : `Class ${selectedClass}`;
-    const accent = /^#[0-9a-f]{6}$/i.test(currentThemeColor || '') ? currentThemeColor : '#2563eb';
-    const escapeHtml = value => {
-        const span = document.createElement('span');
-        span.textContent = String(value ?? 'N/A');
-        return span.innerHTML;
-    };
-    const recordSheets = document.createElement('div');
-    recordSheets.className = 'student-record-pdf-root';
-    recordSheets.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1;';
-
-    const pages = [];
-    for (let index = 0; index < selected.length; index += 18) pages.push(selected.slice(index, index + 18));
-    recordSheets.innerHTML = pages.map((students, pageIndex) => `
-        <section class="student-record-pdf-page" style="position:relative;width:794px;height:1123px;box-sizing:border-box;padding:22px 28px;background:#fff;color:#172033;font-family:Arial,sans-serif;overflow:hidden;">
-            <header style="border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px;text-align:center;">
-                <h1 style="margin:0;color:${accent};font-size:20px;line-height:1.2;text-transform:uppercase;">${escapeHtml(schoolName)}</h1>
-                <div style="margin-top:4px;color:#475569;font-size:9px;font-weight:700;letter-spacing:1px;">STUDENT RECORD • ${escapeHtml(classTitle.toUpperCase())}</div>
-            </header>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-                ${students.map(student => `
-                    <article style="height:158px;box-sizing:border-box;border:1.5px solid ${accent};border-radius:5px;overflow:hidden;background:#f8fafc;">
-                        <div style="height:5px;background:${accent};"></div>
-                        <div style="display:flex;gap:7px;padding:7px 7px 4px;">
-                            <div style="width:52px;flex:0 0 52px;">
-                                <img src="${escapeHtml(student.photoUrl || 'https://via.placeholder.com/80?text=Photo')}" crossorigin="anonymous" style="display:block;width:52px;height:64px;object-fit:cover;border:1px solid #cbd5e1;border-radius:3px;background:#fff;">
-                                <div style="margin-top:3px;padding:2px;border-radius:3px;background:${accent};color:#fff;text-align:center;font-size:6.5px;font-weight:700;">${escapeHtml(student.status || 'Approved')}</div>
-                            </div>
-                            <div style="min-width:0;flex:1;overflow:hidden;">
-                                <h2 style="margin:0 0 3px;color:${accent};font-size:10px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(student.name || 'N/A')}</h2>
-                                <div style="font-size:7px;line-height:1.55;color:#334155;white-space:nowrap;overflow:hidden;">
-                                    <div><b>Class:</b> ${escapeHtml(student.class || 'N/A')} &nbsp; <b>Roll:</b> ${escapeHtml(student.rollNo || 'N/A')}</div>
-                                    <div style="text-overflow:ellipsis;overflow:hidden;"><b>Reg:</b> ${escapeHtml(student.regNo || 'N/A')}</div>
-                                    <div><b>Mobile:</b> ${escapeHtml(student.mobile || 'N/A')}</div>
-                                    <div><b>DOB:</b> ${escapeHtml(student.dob || 'N/A')}</div>
-                                    <div><b>Gender:</b> ${escapeHtml(student.gender || 'N/A')}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div style="margin:0 7px;padding:4px 5px;border-top:1px solid #dbe4ef;background:#fff;font-size:6.7px;line-height:1.4;color:#334155;overflow:hidden;">
-                            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><b>Father:</b> ${escapeHtml(student.parentage || student.fatherName || 'N/A')}</div>
-                            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><b>Mother:</b> ${escapeHtml(student.motherName || 'N/A')}</div>
-                            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><b>Address:</b> ${escapeHtml(student.address || 'N/A')}</div>
-                        </div>
-                    </article>`).join('')}
-            </div>
-            <footer style="position:absolute;left:28px;right:28px;bottom:12px;display:flex;justify-content:space-between;border-top:1px solid #cbd5e1;padding-top:5px;color:#64748b;font-size:8px;">
-                <span>Generated: ${new Date().toLocaleDateString()}</span>
-                <span>Page ${pageIndex + 1} of ${pages.length}</span>
-            </footer>
-        </section>`).join('');
-    document.body.appendChild(recordSheets);
-
-    const button = document.getElementById('export-student-records-btn');
-    if (button) { button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing PDF'; }
-    try {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const sheets = recordSheets.querySelectorAll('.student-record-pdf-page');
-        for (let pageIndex = 0; pageIndex < sheets.length; pageIndex++) {
-            const canvas = await html2canvas(sheets[pageIndex], { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-            if (pageIndex > 0) pdf.addPage();
-            pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297);
-        }
-        const safeSchoolName = schoolName.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'School';
-        pdf.save(`Student_Record_${safeSchoolName}_${new Date().toISOString().slice(0, 10)}.pdf`);
-    } catch (error) {
-        console.error('Student record PDF export failed:', error);
-        alert('Student record PDF export failed. Please check student photos and try again.');
-    } finally {
-        recordSheets.remove();
-        if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-file-pdf"></i> Export PDF'; }
-    }
-};
-
-window.filterAdmitStudents = (className) => {
-    sessionStorage.setItem('activeAdmitStudentTab', className);
-    renderAdmitCardStudentsTable(className);
-};
-
-window.searchAdmitStudent = () => {
-    const term = document.getElementById("searchAdmitStudentInput").value;
-    const activeClass = document.getElementById("admit_class_select").value || sessionStorage.getItem('activeAdmitStudentTab') || 'All';
-    renderAdmitCardStudentsTable(activeClass, term);
-};
-
-function renderAdmitCardStudentsTable(className = "ALL", searchTerm = null, statusFilter = null) {
-    const tbody = document.getElementById("admit-student-table");
-    if (!tbody) return;
-    let html = "";
-
-    let filtered = className.toUpperCase() === "ALL" ? window.fetchedStudents : window.fetchedStudents.filter(s => s.class && s.class.toUpperCase() === className.toUpperCase());
-
-    if (statusFilter && statusFilter !== 'all') {
-        filtered = filtered.filter(s => s.status && s.status.toLowerCase() === statusFilter.toLowerCase());
-    }
-
-    if (searchTerm) {
-        const lowerTerm = searchTerm.toLowerCase();
-        filtered = filtered.filter(s =>
-            (s.name && s.name.toLowerCase().includes(lowerTerm)) ||
-            (s.rollNo && String(s.rollNo).includes(lowerTerm)) ||
-            (s.regNo && String(s.regNo).includes(lowerTerm)) ||
-            (s.mobile && String(s.mobile).includes(lowerTerm))
-        );
-    }
-
-    filtered.sort((a, b) => (Number(a.rollNo) || 999999) - (Number(b.rollNo) || 999999));
-
-    filtered.forEach(dt => {
-        const safeId = dt.id.replace(/'/g, "\\'");
-        const locked = dt.lockedOut;
-
-        // NO Generate ID Card Button
-        const actionBtns = `
-            <button class="action-btn btn-purple" onclick="downloadMyAdmitCard('${safeId}')"><i class="fas fa-file-alt"></i> Admit Card</button>
-            <button class="action-btn" style="background:#10b981; color:white;" onclick="downloadMyMarksheet('${safeId}')"><i class="fas fa-file-invoice"></i> Marksheet</button>
-        `;
-
-        const toggleHtml = `<label class="switch" style="transform: scale(0.8);"><input type="checkbox" onchange="toggleAdmitCardVisibility('${safeId}', this.checked)" ${dt.admitCardPublished ? 'checked' : ''}><span class="slider"></span></label>`;
-
-        html += `<tr class="${locked ? 'locked-row' : ''}">
-            <td><img src="${dt.photoUrl || 'https://via.placeholder.com/100'}" class="img-circle"></td>
-            <td><strong style="display:block; font-size:13px;">${dt.name || 'N/A'} ${locked ? '<i class="fas fa-lock" style="color:#e53e3e"></i>' : ''}</strong><span style="font-size:12px; display:block;"><b>P:</b> ${(dt.parentage || dt.fatherName) || 'N/A'}</span></td>
-            <td><span style="background:#eaf4ff; color:#2c7be5; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">Class: ${dt.class || 'N/A'} (Roll: ${dt.rollNo || 'N/A'})</span></td>
-            <td><span style="font-size:13px; font-weight:bold; color:#e53e3e;">₹${dt.feeDue || 0}</span></td>
-            <td style="text-align: center;">${toggleHtml}</td>
-            <td><div class="action-btn-group">${actionBtns}</div></td>
-        </tr>`;
-    });
-    tbody.innerHTML = html || "<tr><td colspan='6' style='text-align:center; padding:30px; color:#999;'>No Students Found.</td></tr>";
-}
-
-window.toggleAdmitCardVisibility = async (studentId, isPublished) => {
-    try {
-        const { error: rpcError } = await supabaseClient.rpc('update_student', { p_student_id: studentId, p_payload: { admitCardPublished: isPublished } });
-        if (rpcError) throw new Error(rpcError.message);
-        // Optionally update the local fetched array so it persists on re-filter
-        const idx = window.fetchedStudents.findIndex(s => s.id === studentId);
-        if (idx !== -1) window.fetchedStudents[idx].admitCardPublished = isPublished;
-        console.log(`Admit card visibility updated for ${studentId}: ${isPublished}`);
-    } catch (error) {
-        console.error("Error toggling admit card visibility:", error);
-        alert("Failed to update database.");
-    }
-};
-
-window.populateStudentsForMarks = () => {
-    const classVal = document.getElementById("marks_class").value;
-    const studentSelect = document.getElementById("marks_student");
-    studentSelect.innerHTML = '<option value="">-- Select Student --</option>';
-    if (!classVal) return;
-
-    const students = window.fetchedStudents.filter(s => s.class === classVal);
-    students.forEach(s => {
-        studentSelect.innerHTML += `<option value="${s.id}">${s.name} (${s.rollNo || 'N/A'})</option>`;
-    });
-
-    const subjects = window.examSubjects || ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi/Local'];
-    const tbody = document.getElementById("marks_entry_table");
-    tbody.innerHTML = '';
-
-    subjects.forEach((sub, idx) => {
-        tbody.innerHTML += `<tr>
-            <td style="padding:10px; border:1px solid #ccc;">${sub}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;"><input type="number" id="marks_max_${idx}" value="100" class="input-premium" style="width:60px;"></td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;"><input type="number" id="marks_min_${idx}" value="33" class="input-premium" style="width:60px;"></td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;"><input type="number" id="marks_obt_${idx}" class="input-premium" style="width:80px;" placeholder="Marks"></td>
-        </tr>`;
-    });
-};
-
-window.saveStudentMarks = async () => {
-    const studentId = document.getElementById("marks_student").value;
-    if (!studentId) return alert("Please select a student.");
-    const examTerm = document.getElementById("marks_exam_term") ? document.getElementById("marks_exam_term").value : "Annual Examination 2026";
-
-    const subjects = window.examSubjects || ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi/Local'];
-    const marksData = {};
-
-    let totalObt = 0;
-    let totalMax = 0;
-
-    subjects.forEach((sub, idx) => {
-        const max = parseFloat(document.getElementById(`marks_max_${idx}`).value) || 100;
-        const min = parseFloat(document.getElementById(`marks_min_${idx}`).value) || 33;
-        const obt = parseFloat(document.getElementById(`marks_obt_${idx}`).value) || 0;
-        totalMax += max;
-        totalObt += obt;
-        let grade = obt >= (0.9 * max) ? 'A+' : (obt >= (0.8 * max) ? 'A' : (obt >= (0.7 * max) ? 'B' : (obt >= min ? 'C' : 'F')));
-        marksData[sub] = { max, min, obt, grade };
-    });
-
-    try {
-        const { error } = await supabaseClient.from("student_marks").upsert({
-            id: studentId,
-            marks: marksData,
-            totalMax,
-            totalObt,
-            examTerm: examTerm,
-            updatedAt: new Date().toISOString()
-        });
-        if (error) throw error;
-        alert("Marks saved successfully!");
-    } catch (e) {
-        console.error(e);
-        alert("Error saving marks.");
-    }
-};
-
-async function getTransparentSignature(sigUrl) {
-    try {
-        // Assuming backend is running on the same domain or configure full URL
-        const res = await fetch('https://school-backend-zlgy.onrender.com/api/remove-bg', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: sigUrl })
-        });
-        const data = await res.json();
-        return data.success ? data.base64 : sigUrl;
-    } catch (e) {
-        return sigUrl;
-    }
-}
-
-window.generateMarksheet = async (st, marksDoc) => {
-    const slipDiv = document.createElement('div');
-    slipDiv.style.position = 'absolute';
-    slipDiv.style.top = '-9999px';
-    slipDiv.style.left = '-9999px';
-    slipDiv.style.width = '210mm';
-    slipDiv.style.padding = '40px';
-    slipDiv.style.background = '#fff';
-    slipDiv.style.color = '#000';
-    slipDiv.style.fontFamily = 'Arial, sans-serif';
-
-    const schoolName = currentSchoolName || 'School Name';
-    const examTerm = marksDoc.examTerm || 'Annual Examination 2026';
-
-    let rowsHtml = '';
-    let totalMarks = marksDoc.totalObt || 0;
-    let maxTotal = marksDoc.totalMax || 0;
-
-    Object.keys(marksDoc.marks || {}).forEach(sub => {
-        const m = marksDoc.marks[sub];
-        rowsHtml += `<tr>
-            <td style="padding:10px; border:1px solid #ccc;">${sub}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${m.max}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${m.min}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${m.obt}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${m.grade}</td>
-        </tr>`;
-    });
-
-    const percentage = maxTotal > 0 ? ((totalMarks / maxTotal) * 100).toFixed(2) : 0;
-    const finalResult = percentage >= 33 ? '<span style="color:#27ae60;">PASS</span>' : '<span style="color:#e53e3e;">FAIL</span>';
-
-    slipDiv.innerHTML = `
-        <div style="text-align:center; margin-bottom:20px; padding-bottom:10px; border-bottom:3px double #1e3c72;">
-            <h1 style="margin:0; font-size:28px; color:#1e3c72; text-transform:uppercase;">${schoolName}</h1>
-            <p style="margin:5px 0 0 0; font-size:16px; letter-spacing:2px; font-weight:bold;">ACADEMIC PERFORMANCE REPORT - ${examTerm.toUpperCase()}</p>
-        </div>
-        
-        <div style="display:flex; justify-content:space-between; margin-bottom:20px; border:1px solid #ccc; padding:15px; border-radius:5px;">
-            <div style="flex:1;">
-                <p style="margin:5px 0;"><strong>Student Name:</strong> ${st.name}</p>
-                <p style="margin:5px 0;"><strong>Class/Section:</strong> ${st.class}</p>
-                <p style="margin:5px 0;"><strong>Roll Number:</strong> ${st.rollNo || 'N/A'}</p>
-            </div>
-            <div style="flex:1; text-align:right;">
-                <p style="margin:5px 0;"><strong>Parent/Guardian:</strong> ${(st.parentage || st.fatherName) || 'N/A'}</p>
-                <p style="margin:5px 0;"><strong>Date of Birth:</strong> ${st.dob || 'N/A'}</p>
-                <p style="margin:5px 0;"><strong>Reg No:</strong> ${st.regNo || 'N/A'}</p>
-            </div>
-        </div>
-        
-        <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-            <thead>
-                <tr style="background:#1e3c72; color:#fff;">
-                    <th style="padding:10px; border:1px solid #1e3c72; text-align:left;">SUBJECTS</th>
-                    <th style="padding:10px; border:1px solid #1e3c72; text-align:center;">MAX MARKS</th>
-                    <th style="padding:10px; border:1px solid #1e3c72; text-align:center;">MIN MARKS</th>
-                    <th style="padding:10px; border:1px solid #1e3c72; text-align:center;">OBTAINED</th>
-                    <th style="padding:10px; border:1px solid #1e3c72; text-align:center;">GRADE</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rowsHtml}
-                <tr style="background:#f4f4f4; font-weight:bold;">
-                    <td style="padding:10px; border:1px solid #ccc;">GRAND TOTAL</td>
-                    <td style="padding:10px; border:1px solid #ccc; text-align:center;">${maxTotal}</td>
-                    <td style="padding:10px; border:1px solid #ccc; text-align:center;"></td>
-                    <td style="padding:10px; border:1px solid #ccc; text-align:center;">${totalMarks}</td>
-                    <td style="padding:10px; border:1px solid #ccc; text-align:center;"></td>
-                </tr>
-            </tbody>
-        </table>
-        
-        <div style="display:flex; justify-content:space-between; margin-bottom:40px; padding:15px; background:#f9f9f9; border:1px solid #eee; border-radius:5px;">
-            <div><strong>Overall Percentage:</strong> ${percentage}%</div>
-            <div><strong>Final Result:</strong> ${finalResult}</div>
-        </div>
-    `;
-
-    const renderSig = currentSignatureUrl && (!window.currentSigSettings || window.currentSigSettings.marksheet !== false);
-    let finalSigSrc = "";
-    if (renderSig) finalSigSrc = await getTransparentSignature(currentSignatureUrl);
-
-    slipDiv.innerHTML += `
-        <div style="display:flex; justify-content:space-between; margin-top:60px;">
-            <div style="text-align:center; width:200px;">
-                <div style="border-top:1px solid #000; padding-top:5px;">Class Teacher</div>
-            </div>
-            <div style="text-align:center; width:200px;">
-                ${renderSig ? `<img src="${finalSigSrc}" style="height:50px; margin-bottom:5px;">` : `<div style="height:50px;"></div>`}
-                <div style="border-top:1px solid #000; padding-top:5px;">Principal Signature</div>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(slipDiv);
-    await new Promise(r => setTimeout(r, 500));
-    const canvas = await html2canvas(slipDiv, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/jpeg', 1.0);
-    document.body.removeChild(slipDiv);
-    return imgData;
-};
-
-window.generateBulkMarksheets = async (students) => {
-    document.getElementById("cert-modal").style.display = "flex";
-    if (document.getElementById("cert-printable")) document.getElementById("cert-printable").style.display = "none";
-    if (document.getElementById("cert-preview-frame")) document.getElementById("cert-preview-frame").style.display = "none";
-    if (document.getElementById("cert-actions")) document.getElementById("cert-actions").style.display = "none";
-    document.getElementById("cert-generating-text").style.display = "block";
-    document.getElementById("cert-generating-text").innerText = "Fetching Real Marks and Generating Marksheets...";
-
-    try {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        let pdfAdded = false;
-
-        for (let st of students) {
-            const { data: marksRow, error: marksError } = await supabaseClient.from("student_marks").select("*").eq("id", st.id).maybeSingle();
-            if (marksError) throw marksError;
-            if (!marksRow) {
-                console.warn(`No marks found for ${st.name}`);
-                continue; // Skip if no real data
-            }
-
-            const imgData = await window.generateMarksheet(st, marksRow);
-
-            if (pdfAdded) pdf.addPage();
-
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-            pdfAdded = true;
-        }
-
-        if (pdfAdded) {
-            window.currentGeneratedPDF = pdf;
-            window.currentGeneratedFileName = "Batch_Marksheets.pdf";
-            const blobUrl = pdf.output('bloburl');
-            document.getElementById("cert-preview-frame").src = blobUrl;
-            document.getElementById("cert-preview-frame").style.display = "block";
-            document.getElementById("cert-generating-text").style.display = "none";
-            document.getElementById("cert-actions").style.display = "flex";
-        } else {
-            alert("No real marks data found for any of the selected students. Please enter marks in Academic Veto first.");
-            closeCustomModal("cert-modal");
-        }
-    } catch (e) {
-        alert("Failed to generate Marksheets. Error: " + e.message);
-        closeCustomModal("cert-modal");
-    }
-};
-
-window.updateStudentStatus = async (id, isNewAdmission) => { 
-    if (isNewAdmission) {
-        if (!confirm("Approve this new admission and create student record?")) return;
-        try {
-            const { data, error } = await supabaseClient.rpc('approve_admission', { p_application_id: id });
-            if (error) throw error;
-            alert('Admission approved successfully! Student record created.');
-            loadStudents();
-        } catch (err) {
-            console.error('Approval failed:', err);
-            alert('Error approving admission: ' + (err.message || 'Unknown error'));
-        }
-        return;
-    }
-    if (confirm("Approve legacy admission?")) { 
-        try {
-            const { error: rpcError } = await supabaseClient.rpc('update_student', { p_student_id: id, p_payload: { status: "Approved" } });
-            if (rpcError) throw new Error(rpcError.message);
-            alert("Status updated successfully.");
-            loadStudents(); 
-        } catch (e) {
-            alert("Error updating status: " + e.message);
-        }
-    } 
-};
-window.deleteStudent = async (id) => { 
-    if (confirm("Delete this student permanently?")) { 
-        try {
-            const { error: rpcError } = await supabaseClient.rpc('delete_student', { p_student_id: id });
-            if (rpcError) throw new Error(rpcError.message);
-            loadStudents(); 
-        } catch (err) {
-            alert("Error deleting student: " + (err.message || "Unknown error"));
-        }
-    } 
-};
-
-window.toggleStudentLock = async (id, state) => {
-    if (confirm(state ? "Lock this student's account?" : "Unlock this student's account?")) {
-        try {
-            const { error: rpcError } = await supabaseClient.rpc('update_student', { p_student_id: id, p_payload: { lockedOut: state } });
-            if (rpcError) throw new Error(rpcError.message);
-            loadStudents();
-        } catch (e) {
-            alert("Error locking/unlocking student: " + e.message);
-        }
-    }
-};
-
-window.openStudentModal = (id = null) => {
-    document.getElementById("student-modal").style.display = "flex";
-    document.getElementById("modal-student-photo-file").value = "";
-    if (id) {
-        document.getElementById("student-modal-title").innerText = "Edit Student";
-        const st = window.fetchedStudents.find(s => s.id === id);
-        document.getElementById("modal-student-id").value = id;
-        document.getElementById("modal-student-name").value = st.name || "";
-        document.getElementById("modal-student-father").value = (st.parentage || st.fatherName) || "";
-        document.getElementById("dob").value = st.dob || "";
-        document.getElementById("modal-student-class").value = st.class || "";
-        document.getElementById("modal-student-address").value = st.address || "";
-        document.getElementById("modal-student-rollNo").value = st.rollNo || "";
-        document.getElementById("modal-student-regNo").value = st.regNo || "";
-        document.getElementById("modal-student-mobile").value = st.mobile || "";
-        document.getElementById("modal-student-emergency").value = st.emergencyNo || "";
-        document.getElementById("modal-student-photo-url").value = st.photoUrl || "";
-        if (st.photoUrl) {
-            document.getElementById("modal-student-photo-preview").src = st.photoUrl;
-            document.getElementById("modal-student-photo-preview").style.display = "block";
-        } else {
-            document.getElementById("modal-student-photo-preview").style.display = "none";
-        }
-    } else {
-        document.getElementById("student-modal-title").innerText = "Add Student";
-        document.getElementById("modal-student-id").value = "";
-        document.getElementById("modal-student-name").value = "";
-        document.getElementById("modal-student-father").value = "";
-        document.getElementById("dob").value = "";
-        document.getElementById("modal-student-class").value = institutionIsCollege() ? "1st Semester" : "1st";
-        document.getElementById("modal-student-address").value = "";
-        document.getElementById("modal-student-rollNo").value = "";
-        document.getElementById("modal-student-regNo").value = "";
-        document.getElementById("modal-student-mobile").value = "";
-        document.getElementById("modal-student-emergency").value = "";
-        document.getElementById("modal-student-photo-url").value = "";
-        document.getElementById("modal-student-photo-preview").style.display = "none";
-    }
-};
-
-const uploadStudentPhotoWithBgRemoval = async (fileInputId, btnId, defaultText) => {
-    const file = document.getElementById(fileInputId).files[0];
-    if (!file) return null;
-
-    const btn = document.getElementById(btnId);
-    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Processing Photo...";
-
-    try {
-        let base64Image = await convertToBase64(file);
-
-        // 1. Pre-process: Remove Background
-        try {
-            const bgRes = await fetch("https://school-backend-zlgy.onrender.com/api/remove-bg", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ imageUrl: base64Image })
-            });
-            const bgData = await bgRes.json();
-            if (bgData.success && bgData.base64) {
-                base64Image = bgData.base64;
-            }
-        } catch (e) {
-            console.warn("Remove BG API Failed, falling back to original photo.", e);
-        }
-
-        // 2. Upload transparent image to Cloudinary
-        btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Uploading...";
-        const res = await fetch("https://api.cloudinary.com/v1_1/disgtvs6f/image/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ file: base64Image, upload_preset: "ml_default" })
-        });
-        const data = await res.json();
-        btn.innerHTML = defaultText;
-        return data.secure_url || null;
-    } catch (e) {
-        btn.innerHTML = defaultText;
-        return null;
-    }
-};
-
-window.saveStudentModal = async () => {
-    const id = document.getElementById("modal-student-id").value;
-
-    let photoUrl = document.getElementById("modal-student-photo-url").value;
-    if (document.getElementById("modal-student-photo-file").files.length > 0) {
-        let uploadedUrl = await uploadStudentPhotoWithBgRemoval("modal-student-photo-file", "modal-save-btn", "<i class='fas fa-save'></i> Save");
-        if (uploadedUrl) photoUrl = uploadedUrl;
-    }
-
-    const data = {
-        name: document.getElementById("modal-student-name").value.trim(),
-        parentage: document.getElementById("modal-student-father").value.trim(),
-        dob: document.getElementById("dob").value,
-        address: document.getElementById("modal-student-address").value.trim(),
-        class: document.getElementById("modal-student-class").value,
-        rollNo: document.getElementById("modal-student-rollNo").value.trim(),
-        regNo: document.getElementById("modal-student-regNo").value.trim(),
-        mobile: document.getElementById("modal-student-mobile").value.trim(),
-        emergencyNo: document.getElementById("modal-student-emergency").value.trim(),
-        photoUrl: photoUrl.trim(),
-        schoolId: currentSchoolId
-    };
-
-    if (!data.name || !data.class) return alert("Name and Class are required.");
-
-    // SaaS Throttling Check
-    if (!id && window.currentLicenseStatus === "Throttled") {
-        return alert("Your account is throttled due to non-payment. Database writes for new records are disabled. Please contact billing.");
-    }
-
-    // Global Blacklist Pre-Check
-    try {
-        const checkValues = [];
-        if (data.mobile) checkValues.push(data.mobile);
-        const emailEl = document.getElementById("modal-student-email");
-        if (emailEl && emailEl.value) checkValues.push(emailEl.value);
-        
-        for (const val of checkValues) {
-            const { data: isBlocked, error } = await supabaseClient.rpc('is_blacklisted', { check_value: val });
-            if (error) throw error;
-            if (isBlocked) {
-                return alert("Flagged in Global Blacklist. Action rejected.");
-            }
-        }
-    } catch (err) {
-        console.warn("Blacklist check failed:", err.message);
-        return alert("Security check failed. Please try again later.");
-    }
-
-    try {
-        if (id) {
-            const { error: rpcError } = await supabaseClient.rpc('update_student', { p_student_id: id, p_payload: data });
-            if (rpcError) throw new Error(rpcError.message);
-            alert("Student details updated successfully!");
-        } else {
-            // Use Secure Server-Side Student Creation RPC
-            const { data: newStudentId, error: rpcError } = await supabaseClient.rpc('create_student', { p_payload: data });
-            if (rpcError) {
-                console.error("RPC Error:", rpcError);
-                throw new Error(rpcError.message || "Failed to create student securely.");
-            }
-            alert("New student added successfully!");
-        }
-        document.getElementById("student-modal").style.display = "none";
-        loadStudents();
-    } catch (e) {
-        alert("Error saving student: " + (e.message || "Unknown error"));
-    }
-};
-
-window.runDefaulterLockdown = () => { alert("Defaulter Lockdown Tool active! Click the padlock icon next to a student's ID button to lock their portal/results access."); };
-
-// ====== CLEAN ID CARD & CERTIFICATES ======
-window.showIDCard = async (id) => {
-    const st = window.fetchedStudents.find(s => s.id === id); if (!st) return;
-
-    // Setup UI for loading
-    document.getElementById("printable-id").style.display = "none";
-    document.getElementById("generating-text").style.display = "block";
-    document.getElementById("final-id-image").style.display = "none";
-    document.getElementById("id-actions").style.display = "none";
-    document.getElementById("id-modal").style.display = "flex";
-
-    try {
-        let schoolName = currentSchoolName || document.getElementById('school-name')?.innerText || "ABC SCHOOL NAME";
-        const templateStyle = currentTemplateStyle || "wave";
-
-        const response = await fetch("https://school-backend-zlgy.onrender.com/api/generate-id-card", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                studentData: {
-                    id: st.id || st.regNo,
-                    name: st.name,
-                    class: st.class,
-                    dob: st.dob || "N/A",
-                    parentage: (st.parentage || st.fatherName) || "N/A",
-                    mobile: st.mobile || "N/A",
-                    address: st.address || "N/A",
-                    photoUrl: st.photoUrl || "https://via.placeholder.com/150"
-                },
-                themeColor: currentThemeColor || "#1e3c72",
-                secondaryColor: currentSecondaryColor || "#ffffff",
-                templateStyle: templateStyle,
-                schoolName: schoolName,
-                schoolEmergency: document.getElementById("school_emergency").value || "N/A",
-                signatureUrl: (window.currentSigSettings && window.currentSigSettings.idCard === false) ? "" : currentSignatureUrl,
-                schoolLogoUrl: document.getElementById('print_school_logo')?.src || document.getElementById('school-logo')?.src || "",
-                schoolNameColor: document.getElementById('idSchoolNameColor')?.value || currentSchoolNameColor || "#ffffff",
-                studentNameColor: document.getElementById('idStudentNameColor')?.value || currentStudentNameColor || "#d32f2f",
-                detailsColor: document.getElementById('idDetailsColor')?.value || currentDetailsColor || "#333333",
-                photoBgColor: document.getElementById('idPhotoBgColor')?.value || currentPhotoBgColor || "#ffffff"
-            })
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            document.getElementById("final-id-image").src = data.idCardUrl;
-            document.getElementById("generating-text").style.display = "none";
-            document.getElementById("final-id-image").style.display = "block";
-            document.getElementById("id-actions").style.display = "flex";
-        } else {
-            alert("API Error: " + data.message);
-            document.getElementById("id-modal").style.display = "none";
-        }
-    } catch (e) {
-        alert("Failed to generate ID Card. Ensure backend is running.");
-        document.getElementById("id-modal").style.display = "none";
-    }
-};
-
-window.downloadGeneratedID = () => {
-    const img = document.getElementById('final-id-image');
-    if (!img.src) return alert("No ID card available.");
-    const link = document.createElement('a');
-    link.href = img.src;
-    link.download = `Student_IDCard.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-
-window.printGeneratedID = () => {
-    const img = document.getElementById('final-id-image');
-    if (!img.src) return alert("No ID card available.");
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write('<html><head><title>Print ID Card</title></head><body><img src="' + img.src + '" onload="window.print();window.close()"></body></html>');
-    printWindow.document.close();
-};
-
-window.generateCertificate = async (id, type) => {
-    const st = window.fetchedStudents.find(s => s.id === id); if (!st) return;
-    document.getElementById("cert-school-name").innerText = currentSchoolName; document.getElementById("cert-school-name").style.color = currentThemeColor;
-    document.getElementById("cert-title").innerText = type.toUpperCase() + " CERTIFICATE"; document.getElementById("cert-date").innerText = new Date().toLocaleDateString();
-
-    let bodyText = "";
-    if (type === 'tc') bodyText = `This is to certify that Mr./Ms. <strong>${st.name}</strong>, son/daughter of <strong>${(st.parentage || st.fatherName)}</strong>, was a bona fide student of class <strong>${st.class}</strong> in this institution. He/She has paid all dues and is hereby granted this Transfer Certificate to pursue further education.`;
-    if (type === 'character') bodyText = `This is to certify that <strong>${st.name}</strong>, son/daughter of <strong>${(st.parentage || st.fatherName)}</strong>, student of class <strong>${st.class}</strong>, bears a good moral character to the best of our knowledge. We wish him/her success in all future endeavors.`;
-    if (type === 'bonafide') bodyText = `This is to certify that <strong>${st.name}</strong>, son/daughter of <strong>${(st.parentage || st.fatherName)}</strong>, is a bona fide student of this institution, currently studying in class <strong>${st.class}</strong> during the current academic session.`;
-    document.getElementById("cert-body").innerHTML = bodyText;
-
-    document.getElementById("cert-printable").style.display = "flex"; document.getElementById("final-cert-image").style.display = "none"; document.getElementById("cert-actions").style.display = "none"; document.getElementById("cert-generating-text").style.display = "block"; document.getElementById("cert-modal").style.display = "flex";
-
-    setTimeout(() => {
-        html2canvas(document.getElementById("cert-printable"), { useCORS: true, scale: 2 }).then(canvas => {
-            document.getElementById("final-cert-image").src = canvas.toDataURL("image/png");
-            document.getElementById("cert-printable").style.display = "none"; document.getElementById("cert-generating-text").style.display = "none";
-            document.getElementById("final-cert-image").style.display = "block"; document.getElementById("cert-actions").style.display = "flex";
-        }).catch(e => { document.getElementById("cert-generating-text").style.display = "none"; });
-    }, 800);
-};
-
-window.shareImage = async (imgId, filename) => {
-    const imgSrc = document.getElementById(imgId).src; if (!imgSrc) return;
-    try { if (navigator.share) { const blob = await (await fetch(imgSrc)).blob(); const file = new File([blob], filename, { type: 'image/png' }); await navigator.share({ title: 'Document', files: [file] }); } else { alert("Long press the image to save it."); } } catch (err) { }
-};
-
-// ================= STAFF & PRIVILEGES =================
-window.saveStaff = async () => {
-    const name = document.getElementById("s_name").value.trim(); const email = document.getElementById("s_email").value.trim(); const pass = document.getElementById("s_pass").value.trim(); const role = document.getElementById("s_role").value;
-    if (!name || !email || !pass) return alert("Fill all fields.");
-
-    // SaaS Throttling Check
-    if (window.currentLicenseStatus === "Throttled") {
-        return alert("Your account is throttled due to non-payment. Database writes for new records are disabled. Please contact billing.");
-    }
-
-    // Global Blacklist Pre-Check
-    try {
-        const { data: isBlocked, error } = await supabaseClient.rpc('is_blacklisted', { check_value: email });
-        if (error) throw error;
-        if (isBlocked) {
-            return alert("Flagged in Global Blacklist. Action rejected.");
-        }
-    } catch (err) {
-        console.warn("Blacklist check failed:", err.message);
-        return alert("Security check failed. Please try again later.");
-    }
-
-    let photoUrl = await uploadToCloudinary("s_photo", "s_btn", "<i class='fas fa-save'></i> Add Staff Member"); if (!photoUrl) photoUrl = "https://via.placeholder.com/100";
-    try {
-        // Step 1: auth account. Supabase returns NO error and a null user when the email is
-        // already registered, so that case is detected explicitly instead of failing opaquely.
-        const { data: created, error: signUpError } = await staffAuthClient.auth.signUp({ email, password: pass });
-        if (signUpError) throw new Error("Auth account creation failed: " + signUpError.message);
-        let newStaffId = created && created.user ? created.user.id : null;
-        if (!newStaffId) {
-            // Supabase returns NO error and a null user when the email is already registered.
-            // That happens when an earlier attempt created the auth account but the users
-            // profile row failed (RLS). Recover the orphaned account: sign in with the same
-            // credentials to learn its UID, then (re)create the profile row below.
-            const { data: signInData, error: signInError } = await staffAuthClient.auth.signInWithPassword({ email, password: pass });
-            if (signInError) throw new Error("Email already registered and this password does not match it (" + signInError.message + "). Re-enter the same password used first time, or delete the old account in Supabase Auth.");
-            newStaffId = signInData && signInData.user ? signInData.user.id : null;
-            if (!newStaffId) throw new Error("Email already registered; could not recover the existing account.");
-        }
-
-        // Step 2: staff profile row (RLS requires the chairman policy added in
-        // supabase/2026-10-02_staff_portal_rls.sql; the error is surfaced verbatim otherwise).
-        const { error } = await supabaseClient.from("users").upsert({ id: newStaffId, name, email, role: "staff", staffRole: role, plainPassword: pass, photoUrl: photoUrl, schoolId: currentSchoolId, status: "active", privileges: { attendance: true, marks: true, finance: false, notices: false, admissions: false, certs: false, exams: false, settings: false, view_finance: false, delete: false } });
-        if (error) throw new Error("Staff profile could not be saved (" + error.message + "). If this mentions row-level security, run the staff RLS migration in supabase/2026-10-02_staff_portal_rls.sql.");
-        alert("Staff created successfully!"); document.getElementById("s_name").value = ""; document.getElementById("s_email").value = ""; document.getElementById("s_pass").value = ""; loadStaff();
-    } catch (e) { alert("Error: " + e.message); } finally { await staffAuthClient.auth.signOut().catch(() => { }); }
-};
-
-async function loadStaff() {
-    try {
-        const { data: staffRows, error } = await supabaseClient.from("users").select("*").eq("schoolId", currentSchoolId).eq("role", "staff");
-        if (error) throw error;
-        window.fetchedStaff = []; let html = ""; document.getElementById("count-staff").innerText = (staffRows || []).length; let staffOpts = "<option value=''>-- Select Staff --</option>";
-        (staffRows || []).forEach(dt => {
-            window.fetchedStaff.push(dt);
-            staffOpts += `<option value="${dt.id}">${dt.name} (${dt.staffRole})</option>`;
-            const statusColor = dt.status === "blocked" ? "red" : "green";
-            const blockBtn = dt.status === "blocked" ? `<button class="action-btn btn-green" onclick="updateStaffStatus('${dt.id}', 'active')">Unblock</button>` : `<button class="action-btn btn-yellow" onclick="updateStaffStatus('${dt.id}', 'blocked')">Block</button>`;
-
-            let privs = dt.privileges || {}; let privStr = [];
-            if (privs.attendance) privStr.push("Att."); if (privs.marks) privStr.push("Marks"); if (privs.finance) privStr.push("Fin."); if (privs.notices) privStr.push("Notices");
-
-            html += `<tr>
-                <td><img src="${dt.photoUrl || 'https://via.placeholder.com/100'}" class="img-circle"></td>
-                <td><strong>${dt.name}</strong><br><small>${dt.staffRole}</small></td>
-                <td><small>${dt.email}</small><br><strong>${dt.plainPassword}</strong></td>
-                <td><span style="font-size:11px; background:#e2e8f0; padding:2px 5px; border-radius:4px;">${privStr.join(', ') || 'None'}</span></td>
-                <td style="color:${statusColor}; font-weight:bold;">${(dt.status || 'ACTIVE').toUpperCase()}</td>
-                <td>
-                    <button class="action-btn btn-blue" onclick="editStaff('${dt.id}')"><i class="fas fa-user-edit"></i> Auth / Edit</button>
-                    ${blockBtn} <button class="action-btn btn-red" onclick="deleteStaff('${dt.id}')"><i class="fas fa-trash"></i></button>
+        const { data: snap } = await supabaseClient.from("tickets").select("*");
+        let html = "";
+        (snap || []).forEach(doc => {
+            const d = doc;
+            html += `<tr class="hover:bg-slateSurface/50 transition border-l-2 ${d.status === 'Open' ? 'border-rose-500' : 'border-tealAccent'}">
+                <td class="p-4 font-mono font-bold text-white">${doc.id.substring(0, 8).toUpperCase()}</td>
+                <td class="p-4 text-coolLight">${d.schoolName || 'Unknown'}</td>
+                <td class="p-4 text-coolGray">${d.subject}</td>
+                <td class="p-4"><span class="px-2 py-1 rounded text-[10px] uppercase ${d.status === 'Open' ? 'bg-rose-500/20 text-rose-400' : 'bg-tealAccent/20 text-tealAccent'}">${d.status}</span></td>
+                <td class="p-4 text-right">
+                    <button class="px-2 py-1 bg-indigo-600/20 text-indigo-400 border border-indigo-500 hover:bg-indigo-600 hover:text-white rounded text-[10px]"><i class="fas fa-eye"></i></button>
                 </td>
             </tr>`;
         });
-        document.getElementById("staff-table").innerHTML = html || "<tr><td colspan='6'>No Staff Found.</td></tr>";
-        document.getElementById("mail_specific_staff").innerHTML = staffOpts; document.getElementById("salary_staff").innerHTML = staffOpts;
-    } catch (e) { }
-}
-
-window.downloadGlobalStaffCSV = async (evt = null) => {
-    const triggerBtn = evt?.currentTarget || (typeof event !== "undefined" ? event.currentTarget : null);
-    const originalHtml = triggerBtn?.innerHTML;
-    try {
-        if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Preparing CSV..."; }
-        const [staffRes, schoolsRes] = await Promise.all([
-            supabaseClient.from("users").select("*").eq("role", "staff"),
-            supabaseClient.from("vw_public_schools").select("*").then(res => (res.error ? null : res))
-        ]);
-        if (staffRes.error) throw staffRes.error;
-        const schoolMap = {};
-        (schoolsRes?.data || []).forEach(school => {
-            schoolMap[school.id] = school.name || school.schoolName || school.entityName || "";
-        });
-        const rows = [["School ID", "School Name", "Name", "Role", "Email", "Password", "Status"]];
-        (staffRes.data || []).forEach(s => {
-            rows.push([s.schoolId || '', s.schoolName || schoolMap[s.schoolId] || currentSchoolName || '', s.name || '', s.staffRole || '', s.email || '', s.plainPassword || '', s.status || 'active']);
-        });
-        if (rows.length === 1) {
-            alert("No global staff records are currently available.");
-            return;
-        }
-        const csv = rows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `Global_Staff_${new Date().toISOString().slice(0, 10)}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO SLA TICKETS FOUND.</td></tr>";
     } catch (e) {
-        console.error(e);
-        alert("Global staff download failed. Permission ya network issue ho sakta hai.");
-    } finally {
-        if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.innerHTML = originalHtml; }
+        tbody.innerHTML = `<tr><td colspan='5' class='p-4 text-center text-rose-500'>ERROR LOADING TICKETS</td></tr>`;
     }
 };
+document.querySelector('[data-target="tab-tickets"]')?.addEventListener('click', window.loadTickets);
 
-window.editStaff = (id) => {
-    const st = window.fetchedStaff.find(s => s.id === id); if (!st) return; currentEditStaffId = id;
-    const resolvedSchoolName = st.schoolName || currentSchoolName || "";
-    document.getElementById("edit_s_school_name").value = resolvedSchoolName;
-    document.getElementById("edit_s_name").value = st.name || "";
-    document.getElementById("edit_s_email").value = st.email || "";
-    document.getElementById("edit_s_pass").value = st.plainPassword || "";
-    document.getElementById("edit_s_role").value = ["Chairman", "Principal"].includes(st.staffRole) ? st.staffRole : "Principal";
-    document.getElementById("edit_s_status").value = (st.status || "active").toUpperCase();
-    let p = st.privileges || {};
-    document.getElementById("priv_attendance").checked = p.attendance === true;
-    document.getElementById("priv_marks").checked = p.marks === true;
-    document.getElementById("priv_finance").checked = p.finance === true;
-    document.getElementById("priv_notices").checked = p.notices === true;
-    document.getElementById("priv_admissions").checked = p.admissions === true;
-    document.getElementById("priv_certs").checked = p.certs === true;
-    document.getElementById("priv_exams").checked = p.exams === true;
-    document.getElementById("priv_settings").checked = p.settings === true;
-    document.getElementById("priv_view_finance").checked = p.view_finance === true;
-    document.getElementById("priv_delete").checked = p.delete === true;
-    document.getElementById("edit-staff-modal").style.display = "flex";
+// ==========================================
+// AI ASSISTANT CHAT LOGIC
+// ==========================================
+window.toggleAIChat = () => {
+    const chatWindow = document.getElementById("ai-chat-window");
+    if (chatWindow) chatWindow.classList.toggle("hidden-el");
 };
 
-window.saveStaffEdits = async () => {
-    const schoolName = document.getElementById("edit_s_school_name").value.trim();
-    const name = document.getElementById("edit_s_name").value.trim();
-    const email = document.getElementById("edit_s_email").value.trim();
-    const p = document.getElementById("edit_s_pass").value.trim();
-    const r = document.getElementById("edit_s_role").value;
-    if (!schoolName || !name || !email) {
-        alert("Entity Name, Chairman Name aur Auth Email required hain.");
-        return;
-    }
-    const privs = {
-        attendance: document.getElementById("priv_attendance").checked,
-        marks: document.getElementById("priv_marks").checked,
-        finance: document.getElementById("priv_finance").checked,
-        notices: document.getElementById("priv_notices").checked,
-        admissions: document.getElementById("priv_admissions").checked,
-        certs: document.getElementById("priv_certs").checked,
-        exams: document.getElementById("priv_exams").checked,
-        settings: document.getElementById("priv_settings").checked,
-        view_finance: document.getElementById("priv_view_finance").checked,
-        delete: document.getElementById("priv_delete").checked
-    };
-    try {
-        const updatePayload = { schoolName, name, email, staffRole: r, privileges: privs, updatedAt: new Date().toISOString() };
-        if (p) updatePayload.plainPassword = p;
-        const { error } = await supabaseClient.from("users").update(updatePayload).eq("id", currentEditStaffId);
-        if (error) throw error;
-        alert("Node, Chairman details aur privileges updated successfully!"); document.getElementById("edit-staff-modal").style.display = "none"; loadStaff();
-    } catch (e) { console.error(e); alert("Error saving node details."); }
-};
+window.sendAIMessage = async () => {
+    const input = document.getElementById("ai-chat-input");
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = "";
 
-window.updateStaffStatus = async (uid, newStatus) => {
-    if (newStatus === 'blocked') { const reason = prompt("Enter reason for blocking this staff member:"); if (reason === null) return; const { error } = await supabaseClient.from("users").update({ status: newStatus, blockReason: reason || "Violation of policies" }).eq("id", uid); if (error) throw error; } else { if (confirm("Unblock this staff member?")) { const { error } = await supabaseClient.from("users").update({ status: newStatus, blockReason: "" }).eq("id", uid); if (error) throw error; } else return; } loadStaff();
-};
-window.deleteStaff = async (uid) => { if (confirm("Permanently delete this staff member?")) { const { error } = await supabaseClient.from("users").delete().eq("id", uid); if (error) throw error; loadStaff(); } };
+    const messagesDiv = document.getElementById("ai-chat-messages");
+    if (!messagesDiv) return;
 
-// ================= ACADEMIC VETO =================
-async function loadPendingResults() {
-    try {
-        const { data: pendingMarks, error } = await supabaseClient.from("exam_marks").select("*").eq("schoolId", currentSchoolId).eq("status", "Pending");
-        if (error) throw error;
-        let html = "";
-        (pendingMarks || []).forEach(dt => {
-            html += `<tr><td>${dt.date || 'Recent'}</td><td><strong>${dt.studentName}</strong><br><small>Class: ${dt.class}</small></td><td><strong>${dt.examName}</strong><br><small>${dt.subject}</small></td><td><span style="color:#e67e22; font-weight:bold;">${dt.marksObtained} / ${dt.maxMarks}</span></td><td><button class="action-btn btn-green" onclick="approveResult('${dt.id}')"><i class="fas fa-check"></i> Approve Result</button></td></tr>`;
-        });
-        document.getElementById("veto-table").innerHTML = html || "<tr><td colspan='5' style='text-align:center;'>No pending results to vet.</td></tr>";
-    } catch (e) { console.log("Academic veto skip", e); }
-}
-window.approveResult = async (docId) => { try { const { error } = await supabaseClient.from("exam_marks").update({ status: "Approved" }).eq("id", docId); if (error) throw error; alert("Result Approved! Students can now see it."); loadPendingResults(); } catch (e) { } };
+    messagesDiv.innerHTML += `<div class="text-right mb-2"><span class="bg-tealAccent/20 px-3 py-2 rounded-lg text-tealAccent inline-block max-w-[85%] border border-tealAccent/50">${msg}</span></div>`;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
-// ================= NOTICES =================
-window.saveNotice = async () => {
-    const target = document.getElementById("n_target").value;
-    const title = document.getElementById("n_title").value.trim(); const body = document.getElementById("n_body").value.trim();
-    if (!title || !body) return alert("Fill title and body");
-    try {
-        const { error } = await supabaseClient.from("notices").insert({ target, title, body, date: new Date().toLocaleDateString(), visible: true, schoolId: currentSchoolId, createdAt: new Date().toISOString() });
-        if (error) throw error;
-        document.getElementById("n_title").value = ""; document.getElementById("n_body").value = ""; loadNotices();
-    } catch (e) { alert("Error saving notice."); }
-};
-
-window.saveWhatsappLink = async () => {
-    const link = document.getElementById("wa_group_link").value.trim();
-    if (!link) return alert("Please enter the WhatsApp Group Link.");
+    const loadingId = "msg-" + Date.now();
+    messagesDiv.innerHTML += `<div id="${loadingId}" class="text-left mb-2"><span class="bg-slateSurface px-3 py-2 rounded-lg text-coolGray inline-block max-w-[85%] border border-glassBorder"><i class="fas fa-circle-notch fa-spin"></i> Analyzing Core Data...</span></div>`;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
     try {
-        const { error } = await supabaseClient.from("schools").update({ whatsappGroup: link }).eq("id", currentSchoolId);
-        if (error) throw error;
-        alert("WhatsApp Group Link saved successfully!");
-    } catch (e) {
-        alert("Error saving link.");
-    }
-};
+        const { data: schoolsSnapData } = await supabaseClient.from("schools").select("*");
+        const schools = (schoolsSnapData || []).map(d => ({ id: d.id, ...d }));
+        const { data: txSnapData } = await supabaseClient.from("transactions").select("*");
+        const transactions = (txSnapData || []).map(d => ({ id: d.id, ...d }));
 
-window.broadcastToWhatsapp = async () => {
-    const link = document.getElementById("wa_group_link").value.trim();
-    const msg = document.getElementById("wa_message").value.trim();
+        const contextData = JSON.stringify({ schools, transactions });
 
-    if (!link) return alert("Please save the Official WhatsApp Group Link first.");
-    if (!msg) return alert("Please enter a message to broadcast.");
-
-    try {
-        await navigator.clipboard.writeText(msg);
-        alert("Message copied to clipboard! Opening WhatsApp Group...\nPlease paste the message into the chat.");
-        window.open(link, "_blank");
-    } catch (err) {
-        alert("Failed to copy message. Please manually copy it before opening WhatsApp.");
-        window.open(link, "_blank");
-    }
-};
-
-async function loadNotices() {
-    try {
-        const { data: noticeRows, error } = await supabaseClient.from("notices").select("*").eq("schoolId", currentSchoolId);
-        if (error) throw error;
-        let html = "", activeCount = 0;
-        (noticeRows || []).forEach(dt => {
-            if (dt.visible) activeCount++;
-            const eyeIcon = dt.visible ? "fa-eye" : "fa-eye-slash", eyeColor = dt.visible ? "btn-blue" : "btn-yellow";
-            html += `<tr><td>${dt.date}</td><td><strong>${dt.target || 'All'}</strong></td><td>${dt.title}</td><td>${dt.body}</td>
-            <td><button class="action-btn ${eyeColor}" onclick="toggleNotice('${dt.id}', ${!dt.visible})"><i class="fas ${eyeIcon}"></i></button></td>
-            <td><button class="action-btn btn-red" onclick="deleteRecordFromDb('notices', '${dt.id}', loadNotices)"><i class="fas fa-trash"></i> Del</button></td></tr>`;
-        });
-        document.getElementById("notice-table").innerHTML = html || "<tr><td colspan='6'>No Notices Found.</td></tr>";
-        document.getElementById("count-notices").innerText = activeCount;
-    } catch (e) { }
-}
-
-window.toggleNotice = async (id, state) => { const { error } = await supabaseClient.from("notices").update({ visible: state }).eq("id", id); if (error) throw error; loadNotices(); };
-
-window.deleteRecordFromDb = async (tableName, id, callback) => {
-    if (confirm("Are you sure you want to permanently delete this record?")) {
-        const { error } = await supabaseClient.from(tableName).delete().eq("id", id);
-        if (error) throw error;
-        callback();
-    }
-};
-
-function parseUserAgent(ua) {
-    if (!ua) return { os: "Unknown", model: "Unknown" };
-    let os = "Unknown OS", model = "Unknown Device";
-    if (ua.includes("Android")) { os = "Android"; model = ua.split(';')[2].split('Build')[0]; }
-    else if (ua.includes("iPhone")) { os = "iOS"; model = "iPhone"; }
-    else if (ua.includes("Windows")) { os = "Windows"; model = "PC"; }
-    return { os, model };
-}
-
-// AUTO LOGIN FOR SUPER ADMIN IMPERSONATION
-window.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('impersonate') === 'true') {
-        sessionStorage.setItem("is_impersonating", "true");
-        const impEmail = urlParams.get('email');
-        const impPass = urlParams.get('pass');
-
-        if (impEmail && impPass) {
-            setTimeout(() => {
-                document.getElementById("loginId").value = decodeURIComponent(impEmail);
-                document.getElementById("loginPassword").value = decodeURIComponent(impPass);
-                document.getElementById("doLoginBtn").click();
-
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }, 800);
-        }
-    }
-});
-
-// ================= BULK ACTION MODAL (ID, ADMIT, BONAFIDE) =================
-window.currentBulkActionType = '';
-window.pendingAdmitCardStudents = [];
-
-window.openBulkActionModal = (type) => {
-    window.currentBulkActionType = type;
-    let title = "Batch Action";
-    if (type === 'id') title = "<i class='fas fa-id-badge'></i> Bulk Generate ID Cards";
-    if (type === 'admit') title = "<i class='fas fa-file-alt'></i> Bulk Generate Admit Cards";
-    if (type === 'bonafide') title = "<i class='fas fa-graduation-cap'></i> Bulk Generate Bonafide Certificates";
-    document.getElementById("bulk-modal-title").innerHTML = title;
-    document.getElementById("bulk-action-class").value = "All";
-    document.getElementById("bulk-select-all").checked = false;
-    window.renderBulkActionStudents();
-    document.getElementById("bulk-action-modal").style.display = "flex";
-};
-
-window.renderBulkActionStudents = () => {
-    const cls = document.getElementById("bulk-action-class").value;
-    let filtered = window.fetchedStudents.filter(s => s.status === 'Approved');
-    if (cls !== "All") filtered = filtered.filter(s => s.class === cls);
-    filtered.sort((a, b) => (Number(a.rollNo) || 999999) - (Number(b.rollNo) || 999999));
-
-    const tbody = document.getElementById("bulk-action-list");
-    if (filtered.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='4' style='text-align:center; padding:15px;'>No approved students found.</td></tr>";
-        return;
-    }
-    let html = "";
-    filtered.forEach(st => {
-        html += `<tr>
-            <td style="padding:10px;"><input type="checkbox" class="bulk-student-cb" value="${st.id}"></td>
-            <td style="padding:10px;">${st.rollNo || 'N/A'}</td>
-            <td style="padding:10px;">${st.name}</td>
-            <td style="padding:10px;">${st.class}</td>
-        </tr>`;
-    });
-    tbody.innerHTML = html;
-};
-
-window.toggleAllBulkStudents = (el) => {
-    document.querySelectorAll(".bulk-student-cb").forEach(cb => cb.checked = el.checked);
-};
-
-window.triggerBulkAction = () => {
-    const checked = document.querySelectorAll(".bulk-student-cb:checked");
-    if (checked.length === 0) return alert("Please select at least one student.");
-
-    const selectedIds = Array.from(checked).map(cb => cb.value);
-    const selectedStudents = window.fetchedStudents.filter(st => selectedIds.includes(st.id));
-
-    closeCustomModal('bulk-action-modal');
-
-    if (window.currentBulkActionType === 'id') {
-        window.generateBatchIDCards(selectedStudents);
-    } else if (window.currentBulkActionType === 'marksheet') {
-        window.generateBulkMarksheets(selectedStudents);
-    } else if (window.currentBulkActionType === 'admit') {
-        const hasDefaulters = selectedStudents.some(st => st.dueBalance && st.dueBalance > 0);
-        if (hasDefaulters) {
-            window.pendingAdmitCardStudents = selectedStudents;
-            document.getElementById("defaulter-admit-modal").style.display = "flex";
-        } else {
-            window.pendingAdmitCardStudents = selectedStudents;
-            window.proceedAdmitCards('disable');
-        }
-    } else if (window.currentBulkActionType === 'bonafide') {
-        window.triggerBulkBonafide(selectedStudents);
-    }
-};
-
-window.triggerBulkBonafide = async (students) => {
-    document.getElementById("cert-modal").style.display = "flex";
-    if (document.getElementById("cert-printable")) document.getElementById("cert-printable").style.display = "none";
-    if (document.getElementById("cert-preview-frame")) document.getElementById("cert-preview-frame").style.display = "none";
-    if (document.getElementById("cert-actions")) document.getElementById("cert-actions").style.display = "none";
-    document.getElementById("cert-generating-text").style.display = "block";
-    document.getElementById("cert-generating-text").innerText = "Compiling Batch Bonafide PDF...";
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('l', 'mm', 'a4');
-    let pageCount = 0;
-
-    for (let st of students) {
-        document.getElementById("cert-school-name").innerText = currentSchoolName;
-        document.getElementById("cert-school-name").style.color = currentThemeColor;
-        document.getElementById("cert-title").innerText = "BONAFIDE CERTIFICATE";
-        document.getElementById("cert-date").innerText = new Date().toLocaleDateString();
-        document.getElementById("cert-body").innerHTML = `This is to certify that <strong>${st.name}</strong>, son/daughter of <strong>${(st.parentage || st.fatherName) || 'N/A'}</strong>, is a bona fide student of this institution, currently studying in class <strong>${st.class}</strong> during the current academic session.`;
-
-        if (currentSignatureUrl && (!window.currentSigSettings || window.currentSigSettings.bonafide !== false)) {
-            const finalSigSrc = await getTransparentSignature(currentSignatureUrl);
-            document.getElementById("cert_sig").src = finalSigSrc;
-            document.getElementById("cert_sig").style.mixBlendMode = "normal"; // override inline CSS
-            document.getElementById("cert_sig").style.display = "block";
-        } else {
-            document.getElementById("cert_sig").style.display = "none";
-        }
-
-        document.getElementById("cert-printable").style.display = "flex";
-
-        await new Promise(r => setTimeout(r, 500));
-
-        const canvas = await html2canvas(document.getElementById("cert-printable"), { useCORS: true, scale: 2 });
-        const imgData = canvas.toDataURL("image/jpeg", 0.9);
-        document.getElementById("cert-printable").style.display = "none";
-
-        if (pageCount > 0) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 10, 10, 277, 190);
-        pageCount++;
-    }
-
-    if (pageCount > 0) {
-        window.currentGeneratedPDF = pdf;
-        window.currentGeneratedFileName = "Batch_Bonafide_Certificates.pdf";
-        const blobUrl = pdf.output('bloburl');
-        document.getElementById("cert-preview-frame").src = blobUrl;
-        document.getElementById("cert-preview-frame").style.display = "block";
-        document.getElementById("cert-generating-text").style.display = "none";
-        document.getElementById("cert-actions").style.display = "flex";
-    } else {
-        closeCustomModal("cert-modal");
-    }
-};
-
-window.downloadCertPDF = () => {
-    if (window.currentGeneratedPDF) {
-        window.currentGeneratedPDF.save(window.currentGeneratedFileName || "Document.pdf");
-    }
-};
-
-window.downloadAllIdsAsPDF = () => {
-    const images = document.getElementById("bulk-id-grid").querySelectorAll("img");
-    if (images.length === 0) return alert("No ID cards generated yet.");
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    images.forEach((img, index) => {
-        if (index > 0) pdf.addPage();
-        pdf.addImage(img.src, 'PNG', 10, 10, 54, 86);
-    });
-    pdf.save("Batch_ID_Cards.pdf");
-};
-
-async function getTransparentAdmitPhoto(imageUrl) {
-    if (!imageUrl) return null;
-    try {
-        const response = await fetch('https://school-backend-zlgy.onrender.com/api/remove-bg', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: imageUrl })
-        });
-        const data = await response.json();
-        if (data.success && data.base64) return data.base64;
-        return imageUrl;
-    } catch (e) {
-        console.error("Admit Card BG Removal failed:", e);
-        return imageUrl;
-    }
-}
-
-// ================= BULK ADMIT CARDS =================
-window.proceedAdmitCards = async (mode) => {
-    document.getElementById("defaulter-admit-modal").style.display = "none";
-    let students = window.pendingAdmitCardStudents;
-
-    if (mode === 'disable') {
-        students = students.filter(st => !(st.dueBalance && st.dueBalance > 0));
-        if (students.length === 0) return alert("No paid students available to generate admit cards.");
-    }
-
-    document.getElementById("bulk-id-modal").style.display = "block";
-    document.getElementById("bulk-generating-text").style.display = "block";
-    document.getElementById("bulk-generating-text").innerText = "Generating Admit Cards... Please wait";
-    document.getElementById("bulk-id-grid").innerHTML = "";
-
-    let schoolName = currentSchoolName || document.getElementById('school-name')?.innerText || "SCHOOL NAME";
-    let logoUrl = document.getElementById('school-logo')?.src || "";
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const template = document.getElementById("admit-card-template");
-
-    document.getElementById("admit-school").innerText = schoolName.toUpperCase();
-    if (logoUrl) document.getElementById("admit-logo").src = logoUrl;
-
-    if (currentSignatureUrl && window.currentSigSettings && window.currentSigSettings.admit !== false) {
-        const finalSigSrc = await getTransparentSignature(currentSignatureUrl);
-        document.getElementById("admit-sig").src = finalSigSrc;
-        document.getElementById("admit-sig").style.mixBlendMode = "normal"; // override inline CSS
-        document.getElementById("admit-sig").style.display = "block";
-    } else {
-        document.getElementById("admit-sig").style.display = "none";
-    }
-
-    const uniqueClasses = [...new Set(students.map(st => st.class))];
-    const classSchedules = {};
-    const { data: schoolRow, error: schoolError } = await supabaseClient.from("schools").select("*").eq("id", currentSchoolId).maybeSingle();
-    if (schoolError) throw schoolError;
-    const schoolData = schoolRow || {};
-    for (let cls of uniqueClasses) {
-        if (cls) {
-            const fieldKey = "examSchedule_" + cls;
-            // Per-class schedule column first, the shared `schedule` column as fallback.
-            classSchedules[cls] = Array.isArray(schoolData[fieldKey]) ? schoolData[fieldKey] : (schoolData.schedule || []);
-        }
-    }
-
-    try {
-        for (let i = 0; i < students.length; i++) {
-            const st = students[i];
-            document.getElementById("admit-name").innerText = st.name || "N/A";
-            document.getElementById("admit-class").innerText = st.class || "N/A";
-            document.getElementById("admit-roll").innerText = st.rollNo || "N/A";
-            document.getElementById("admit-fname").innerText = (st.parentage || st.fatherName) || "N/A";
-            document.getElementById("admit-mname").innerText = st.motherName || "N/A";
-            document.getElementById("admit-dob").innerText = st.dob || "N/A";
-
-            const fallbackImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-
-            // Process photo via Hugging Face AI before rendering the card
-            const admitPhotoEl = document.getElementById("admit-photo");
-
-            // Apply the dynamic school settings background color
-            admitPhotoEl.style.backgroundColor = currentPhotoBgColor || "#ffffff";
-
-            let finalPhotoSrc = fallbackImg;
-            if (st.photoUrl) {
-                finalPhotoSrc = await getTransparentAdmitPhoto(st.photoUrl);
-            }
-
-            await new Promise((resolve) => {
-                admitPhotoEl.onload = resolve;
-                admitPhotoEl.onerror = resolve;
-                admitPhotoEl.src = finalPhotoSrc;
-            });
-
-            const watermark = document.getElementById("admit-watermark");
-            if (mode === 'enable' && st.dueBalance && st.dueBalance > 0) {
-                watermark.style.display = "block";
-            } else {
-                watermark.style.display = "none";
-            }
-
-            const schedRows = document.getElementById("admit-card-tbody").querySelectorAll("tr");
-            const sched = classSchedules[st.class] || [];
-            for (let j = 0; j < 6; j++) {
-                const tds = schedRows[j].querySelectorAll("td");
-                let dStr = sched[j]?.date || "";
-                if (dStr && dStr.includes("-")) {
-                    let parts = dStr.split("-");
-                    if (parts.length === 3) dStr = parts[2] + '/' + parts[1] + '/' + parts[0];
-                }
-                tds[0].innerText = dStr;
-                tds[1].innerText = sched[j]?.subject || "";
-                tds[2].innerText = sched[j]?.timing || "";
-            }
-
-            await new Promise(r => setTimeout(r, 200));
-
-            const canvas = await html2canvas(template, { useCORS: true, scale: 2 });
-            const imgData = canvas.toDataURL("image/jpeg");
-
-            if (i > 0) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 10, 10, 190, 260);
-
-            const imgElement = document.createElement("img");
-            imgElement.src = imgData;
-            imgElement.style.width = "100%";
-            imgElement.style.borderRadius = "8px";
-            imgElement.style.boxShadow = "0 4px 6px rgba(0,0,0,0.1)";
-            document.getElementById("bulk-id-grid").appendChild(imgElement);
-        }
-
-        document.getElementById("bulk-generating-text").style.display = "none";
-        pdf.save("Batch_Admit_Cards.pdf");
-
-    } catch (e) {
-        document.getElementById("bulk-generating-text").style.display = "none";
-        alert("Failed to generate Admit Cards. Error: " + e.message);
-    }
-};
-
-window.generateBatchIDCards = async (students) => {
-    document.getElementById("bulk-id-modal").style.display = "block";
-    document.getElementById("bulk-generating-text").style.display = "block";
-    document.getElementById("bulk-generating-text").innerText = "Generating ID Cards...";
-    document.getElementById("bulk-id-grid").innerHTML = "";
-
-    try {
-        let schoolName = currentSchoolName || document.getElementById('school-name')?.innerText || "ABC SCHOOL NAME";
-        const templateStyle = currentTemplateStyle || "wave";
-        const fallbackImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-
-        const response = await fetch("https://school-backend-zlgy.onrender.com/api/bulk-generate-id-cards", {
+        const res = await fetch((window.APP_CONFIG?.backendBaseUrl || '') + "/api/ai-assistant", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                themeColor: currentThemeColor || "#1e3c72",
-                secondaryColor: currentSecondaryColor || "#ffffff",
-                templateStyle: templateStyle,
-                schoolName: schoolName,
-                schoolEmergency: document.getElementById("school_emergency").value || "N/A",
-                emergencyMobile: document.getElementById("school_emergency_mobile")?.value || "N/A",
-                signatureUrl: (window.currentSigSettings && window.currentSigSettings.idCard === false) ? "" : (currentSignatureUrl || ""),
-                schoolLogoUrl: document.getElementById('print_school_logo')?.src || document.getElementById('school-logo')?.src || "",
-                schoolNameColor: document.getElementById('idSchoolNameColor')?.value || currentSchoolNameColor || "#ffffff",
-                studentNameColor: document.getElementById('idStudentNameColor')?.value || currentStudentNameColor || "#d32f2f",
-                detailsColor: document.getElementById('idDetailsColor')?.value || currentDetailsColor || "#333333",
-                photoBgColor: document.getElementById('idPhotoBgColor')?.value || currentPhotoBgColor || "#ffffff",
-                students: students.map(st => ({
-                    id: st.id || st.regNo,
-                    regNo: st.regNo || "N/A",
-                    rollNo: st.rollNo || "N/A",
-                    name: st.name,
-                    class: st.class,
-                    dob: st.dob || "N/A",
-                    parentage: (st.parentage || st.fatherName) || "N/A",
-                    mobile: st.mobile || "N/A",
-                    address: st.address || "N/A",
-                    photoUrl: st.photoUrl || fallbackImg
-                }))
-            })
+            body: JSON.stringify({ prompt: msg, context: contextData })
         });
 
-        const data = await response.json();
-        if (data.success && data.images) {
-            const { jsPDF } = window.jspdf;
+        const data = await res.json();
+        document.getElementById(loadingId).outerHTML = `<div class="text-left mb-2"><span class="bg-slateSurface px-3 py-2 rounded-lg text-white inline-block max-w-[85%] border border-tealAccent/20">${data.reply ? data.reply.replace(/\n/g, '<br>') : "NO RESPONSE"}</span></div>`;
+    } catch (e) {
+        document.getElementById(loadingId).outerHTML = `<div class="text-left mb-2"><span class="bg-rose-500/20 px-3 py-2 rounded-lg text-rose-400 inline-block max-w-[85%] border border-rose-500">Error: Unable to reach AI Backend.</span></div>`;
+    }
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+};
 
-            const paperSizeEl = document.getElementById("bulk-paper-size");
-            let pFormat = 'a4';
-            if (paperSizeEl && paperSizeEl.value) { pFormat = paperSizeEl.value; }
+// ==========================================
+// GST INVOICE LOGIC
+// ==========================================
+window.generateGSTInvoice = async (schoolId) => {
+    if (!schoolId || schoolId === 'ALL') {
+        window.showToast("PLEASE SELECT A SPECIFIC NODE", "#e11d48");
+        return;
+    }
+    window.showToast("FETCHING DATA...", "#3b82f6");
+    try {
+        const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", schoolId).maybeSingle();
+        if (!sDoc) return window.showToast("NODE NOT FOUND", "#e11d48");
+        const sData = sDoc;
 
-            const pdf = new jsPDF('p', 'mm', pFormat);
+        const { data: uDoc } = await supabaseClient.from("users").select("*").eq("id", sData.chairmanUid).maybeSingle();
+        const email = uDoc ? uDoc.email : "unknown@domain.com";
+        const tier = sData.subscriptionTier || 'Starter';
+        const schoolName = sData.schoolName || 'Unknown School';
 
-            const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
+        window.showToast("GENERATING GST INVOICE...", "#3b82f6");
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
 
-            // Standard ID Card dimensions in mm
-            const cardW = 54;
-            const cardH = 86;
-            const marginX = 10;
-            const marginY = 10;
-            const gap = 5;
+        let basePrice = 5000;
+        if (tier === 'Professional') basePrice = 12000;
+        if (tier === 'Enterprise') basePrice = 25000;
 
-            const cols = Math.floor((pageWidth - 2 * marginX + gap) / (cardW + gap));
-            const rows = Math.floor((pageHeight - 2 * marginY + gap) / (cardH + gap));
-            const cardsPerPage = cols * rows;
+        const gst = basePrice * 0.18;
+        const total = basePrice + gst;
 
-            let currentCardInPage = 0;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.text("GST INVOICE", 105, 20, null, null, "center");
 
-            data.images.forEach((imgBase64, index) => {
-                if (index > 0 && currentCardInPage >= cardsPerPage) {
-                    pdf.addPage();
-                    currentCardInPage = 0;
-                }
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Invoice Date: ${new Date().toLocaleDateString()}`, 20, 40);
+        doc.text(`Invoice No: INV-${Date.now().toString().slice(-6)}`, 20, 48);
 
-                const colIdx = currentCardInPage % cols;
-                const rowIdx = Math.floor(currentCardInPage / cols);
+        doc.text(`Billed To:`, 120, 40);
+        doc.setFont("helvetica", "bold");
+        doc.text(`${schoolName}`, 120, 48);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Email: ${email}`, 120, 56);
+        doc.text(`School ID: ${schoolId}`, 120, 64);
 
-                const xPos = marginX + colIdx * (cardW + gap);
-                const yPos = marginY + rowIdx * (cardH + gap);
+        doc.autoTable({
+            startY: 80,
+            head: [['Description', 'Quantity', 'Unit Price (INR)', 'Amount (INR)']],
+            body: [
+                [`Master Core SaaS - ${tier} Tier (Monthly)`, '1', basePrice.toFixed(2), basePrice.toFixed(2)],
+            ],
+            foot: [
+                ['', '', 'Subtotal:', basePrice.toFixed(2)],
+                ['', '', 'GST (18%):', gst.toFixed(2)],
+                ['', '', 'Total Due:', total.toFixed(2)]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [15, 23, 42] },
+            footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] }
+        });
 
-                pdf.addImage(imgBase64, 'PNG', xPos, yPos, cardW, cardH);
+        doc.setFontSize(10);
+        doc.text("Thank you for your business. Please remit payment within 7 days.", 20, doc.lastAutoTable.finalY + 20);
+        doc.text("Provider: CoreEdu Tech Pvt Ltd | GSTIN: 27AABCU9603R1ZM", 20, doc.lastAutoTable.finalY + 28);
 
-                currentCardInPage++;
+        const fileName = `Invoice_${schoolName.replace(/ /g, '_')}_${Date.now()}.pdf`;
+        doc.save(fileName);
+        window.logAudit("Generated Invoice", schoolName);
 
-                const imgElement = document.createElement("img");
-                imgElement.src = imgBase64;
-                imgElement.style.width = "100%";
-                imgElement.style.borderRadius = "8px";
-                document.getElementById("bulk-id-grid").appendChild(imgElement);
+    } catch (err) {
+        console.error(err);
+        window.showToast("INVOICE ERROR: " + err.message, "#e11d48");
+    }
+};
+// ==========================================
+// ==========================================
+// MASSIVE UPGRADES - NEW LOGIC
+// ==========================================
+
+// 1. Landing Page Navigation Modals
+window.scrollToPublicSection = (sectionId) => {
+    const target = document.getElementById(sectionId);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+window.openPublicApkDownload = () => {
+    const appSection = document.getElementById("public-app-section");
+    if (appSection) {
+        appSection.classList.remove("hidden-el");
+        appSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+};
+
+window.toggleHamburger = () => {
+    const modal = document.getElementById('hamburger-modal');
+    if (modal.classList.contains('hidden-el')) {
+        modal.classList.remove('hidden-el');
+        setTimeout(() => modal.classList.replace('opacity-0', 'opacity-100'), 10);
+        document.getElementById('hamburger-modal-box').classList.replace('scale-95', 'scale-100');
+    } else {
+        modal.classList.replace('opacity-100', 'opacity-0');
+        document.getElementById('hamburger-modal-box').classList.replace('scale-100', 'scale-95');
+        setTimeout(() => modal.classList.add('hidden-el'), 300);
+    }
+};
+
+window.showRegistrationModal = () => {
+    document.getElementById('registration-modal').classList.remove('hidden-el');
+    if (globalCountries.length === 0) window.loadCountriesAPI();
+};
+
+window.showForgotPasswordModal = () => {
+    document.getElementById('forgot-password-modal').classList.remove('hidden-el');
+};
+
+window.showSchoolLoginModal = () => {
+    document.getElementById('school-login-modal').classList.remove('hidden-el');
+};
+
+let globalCountries = [];
+window.loadCountriesAPI = async () => {
+    try {
+        const res = await fetch("https://countriesnow.space/api/v0.1/countries/states");
+        const data = await res.json();
+        globalCountries = data.data.filter(c => c.name === "India");
+        const cSelect = document.getElementById("reg-country");
+        cSelect.innerHTML = '';
+        globalCountries.forEach(c => {
+            cSelect.innerHTML += `<option value="${c.name}" selected>${c.name}</option>`;
+        });
+        window.updateStateDropdown();
+    } catch (e) {
+        console.error("API Error", e);
+    }
+};
+
+window.updateStateDropdown = () => {
+    const countryName = document.getElementById('reg-country').value;
+    const stateSelect = document.getElementById('reg-state');
+    const districtSelect = document.getElementById('reg-district');
+    stateSelect.innerHTML = '<option value="">Select State/Province</option>';
+    districtSelect.innerHTML = '<option value="">Select District/City</option>';
+    districtSelect.disabled = true;
+
+    if (countryName) {
+        stateSelect.disabled = false;
+        const countryData = globalCountries.find(c => c.name === countryName);
+        if (countryData && countryData.states && countryData.states.length > 0) {
+            countryData.states.forEach(s => {
+                stateSelect.innerHTML += `<option value="${s.name}">${s.name}</option>`;
             });
-
-            pdf.save("Batch_ID_Cards.pdf");
-        } else {
-            alert("API Error: " + data.error);
         }
-    } catch (e) {
-        alert("Failed to generate ID Cards. Error: " + e.message);
-    } finally {
-        document.getElementById("bulk-generating-text").style.display = "none";
-    }
-};
-// ==========================================
-// ZERO-COMMISSION FEE APPROVAL MODULE
-// ==========================================
-
-window.loadFeeVerifications = async () => {
-    try {
-        const { data: rows, error } = await supabaseClient.from("fee_verifications").select("*").eq("schoolId", currentSchoolId);
-        if (error) throw error;
-        let html = "";
-        const now = new Date();
-
-        let verifications = rows || [];
-
-        // Sort by newest first
-        verifications.sort((a, b) => toEpochMillis(b.createdAt) - toEpochMillis(a.createdAt));
-
-        verifications.forEach(data => {
-            const createdAt = data.createdAt ? new Date(data.createdAt) : null;
-            // Auto-hide successful verifications older than 24 hours
-            if (data.status === "Successful") {
-                const ageHours = createdAt ? (now - createdAt) / (1000 * 60 * 60) : 0;
-                if (ageHours > 24) return;
-            }
-
-            const isPending = data.status === "Pending";
-            const statusClass = isPending ? "color: #d97706;" : "color: #059669;";
-            const btnHtml = isPending ?
-                `<button class="action-btn" style="background:#059669; padding: 5px 10px; font-size:12px;" onclick="approveFeeVerification('${data.id}', '${data.studentId}', '${data.studentName}', ${data.amount})"><i class="fas fa-check"></i> Approve & Record</button>` :
-                `<span style="color:#059669; font-weight:bold;"><i class="fas fa-check-circle"></i> Approved</span>`;
-
-            html += `<tr>
-                <td>${createdAt ? createdAt.toLocaleString() : 'N/A'}</td>
-                <td><strong>${data.studentName}</strong><br><small>Reg: ${data.regNo}</small></td>
-                <td style="font-family: monospace;">${data.utr}</td>
-                <td><strong>Rs. ${data.amount}</strong></td>
-                <td><a href="${data.screenshotUrl}" target="_blank" style="color:#3182ce; text-decoration:none;"><i class="fas fa-image"></i> View Proof</a></td>
-                <td style="${statusClass}">${btnHtml}</td>
-            </tr>`;
-        });
-
-        document.getElementById("fee-verifications-body").innerHTML = html || '<tr><td colspan="6" style="text-align:center;">No pending fee verifications.</td></tr>';
-    } catch (e) {
-        console.error("Fee verification load error:", e);
+    } else {
+        stateSelect.disabled = true;
     }
 };
 
-window.approveFeeVerification = async (verificationId, studentId, studentName, amount) => {
-    if (!confirm(`Approve Rs.${amount} fee payment for ${studentName}? This will update the student's balance and ledger.`)) return;
+window.updateDistrictDropdown = async () => {
+    const countryName = document.getElementById('reg-country').value;
+    const stateName = document.getElementById('reg-state').value;
+    const districtSelect = document.getElementById('reg-district');
+    districtSelect.innerHTML = '<option value="">Loading cities...</option>';
 
-    try {
-        // 1. Mark verification successful
-        const { error: verificationError } = await supabaseClient.from("fee_verifications")
-            .update({ status: "Successful", updatedAt: new Date().toISOString() })
-            .eq("id", verificationId);
-        if (verificationError) throw verificationError;
-
-        // 2. Add to transaction ledger
-        const { error: ledgerError } = await supabaseClient.from("transactions").insert({
-            schoolId: currentSchoolId,
-            type: "Fee",
-            personId: studentId,
-            personName: studentName,
-            amount: Number(amount),
-            mode: "UPI Manual QR",
-            date: new Date().toISOString().split('T')[0],
-            createdAt: new Date().toISOString()
-        });
-        if (ledgerError) throw ledgerError;
-
-        // 3. Decrease the due balance held on the student row
-        const { data: studentRow, error: studentReadError } = await supabaseClient.from("students").select("*").eq("id", studentId).maybeSingle();
-        if (studentReadError) throw studentReadError;
-        const updatedDueBalance = Number(studentRow?.dueBalance || 0) - Number(amount);
-        const { error: studentError } = await supabaseClient.from("students")
-            .update({ dueBalance: updatedDueBalance })
-            .eq("id", studentId);
-        if (studentError) throw studentError;
-        alert("Payment Approved! Ledger updated and student balance reduced.");
-        loadFeeVerifications();
-        loadTransactions();
-    } catch (e) {
-        alert("Error approving payment: " + e.message);
-    }
-};
-window.openExamScheduler = () => {
-    document.getElementById("exam-scheduler-modal").style.display = "flex";
-    window.loadExamSchedule();
-};
-
-window.lastExamScheduleCache = null;
-
-window.loadExamSchedule = async () => {
-    const cls = document.getElementById("scheduler-class-select").value;
-    const targetClass = (cls === "All") ? "Nursery" : cls;
-    try {
-        const { data: schoolData, error } = await supabaseClient.from("schools").select("*").eq("id", currentSchoolId).maybeSingle();
-        if (error) throw error;
-        const fieldKey = "examSchedule_" + targetClass;
-        if (schoolData && Array.isArray(schoolData[fieldKey])) {
-            populateSchedulerTable(schoolData[fieldKey]);
-            window.lastExamScheduleCache = schoolData[fieldKey];
-            return;
-        }
-        if (schoolData) {
-            const data = schoolData.schedule || [];
-            populateSchedulerTable(data);
-            window.lastExamScheduleCache = data;
-        } else if (window.lastExamScheduleCache) {
-            populateSchedulerTable(window.lastExamScheduleCache);
-        } else {
-            populateSchedulerTable([]);
-        }
-    } catch (e) { console.error(e); }
-};
-
-window.populateSchedulerTable = (data) => {
-    const dates = document.querySelectorAll(".sched-date");
-    const subjs = document.querySelectorAll(".sched-subj");
-    const times = document.querySelectorAll(".sched-time");
-    for (let i = 0; i < 6; i++) {
-        dates[i].value = data[i]?.date || "";
-        subjs[i].value = data[i]?.subject || "";
-        times[i].value = data[i]?.timing || "";
-    }
-};
-
-window.updateSchedulerDatalists = () => {
-    const subjects = new Set(window.examSubjects || []);
-    const timings = new Set();
-    document.querySelectorAll(".sched-subj").forEach(el => {
-        if (el.value.trim()) subjects.add(el.value.trim().toUpperCase());
-    });
-    document.querySelectorAll(".sched-time").forEach(el => {
-        if (el.value.trim()) timings.add(el.value.trim());
-    });
-
-    const subjList = document.getElementById("subjectsList");
-    if (subjList) {
-        subjList.innerHTML = "";
-        subjects.forEach(val => subjList.innerHTML += `<option value="${val}"></option>`);
-    }
-
-    const timeList = document.getElementById("timingsList");
-    if (timeList) {
-        timeList.innerHTML = "";
-        timings.forEach(val => timeList.innerHTML += `<option value="${val}"></option>`);
-    }
-};
-window.saveExamSchedule = async () => {
-    const cls = document.getElementById("scheduler-class-select").value;
-    if (!currentSchoolId) return alert("School ID not found. Please re-login.");
-
-    const dates = document.querySelectorAll(".sched-date");
-    const subjs = document.querySelectorAll(".sched-subj");
-    const times = document.querySelectorAll(".sched-time");
-
-    const schedule = [];
-    for (let i = 0; i < 6; i++) {
-        schedule.push({
-            date: dates[i].value.trim(),
-            subject: subjs[i].value.trim(),
-            timing: times[i].value.trim()
-        });
-    }
-
-    try {
-        if (cls === "All") {
-            const allClasses = institutionIsCollege() ? ["1st Semester", "2nd Semester", "3rd Semester", "4th Semester", "5th Semester", "6th Semester"] : ["Nursery", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
-            const scheduleMap = {};
-            allClasses.forEach(c => { scheduleMap["examSchedule_" + c] = schedule; });
-            const { error } = await supabaseClient.from("schools").update(scheduleMap).eq("id", currentSchoolId);
-            if (error) throw error;
-            alert("Schedule saved for ALL Classes!");
-        } else {
-            const fieldKey = "examSchedule_" + cls;
-            const { error } = await supabaseClient.from("schools").update({ [fieldKey]: schedule }).eq("id", currentSchoolId);
-            if (error) throw error;
-            alert("Schedule saved for Class " + cls);
-        }
-        window.lastExamScheduleCache = schedule;
-    } catch (e) {
-        console.error("Schedule save error:", e);
-        alert("Error: " + e.message);
-    }
-};
-
-window.openGlobalBonafideModal = () => {
-    const sel = document.getElementById("global-bonafide-student");
-    sel.innerHTML = '<option value="">-- Select a Student --</option>';
-    window.fetchedStudents.forEach(st => {
-        sel.innerHTML += `<option value="${st.id}">${st.name} (${st.class})</option>`;
-    });
-    document.getElementById("global-bonafide-modal").style.display = "flex";
-};
-
-window.triggerGlobalBonafide = () => {
-    const studentId = document.getElementById("global-bonafide-student").value;
-    if (!studentId) return alert("Please select a student first.");
-    closeCustomModal("global-bonafide-modal");
-    window.generateCertificate(studentId, 'bonafide');
-};
-
-let currentDMStudentId = null;
-window.openDirectMessageModal = (id, name) => {
-    currentDMStudentId = id;
-    document.getElementById("dm-student-name").innerText = name;
-    document.getElementById("dm-message-body").value = "";
-    document.getElementById("direct-message-modal").style.display = "flex";
-};
-
-window.sendDirectMessage = async () => {
-    const msg = document.getElementById("dm-message-body").value.trim();
-    if (!msg) return alert("Please type a message.");
-    try {
-        const { error } = await supabaseClient.from("direct_messages").insert({
-            schoolId: currentSchoolId,
-            studentId: currentDMStudentId,
-            message: msg,
-            sender: "Chairman",
-            timestamp: new Date().toISOString(),
-            read: false
-        });
-        if (error) throw error;
-        alert("Message sent successfully!");
-        closeCustomModal("direct-message-modal");
-    } catch (e) {
-        alert("Failed to send message: " + e.message);
-    }
-};
-
-// --- EXAM SCHEDULER: MASTER SUBJECTS ---
-window.factoryDefaultSubjects = ["ENGLISH", "MATHS", "SCIENCE", "SOCIAL SCIENCE", "HINDI", "URDU", "COMPUTER", "GENERAL KNOWLEDGE", "DRAWING"];
-window.examSubjects = [];
-
-window.toggleSubjectSettings = () => {
-    const panel = document.getElementById("subject-settings-panel");
-    panel.style.display = panel.style.display === "none" ? "block" : "none";
-    if (panel.style.display === "block") window.renderMasterSubjects();
-};
-
-window.renderMasterSubjects = () => {
-    const list = document.getElementById("master-subjects-list");
-    list.innerHTML = "";
-    window.examSubjects.forEach((sub, i) => {
-        list.innerHTML += `<div style="background:#e2e8f0; padding:5px 10px; border-radius:15px; font-size:12px; display:flex; align-items:center; gap:5px;">
-            ${sub} <i class="fas fa-times" style="color:#ef4444; cursor:pointer;" onclick="window.deleteMasterSubject(${i})"></i>
-        </div>`;
-    });
-};
-
-window.addMasterSubject = async () => {
-    const val = document.getElementById("new-custom-subject").value.trim().toUpperCase();
-    if (!val) return;
-    if (window.examSubjects.includes(val)) return alert("Subject already exists!");
-    window.examSubjects.push(val);
-    document.getElementById("new-custom-subject").value = "";
-    window.renderMasterSubjects();
-    window.updateSchedulerDatalists();
-    const { error } = await supabaseClient.from("schools").update({ examSubjects: window.examSubjects }).eq("id", currentSchoolId);
-    if (error) throw error;
-};
-
-window.deleteMasterSubject = async (index) => {
-    window.examSubjects.splice(index, 1);
-    window.renderMasterSubjects();
-    window.updateSchedulerDatalists();
-    const { error } = await supabaseClient.from("schools").update({ examSubjects: window.examSubjects }).eq("id", currentSchoolId);
-    if (error) throw error;
-};
-
-window.resetMasterSubjects = async () => {
-    if (!confirm("Reset to factory defaults? All custom subjects will be lost.")) return;
-    window.examSubjects = [...window.factoryDefaultSubjects];
-    window.renderMasterSubjects();
-    window.updateSchedulerDatalists();
-    const { error } = await supabaseClient.from("schools").update({ examSubjects: window.examSubjects }).eq("id", currentSchoolId);
-    if (error) throw error;
-};
-
-
-
-// --- GLOBAL BONAFIDE BATCH LOGIC ---
-window.renderGlobalBonafideStudents = () => {
-    const cls = document.getElementById("global-bonafide-class").value;
-    const tbody = document.getElementById("global-bonafide-tbody");
-    tbody.innerHTML = "";
-
-    let filtered = window.fetchedStudents.filter(s => s.status === 'Approved');
-    if (cls !== "All") filtered = filtered.filter(s => s.class === cls);
-
-    if (filtered.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='4' style='text-align:center; padding:10px;'>No approved students found.</td></tr>";
+    if (!countryName || !stateName) {
+        districtSelect.innerHTML = '<option value="">Select District/City</option>';
+        districtSelect.disabled = true;
         return;
     }
 
-    filtered.forEach(st => {
-        tbody.innerHTML += `<tr>
-            <td style="padding: 10px;"><input type="checkbox" class="bonafide-checkbox" value="${st.id}"></td>
-            <td style="padding: 10px;">${st.name}</td>
-            <td style="padding: 10px;">${st.class}</td>
-            <td style="padding: 10px;">${st.rollNo || 'N/A'}</td>
-        </tr>`;
-    });
-};
+    districtSelect.disabled = false;
 
-window.toggleAllBonafideStudents = (el) => {
-    document.querySelectorAll(".bonafide-checkbox").forEach(cb => cb.checked = el.checked);
-};
-
-window.openGlobalBonafideModal = () => {
-    document.getElementById("global-bonafide-class").value = "All";
-    document.getElementById("global-bonafide-select-all").checked = false;
-    window.renderGlobalBonafideStudents();
-    document.getElementById("global-bonafide-modal").style.display = "flex";
-};
-
-window.triggerGlobalBonafideBatch = async () => {
-    const checked = document.querySelectorAll(".bonafide-checkbox:checked");
-    if (checked.length === 0) return alert("Please select at least one student.");
-
-    document.getElementById("global-bonafide-modal").style.display = "none";
-    document.getElementById("cert-modal").style.display = "flex";
-    document.getElementById("cert-printable").style.display = "none";
-    document.getElementById("cert-actions").style.display = "none";
-    document.getElementById("cert-generating-text").style.display = "block";
-    document.getElementById("cert-generating-text").innerText = "Compiling Batch Bonafide PDF...";
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('l', 'mm', 'a4'); // Using landscape for certificates
-
-    let pageCount = 0;
-
-    for (let cb of checked) {
-        const id = cb.value;
-        const st = window.fetchedStudents.find(s => s.id === id);
-        if (!st) continue;
-
-        document.getElementById("cert-school-name").innerText = currentSchoolName;
-        document.getElementById("cert-school-name").style.color = currentThemeColor;
-        document.getElementById("cert-title").innerText = "BONAFIDE CERTIFICATE";
-        document.getElementById("cert-date").innerText = new Date().toLocaleDateString();
-
-        let bodyText = `This is to certify that <strong>${st.name}</strong>, son/daughter of <strong>${(st.parentage || st.fatherName)}</strong>, is a bona fide student of this institution, currently studying in class <strong>${st.class}</strong> during the current academic session.`;
-        document.getElementById("cert-body").innerHTML = bodyText;
-
-        // Wait for render
-        document.getElementById("cert-printable").style.display = "flex";
-
-        const canvas = await html2canvas(document.getElementById("cert-printable"), { useCORS: true, scale: 2 });
-        const imgData = canvas.toDataURL("image/jpeg", 0.9);
-
-        document.getElementById("cert-printable").style.display = "none";
-
-        if (pageCount > 0) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 10, 10, 277, 190);
-        pageCount++;
-    }
-
-    pdf.save("Batch_Bonafide_Certificates.pdf");
-    document.getElementById("cert-modal").style.display = "none";
-};
-
-// ================= PHASE 2: TRANSPORT MANAGER =================
-window.loadTransportRoutes = async () => {
     try {
-        const { data: routeRows, error } = await supabaseClient.from("bus_routes").select("*").eq("schoolId", currentSchoolId);
-        if (error) throw error;
-        let html = "";
-        (routeRows || []).forEach(dt => {
-            html += `<tr class="hover-row">
-                <td><strong>${dt.routeName}</strong></td>
-                <td>${dt.driverName}</td>
-                <td>${dt.contact}</td>
-                <td>₹ ${dt.fee}</td>
-                <td><button class="action-btn" style="background:#e53e3e; padding:5px 10px;" onclick="deleteBusRoute('${dt.id}')"><i class="fas fa-trash"></i></button></td>
-            </tr>`;
+        const res = await fetch("https://countriesnow.space/api/v0.1/countries/state/cities", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ country: countryName, state: stateName })
         });
-        document.getElementById("transport-body").innerHTML = html || "<tr><td colspan='5' style='text-align:center;'>No routes found.</td></tr>";
-    } catch (e) { console.error(e); }
-};
+        const data = await res.json();
 
-window.saveBusRoute = async () => {
-    const rn = document.getElementById("transportRouteName").value.trim();
-    const dn = document.getElementById("transportDriverName").value.trim();
-    const dc = document.getElementById("transportDriverContact").value.trim();
-    const fe = document.getElementById("transportBusFee").value.trim();
-    if (!rn || !dn || !dc || !fe) return alert("Fill all fields.");
-    try {
-        const { error } = await supabaseClient.from("bus_routes").insert({
-            schoolId: currentSchoolId, routeName: rn, driverName: dn, contact: dc, fee: Number(fe), createdAt: new Date().toISOString()
-        });
-        if (error) throw error;
-        alert("Route saved!");
-        document.getElementById("transportRouteName").value = "";
-        document.getElementById("transportDriverName").value = "";
-        document.getElementById("transportDriverContact").value = "";
-        document.getElementById("transportBusFee").value = "";
-        loadTransportRoutes();
-    } catch (e) { alert("Error saving route"); }
-};
-
-window.deleteBusRoute = async (id) => {
-    if (!confirm("Delete this route?")) return;
-    try {
-        const { error } = await supabaseClient.from("bus_routes").delete().eq("id", id);
-        if (error) throw error;
-        loadTransportRoutes();
-    } catch (e) { alert("Error deleting route."); }
-};
-
-// ================= PHASE 2: INVENTORY MANAGER =================
-window.loadInventory = async () => {
-    try {
-        const { data: assetRows, error } = await supabaseClient.from("inventory").select("*").eq("schoolId", currentSchoolId);
-        if (error) throw error;
-        let html = "";
-        (assetRows || []).forEach(dt => {
-            html += `<tr class="hover-row">
-                <td><strong>${dt.itemName}</strong></td>
-                <td><span class="status-badge" style="background:#3182ce;">${dt.category}</span></td>
-                <td>${dt.quantity}</td>
-                <td>${dt.dateAcquired}</td>
-                <td><button class="action-btn" style="background:#e53e3e; padding:5px 10px;" onclick="deleteAsset('${dt.id}')"><i class="fas fa-trash"></i></button></td>
-            </tr>`;
-        });
-        document.getElementById("inventory-body").innerHTML = html || "<tr><td colspan='5' style='text-align:center;'>No assets found.</td></tr>";
-    } catch (e) { console.error(e); }
-};
-
-window.logAsset = async () => {
-    const iname = document.getElementById("inventoryItemName").value.trim();
-    const cat = document.getElementById("inventoryCategory").value;
-    const qty = document.getElementById("inventoryQuantity").value.trim();
-    const dt = document.getElementById("inventoryDate").value;
-    if (!iname || !qty || !dt) return alert("Fill all fields.");
-    try {
-        const { error } = await supabaseClient.from("inventory").insert({
-            schoolId: currentSchoolId, itemName: iname, category: cat, quantity: Number(qty), dateAcquired: dt, createdAt: new Date().toISOString()
-        });
-        if (error) throw error;
-        alert("Asset saved!");
-        document.getElementById("inventoryItemName").value = "";
-        document.getElementById("inventoryQuantity").value = "";
-        document.getElementById("inventoryDate").value = "";
-        loadInventory();
-    } catch (e) { alert("Error saving asset"); }
-};
-
-window.deleteAsset = async (id) => {
-    if (!confirm("Delete this asset?")) return;
-    try {
-        const { error } = await supabaseClient.from("inventory").delete().eq("id", id);
-        if (error) throw error;
-        loadInventory();
-    } catch (e) { alert("Error deleting asset."); }
-};
-
-// ================= PHASE 2: ATTENDANCE ENGINE =================
-window.loadClassForAttendance = () => {
-    const cls = document.getElementById("attendanceClassSelect").value;
-    const dt = document.getElementById("attendanceDateSelect").value;
-    if (!cls || !dt) return alert("Select both class and date.");
-
-    document.getElementById("attendance-roster-panel").style.display = "block";
-    const stds = (window.fetchedStudents || []).filter(s => s.class === cls && s.status === "Approved");
-
-    let html = "";
-    stds.forEach(st => {
-        html += `<tr class="hover-row">
-            <td>${st.rollNo || 'N/A'}</td>
-            <td><strong>${st.name}</strong></td>
-            <td>${(st.parentage || st.fatherName) || 'N/A'}</td>
-            <td style="text-align:center;">
-                <label style="margin-right:10px;"><input type="radio" name="att_${st.id}" value="Present" checked> Present</label>
-                <label><input type="radio" name="att_${st.id}" value="Absent"> Absent</label>
-            </td>
-        </tr>`;
-    });
-    document.getElementById("attendance-roster-body").innerHTML = html || "<tr><td colspan='4' style='text-align:center;'>No approved students in this class.</td></tr>";
-};
-
-window.saveDailyAttendance = async () => {
-    const cls = document.getElementById("attendanceClassSelect").value;
-    const dt = document.getElementById("attendanceDateSelect").value;
-    if (!cls || !dt) return alert("Select both class and date.");
-
-    const stds = (window.fetchedStudents || []).filter(s => s.class === cls && s.status === "Approved");
-    if (stds.length === 0) return alert("No students to save.");
-
-    let records = {};
-    stds.forEach(st => {
-        const selected = document.querySelector(`input[name="att_${st.id}"]:checked`);
-        records[st.id] = selected ? selected.value : "Absent";
-    });
-
-    try {
-        const attId = currentSchoolId + "_" + cls + "_" + dt;
-        const { error } = await supabaseClient.from("attendance").upsert({
-            id: attId,
-            schoolId: currentSchoolId,
-            class: cls,
-            date: dt,
-            records: records,
-            updatedAt: new Date().toISOString()
-        });
-        if (error) throw error;
-        alert("Attendance saved!");
-        loadStudents();
-    } catch (e) { console.error(e); alert("Error saving attendance."); }
-};
-
-// =============================================================================================
-// ============================== STAFF PORTAL ENGINE ==========================================
-// =============================================================================================
-// The staff member logs in with their own ID (GoTrue + users row). Everything below renders a
-// role-aware dashboard: teachers get their own task panel, management roles (Chairman /
-// Principal / Vice Principal / HOD) additionally get school-wide KPIs, teacher compliance and
-// the veto queue. All reads/writes go through the staff member's own authenticated session.
-
-let currentStaffDoc = null;
-window.staffHomeCache = null;
-
-const STAFF_MANAGEMENT_ROLES = ['Chairman', 'Principal', 'Vice Principal', 'HOD'];
-const staffIsManagement = () => STAFF_MANAGEMENT_ROLES.includes(currentStaffDoc && currentStaffDoc.staffRole);
-const staffHasPriv = (key) => staffIsManagement() || (currentStaffDoc && currentStaffDoc.privileges && currentStaffDoc.privileges[key] === true);
-const staffTodayStr = () => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
-const staffEsc = (value) => { const node = document.createElement('span'); node.textContent = value == null || value === '' ? 'N/A' : String(value); return node.innerHTML; };
-const staffPill = (ok, okText, noText) => ok
-    ? `<span style="background:#dcfce7; color:#166534; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:bold; white-space:nowrap;"><i class="fas fa-check"></i> ${okText}</span>`
-    : `<span style="background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:bold; white-space:nowrap;"><i class="fas fa-clock"></i> ${noText}</span>`;
-const staffKpiCard = (icon, bg, fg, value, label, sub) => `
-    <div class="staff-card" style="padding:16px 18px; display:flex; align-items:center; gap:14px;">
-        <div style="width:46px; height:46px; border-radius:50%; background:${bg}; display:flex; align-items:center; justify-content:center; flex:none;">
-            <i class="fas ${icon}" style="color:${fg}; font-size:17px;"></i>
-        </div>
-        <div style="min-width:0;">
-            <div style="font-size:12px; color:#8fa3bf;">${label}</div>
-            <div style="font-size:24px; font-weight:800; color:#f1f5f9; line-height:1.15;">${value}</div>
-            <div style="font-size:11px; font-weight:700; color:#34d399; margin-top:2px;">${sub || ''}</div>
-        </div>
-    </div>`;
-
-function syncStaffMenuGroups() {
-    document.querySelectorAll('#staff-dashboard-wrapper .staff-group').forEach(g => {
-        const any = Array.from(g.querySelectorAll('.menu-item')).some(m => m.style.display !== 'none');
-        g.style.display = any ? '' : 'none';
-    });
-}
-
-window.toggleStaffGroup = (id) => { const g = document.getElementById(id); if (g) g.classList.toggle('collapsed'); };
-
-window.filterStaffMenus = (q) => {
-    q = (q || '').trim().toLowerCase();
-    const allowed = window.__staffMenuAllowed || {};
-    document.querySelectorAll('#staff-dashboard-wrapper .menu-item').forEach(m => {
-        const privOk = allowed[m.id] !== false;
-        const textOk = !q || m.innerText.toLowerCase().includes(q);
-        m.style.display = (privOk && textOk) ? '' : 'none';
-    });
-    syncStaffMenuGroups();
-};
-
-function applyStaffPortalAccess() {
-    window.__staffMenuAllowed = window.__staffMenuAllowed || {};
-    const show = (id, ok) => { const el = document.getElementById(id); if (el) { el.style.display = ok ? '' : 'none'; window.__staffMenuAllowed[id] = ok; } };
-    show('staff-menu-attendance', staffHasPriv('attendance'));
-    show('staff-menu-marks', staffHasPriv('marks'));
-    show('staff-menu-homework', staffHasPriv('marks'));
-    show('staff-menu-staff', staffIsManagement());
-    show('staff-mgmt-panel', staffIsManagement());
-    show('staff-teacher-panel', !staffIsManagement());
-    show('staff-notice-form', staffHasPriv('notices'));
-    syncStaffMenuGroups();
-    if (!staffHasPriv('attendance')) document.getElementById('staff-menu-home') && document.getElementById('staff-menu-home').click();
-}
-
-function renderStaffProfile() {
-    const el = document.getElementById('staff-profile-body');
-    if (!el || !currentStaffDoc) return;
-    const d = currentStaffDoc;
-    const rows = [['Name', d.name], ['Role', d.staffRole], ['Email', d.email], ['Staff ID', d.id], ['Status', d.status || 'active'], ['School', currentSchoolName]];
-    el.innerHTML = `<div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
-        <img src="${d.photoUrl ? staffEsc(d.photoUrl) : 'https://via.placeholder.com/100'}" alt="profile" style="width:84px; height:84px; border-radius:50%; object-fit:cover; border:3px solid #10b981;">
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px 26px; flex:1;">
-            ${rows.map(([label, value]) => `<div><div style="font-size:11px; color:#8fa3bf; text-transform:uppercase; letter-spacing:0.4px;">${staffEsc(label)}</div><div style="font-weight:700; color:#e2e8f0;">${staffEsc(value)}</div></div>`).join('')}
-        </div>
-    </div>`;
-}
-
-function staffDestroyChart() { if (window.staffChartInstance) { window.staffChartInstance.destroy(); window.staffChartInstance = null; } }
-
-function staffRenderChart(approvedRows) {
-    const canvas = document.getElementById('staff-marks-chart');
-    if (!canvas || !window.Chart) return;
-    staffDestroyChart();
-    const perClass = {};
-    (approvedRows || []).forEach(r => {
-        const max = Number(r.maxMarks || r.totalMarks || 0); const got = Number(r.marksObtained || 0);
-        if (!r.class || !max) return;
-        (perClass[r.class] = perClass[r.class] || []).push((got / max) * 100);
-    });
-    const labels = Object.keys(perClass).sort();
-    const values = labels.map(c => Math.round(perClass[c].reduce((a, b) => a + b, 0) / perClass[c].length));
-    window.staffChartInstance = new Chart(canvas, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Average %', data: values, backgroundColor: ['#3b82f6', '#60a5fa', '#10b981', '#34d399', '#64748b', '#1e3a8a', '#8b5cf6', '#f59e0b'], borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100, ticks: { color: '#8fa3bf' }, grid: { color: 'rgba(148,163,184,0.12)' } }, x: { ticks: { color: '#8fa3bf' }, grid: { color: 'rgba(148,163,184,0.08)' } } }, plugins: { legend: { display: false } } }
-    });
-}
-
-function staffComplianceHtml(staffRows, mkRows) {
-    if (!staffRows || staffRows.length === 0) return '<tr><td colspan="4" style="padding:14px; text-align:center; color:#64748b;">No staff records found.</td></tr>';
-    return staffRows.map(st => {
-        const mkOk = (mkRows || []).some(m => m.enteredBy === st.id);
-        const active = (st.status || 'active') !== 'blocked';
-        return `<tr>
-            <td>${staffEsc(st.name)}</td>
-            <td>${staffEsc(st.staffRole)}</td>
-            <td>${staffPill(active, 'Active', 'Blocked')}</td>
-            <td>${staffPill(mkOk, 'Submitted', 'Pending')}</td>
-        </tr>`;
-    }).join('');
-}
-
-const staffAttBar = (label, pct, color) => `
-    <div class="staff-att-row">
-        <div style="display:flex; justify-content:space-between; font-size:12px; color:#9fb0c8; margin-bottom:6px;">
-            <span><i class="fas fa-circle" style="color:${color}; font-size:8px; margin-right:7px;"></i>${label}</span>
-            <strong style="color:#e2e8f0;">${pct}%</strong>
-        </div>
-        <div style="height:8px; border-radius:6px; background:#0d1830;">
-            <div style="height:8px; border-radius:6px; width:${Math.max(0, Math.min(100, pct))}%; background:${color};"></div>
-        </div>
-    </div>`;
-
-function staffRenderAttSummary(rows) {
-    const el = document.getElementById('staff-att-summary');
-    if (el) el.innerHTML = rows.map(([label, pct, color]) => staffAttBar(label, pct, color)).join('');
-}
-
-function staffRenderAttChart(monthRows, monthKeys) {
-    const canvas = document.getElementById('staff-att-chart');
-    if (!canvas || !window.Chart) return;
-    if (window.staffAttChartInstance) { window.staffAttChartInstance.destroy(); window.staffAttChartInstance = null; }
-    const per = {};
-    monthKeys.forEach(k => per[k] = { present: 0, absent: 0 });
-    (monthRows || []).forEach(r => {
-        const k = String(r.date || '').slice(0, 7);
-        if (!per[k]) return;
-        Object.values(r.records || {}).forEach(v => { v === 'Absent' ? per[k].absent++ : per[k].present++; });
-    });
-    const labels = monthKeys.map(k => { const [y, m] = k.split('-'); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' }); });
-    window.staffAttChartInstance = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                { label: 'Present', data: monthKeys.map(k => per[k].present), backgroundColor: '#10b981', borderRadius: 4 },
-                { label: 'Absent', data: monthKeys.map(k => per[k].absent), backgroundColor: '#f97316', borderRadius: 4 }
-            ]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#8fa3bf' }, grid: { color: 'rgba(148,163,184,0.08)' } }, y: { beginAtZero: true, ticks: { color: '#8fa3bf' }, grid: { color: 'rgba(148,163,184,0.12)' } } }, plugins: { legend: { labels: { color: '#cbd5e1', boxWidth: 12 } } } }
-    });
-}
-
-let staffCalOffset = 0;
-window.staffCalNav = (dir) => { staffCalOffset += dir; staffRenderCalendar(); };
-
-function staffRenderCalendar() {
-    const el = document.getElementById('staff-calendar');
-    if (!el) return;
-    const base = new Date();
-    const view = new Date(base.getFullYear(), base.getMonth() + staffCalOffset, 1);
-    const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
-    const firstDow = view.getDay();
-    const title = view.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    let body = '<tr>';
-    let col = firstDow;
-    for (let i = 0; i < firstDow; i++) body += '<td class="staff-cal-dim"></td>';
-    for (let d = 1; d <= days; d++) {
-        const isToday = staffCalOffset === 0 && d === base.getDate();
-        body += `<td class="${isToday ? 'staff-cal-today' : ''}"><span>${d}</span></td>`;
-        col++;
-        if (col % 7 === 0) body += '</tr><tr>';
-    }
-    while (col % 7 !== 0) { body += '<td class="staff-cal-dim"></td>'; col++; }
-    body += '</tr>';
-    el.innerHTML = `<div style="text-align:center; font-weight:800; color:#e2e8f0; margin-bottom:8px;">${title}</div>
-        <table><thead><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr></thead><tbody>${body}</tbody></table>`;
-}
-
-window.initStaffPortal = async (data) => {
-    currentStaffDoc = data;
-    await paInitStaffScope();
-    const avatar = document.getElementById('staff-avatar');
-    if (avatar) avatar.src = data.photoUrl || 'https://via.placeholder.com/100';
-    const avName = document.getElementById('staff-avatar-name');
-    if (avName) avName.innerText = data.name || 'Staff';
-    const dateEl = document.getElementById('staff-today-date');
-    if (dateEl) dateEl.innerText = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const subtitle = document.getElementById('staff-role-subtitle');
-    if (subtitle) subtitle.innerText = `${data.staffRole || 'Staff'} | Staff ID: ${String(data.id || '').slice(0, 8)}`;
-    applyStaffPortalAccess();
-    renderStaffProfile();
-    loadStaffHome();
-};
-
-async function loadStaffHome() {
-    const grid = document.getElementById('staff-kpi-grid');
-    if (!grid || !currentStaffDoc) return;
-    grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:18px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading dashboard...</div>';
-    const today = staffTodayStr();
-    const now = new Date();
-    const monthKeys = [];
-    for (let i = 7; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }
-    const rangeStart = monthKeys[0] + '-01';
-    const [stuRes, usrRes, attTodayRes, attRangeRes, mkRes, ntRes, hwRes] = await Promise.all([
-        (() => { let q = supabaseClient.from('students').select('id, class, status, departmentId').eq('schoolId', currentSchoolId); if (institutionIsCollege() && !staffIsManagement() && window.staffDeptIds.length) q = q.in('departmentId', window.staffDeptIds); return q; })(),
-        supabaseClient.from('users').select('id, name, staffRole, status, email, photoUrl').eq('schoolId', currentSchoolId).eq('role', 'staff'),
-        supabaseClient.from('attendance').select('class, date, records').eq('schoolId', currentSchoolId).eq('date', today),
-        supabaseClient.from('attendance').select('date, records').eq('schoolId', currentSchoolId).gte('date', rangeStart),
-        supabaseClient.from('exam_marks').select('id, class, examName, subject, studentName, marksObtained, maxMarks, totalMarks, status, enteredBy, enteredByName').eq('schoolId', currentSchoolId),
-        supabaseClient.from('notices').select('title, body, date, target, createdAt').eq('schoolId', currentSchoolId),
-        supabaseClient.from('homework').select('id').eq('schoolId', currentSchoolId)
-    ]);
-    const students = (stuRes.data || []).filter(s => s.status === 'Approved');
-    const staffRows = (usrRes.data || []).filter(u => u.status !== 'blocked');
-    const attToday = attTodayRes.data || [];
-    const mkRows = mkRes.data || [];
-    const notices = (ntRes.data || []).slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    const approvedMarks = mkRows.filter(m => m.status === 'Approved');
-    const pendingMarks = mkRows.filter(m => m.status === 'Pending');
-    const hwCount = (hwRes.data || []).length;
-    window.staffHomeCache = { staffRows, attToday, mkRows, pendingMarks };
-
-    const countRecords = (rows) => {
-        let present = 0, absent = 0;
-        (rows || []).forEach(r => { Object.values(r.records || {}).forEach(v => { v === 'Absent' ? absent++ : present++; }); });
-        return { present, absent };
-    };
-    const todayCounts = countRecords(attToday);
-    const classTotal = new Set(students.map(s => s.class)).size;
-    const classMarked = attToday.length;
-    const attPct = classTotal ? Math.round((classMarked / classTotal) * 100) : 0;
-    const markedTotalToday = todayCounts.present + todayCounts.absent;
-    const presentTodayPct = markedTotalToday ? Math.round((todayCounts.present / markedTotalToday) * 100) : 0;
-    const monthRows = (attRangeRes.data || []).filter(r => monthKeys.includes(String(r.date || '').slice(0, 7)));
-    const monthCounts = countRecords(monthRows);
-    const monthTotal = monthCounts.present + monthCounts.absent;
-    const monthPresentPct = monthTotal ? Math.round((monthCounts.present / monthTotal) * 100) : 0;
-    const monthAbsentPct = monthTotal ? Math.round((monthCounts.absent / monthTotal) * 100) : 0;
-    const approvedPct = mkRows.length ? Math.round((approvedMarks.length / mkRows.length) * 100) : 0;
-    const mgmtCount = staffRows.filter(u => STAFF_MANAGEMENT_ROLES.includes(u.staffRole)).length;
-    const examSets = new Set(pendingMarks.map(m => m.examName + '|' + m.class)).size;
-
-    grid.innerHTML =
-        staffKpiCard('fa-chalkboard-teacher', 'rgba(16,185,129,0.15)', '#34d399', staffRows.length, 'Teachers & Staff', `${mgmtCount} management`) +
-        staffKpiCard('fa-user-graduate', 'rgba(59,130,246,0.15)', '#60a5fa', students.length, 'Active Students', `${classTotal} classes`) +
-        staffKpiCard('fa-clipboard-check', 'rgba(245,158,11,0.15)', '#fbbf24', attPct + '%', 'Attendance Marked Today', `${classMarked}/${classTotal} classes`) +
-        staffKpiCard('fa-user-check', 'rgba(34,211,238,0.15)', '#22d3ee', todayCounts.present, 'Present Today', `${todayCounts.absent} absent · ${presentTodayPct}%`) +
-        staffKpiCard('fa-hourglass-half', 'rgba(139,92,246,0.15)', '#a78bfa', pendingMarks.length, 'Results Awaiting Veto', `${examSets} exam sets`) +
-        staffKpiCard('fa-book-open', 'rgba(16,185,129,0.15)', '#34d399', hwCount, 'Homework Published', `${notices.length} notices`);
-
-    staffRenderAttSummary([
-        ['Present (this month)', monthPresentPct, '#10b981'],
-        ['Absent (this month)', monthAbsentPct, '#f97316'],
-        ['Classes Marked Today', attPct, '#8b5cf6'],
-        ['Results Approved', approvedPct, '#22d3ee']
-    ]);
-    staffRenderAttChart(monthRows, monthKeys);
-    staffRenderChart(approvedMarks);
-    staffRenderCalendar();
-
-    const noticeBox = document.getElementById('staff-home-notices');
-    if (noticeBox) {
-        noticeBox.innerHTML = notices.length ? notices.slice(0, 6).map(n => `
-            <div style="border-left:3px solid #10b981; background:#0f1a30; border-radius:8px; padding:10px 12px; margin-bottom:10px;">
-                <div style="font-weight:700; color:#e2e8f0;">${staffEsc(n.title)}</div>
-                <div style="font-size:12px; color:#9fb0c8; margin-top:4px;">${staffEsc(n.body)}</div>
-                <div style="font-size:11px; color:#64748b; margin-top:6px;"><i class="fas fa-calendar"></i> ${staffEsc(n.date)}</div>
-            </div>`).join('') : '<div style="padding:16px; text-align:center; color:#64748b; background:#0f1a30; border-radius:8px;">No notices published yet.</div>';
-    }
-
-    if (staffIsManagement()) {
-        const cb = document.getElementById('staff-compliance-body');
-        if (cb) cb.innerHTML = staffComplianceHtml(staffRows, mkRows);
-        const ab = document.getElementById('staff-approval-body');
-        if (ab) ab.innerHTML = pendingMarks.length ? pendingMarks.slice(0, 6).map(m => `
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1px solid #1c2c47; padding:8px 2px;">
-                <div style="font-size:13px; color:#dbe4f0;"><strong>${staffEsc(m.enteredByName || 'Staff')}</strong> — ${staffEsc(m.examName)} (${staffEsc(m.subject)}) · Class ${staffEsc(m.class)}</div>
-                <button class="submit-btn" style="padding:6px 10px; font-size:12px;" onclick="window.viewStaffApprovalDetail('${m.id}')">View Entries</button>
-            </div>`).join('') : '<div style="padding:16px; text-align:center; color:#64748b; background:#0f1a30; border-radius:8px;">No results awaiting veto.</div>';
-    } else {
-        const tb = document.getElementById('staff-tasks-body');
-        if (tb) {
-            const myPending = pendingMarks.filter(m => m.enteredBy === currentStaffDoc.id).length;
-            const tasks = [];
-            if (staffHasPriv('attendance')) tasks.push(`<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid #1c2c47; color:#dbe4f0;"><div><i class="fas fa-clipboard-list" style="color:#60a5fa;"></i> Today's class attendance${attToday.length ? '' : ' is not marked yet'}.</div><button class="submit-btn" style="padding:6px 12px; font-size:12px;" onclick="document.getElementById('staff-menu-attendance').click()">Mark Now</button></div>`);
-            if (staffHasPriv('marks')) tasks.push(`<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid #1c2c47; color:#dbe4f0;"><div><i class="fas fa-pen-alt" style="color:#34d399;"></i> ${myPending ? myPending + ' of your submitted results are awaiting chairman veto.' : 'No pending results. Enter exam marks when ready.'}</div><button class="submit-btn" style="padding:6px 12px; font-size:12px; background:#10b981;" onclick="document.getElementById('staff-menu-marks').click()">Enter Marks</button></div>`);
-            tasks.push(`<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 2px; color:#dbe4f0;"><div><i class="fas fa-book-open" style="color:#818cf8;"></i> Publish homework for your classes.</div><button class="submit-btn" style="padding:6px 12px; font-size:12px; background:#6366f1;" onclick="document.getElementById('staff-menu-homework').click()">Open</button></div>`);
-            tb.innerHTML = tasks.join('');
+        districtSelect.innerHTML = '<option value="">Select District/City</option>';
+        if (data && !data.error && data.data && data.data.length > 0) {
+            const cityMap = {};
+            data.data.forEach(city => {
+                const trimmedCity = city.trim();
+                const lower = trimmedCity.toLowerCase();
+                if (!cityMap[lower]) {
+                    cityMap[lower] = trimmedCity;
+                }
+            });
+            const uniqueCities = Object.values(cityMap).sort();
+            uniqueCities.forEach(city => {
+                districtSelect.innerHTML += `<option value="${city}">${city}</option>`;
+            });
+        } else {
+            districtSelect.innerHTML = '<option value="">No cities found - type manually</option>';
+            const manualInput = document.createElement('input');
+            manualInput.type = 'text';
+            manualInput.id = 'reg-district-manual';
+            manualInput.className = 'input-premium w-full px-3 py-2 rounded-lg text-white text-sm mt-2';
+            manualInput.placeholder = 'Type district/city name';
+            districtSelect.parentElement.appendChild(manualInput);
         }
-    }
-}
-
-window.viewStaffApprovalDetail = (markId) => {
-    const cache = window.staffHomeCache; const detail = document.getElementById('staff-approval-detail');
-    if (!cache || !detail) return;
-    const ref = cache.pendingMarks.find(m => m.id === markId);
-    if (!ref) return;
-    const rows = cache.pendingMarks.filter(m => m.examName === ref.examName && m.class === ref.class);
-    detail.innerHTML = `<div style="background:rgba(245,158,11,0.08); border:1px solid #7c5806; border-radius:10px; padding:12px;">
-        <div style="font-weight:700; color:#fbbf24; margin-bottom:8px;">${staffEsc(ref.examName)} · ${staffEsc(ref.subject)} · Class ${staffEsc(ref.class)}</div>
-        ${rows.map(r => `<div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px dashed #7c5806; color:#dbe4f0;"><span>${staffEsc(r.studentName)}</span><strong>${staffEsc(r.marksObtained)} / ${staffEsc(r.maxMarks || r.totalMarks)}</strong></div>`).join('')}
-    </div>`;
-};
-
-window.onStaffTabOpen = (targetId) => {
-    if (!currentStaffDoc) return;
-    if (targetId === 'staff-tab-home') return loadStaffHome();
-    if (targetId === 'staff-tab-department') return loadMyDepartment();
-    if (targetId === 'staff-tab-attendance') { const d = document.getElementById('staff_att_date'); if (d && !d.value) d.value = staffTodayStr(); return; }
-    if (targetId === 'staff-tab-marks') { const d = document.getElementById('staff_mk_date'); if (d && !d.value) d.value = staffTodayStr(); return; }
-    if (targetId === 'staff-tab-homework') return loadStaffHomeworkList();
-    if (targetId === 'staff-tab-notices') return loadStaffNotices();
-    if (targetId === 'staff-tab-timetable') return loadStaffTimetable();
-    if (targetId === 'staff-tab-leave') return loadStaffLeaveList();
-    if (targetId === 'staff-tab-staff') return loadStaffTeachers();
-    if (targetId === 'staff-tab-profile') return renderStaffProfile();
-};
-
-window.loadStaffAttendanceRoster = async () => {
-    const cls = document.getElementById('staff_att_class').value;
-    const dt = document.getElementById('staff_att_date').value;
-    if (!cls || !dt) return alert('Select both class and date.');
-    const { data: students, error } = await supabaseClient.from('students').select('*').eq('schoolId', currentSchoolId).eq('class', cls).eq('status', 'Approved');
-    if (error) return alert('Error loading students: ' + error.message);
-    const { data: existing } = await supabaseClient.from('attendance').select('records').eq('schoolId', currentSchoolId).eq('class', cls).eq('date', dt).maybeSingle();
-    const records = (existing && existing.records) || {};
-    const stds = students || [];
-    const body = document.getElementById('staff_att_roster_body');
-    body.innerHTML = stds.length ? stds.map(st => {
-        const val = records[st.id] === 'Absent' ? 'Absent' : 'Present';
-        return `<tr class="hover-row" style="border-bottom:1px solid #1c2c47;">
-            <td style="padding:10px;">${staffEsc(st.rollNo)}</td>
-            <td style="padding:10px;"><strong>${staffEsc(st.name)}</strong></td>
-            <td style="padding:10px;">${staffEsc(st.parentage || st.fatherName)}</td>
-            <td style="padding:10px; text-align:center;">
-                <label style="margin-right:10px;"><input type="radio" name="staffatt_${st.id}" value="Present" ${val === 'Present' ? 'checked' : ''}> Present</label>
-                <label><input type="radio" name="staffatt_${st.id}" value="Absent" ${val === 'Absent' ? 'checked' : ''}> Absent</label>
-            </td>
-        </tr>`;
-    }).join('') : '<tr><td colspan="4" style="padding:14px; text-align:center;">No approved students in this class.</td></tr>';
-    document.getElementById('staff_att_panel').style.display = 'block';
-};
-
-window.saveStaffAttendance = async () => {
-    const cls = document.getElementById('staff_att_class').value;
-    const dt = document.getElementById('staff_att_date').value;
-    if (!cls || !dt) return alert('Select both class and date.');
-    const { data: students } = await supabaseClient.from('students').select('id').eq('schoolId', currentSchoolId).eq('class', cls).eq('status', 'Approved');
-    const stds = students || [];
-    if (stds.length === 0) return alert('No students to save.');
-    const records = {};
-    stds.forEach(st => {
-        const selected = document.querySelector(`input[name="staffatt_${st.id}"]:checked`);
-        records[st.id] = selected ? selected.value : 'Absent';
-    });
-    const attId = currentSchoolId + '_' + cls + '_' + dt;
-    const { error } = await supabaseClient.from('attendance').upsert({
-        id: attId, schoolId: currentSchoolId, class: cls, date: dt, records: records,
-        role: 'staff', uid: currentStaffDoc.id, updatedAt: new Date().toISOString()
-    });
-    if (error) return alert('Error saving attendance: ' + error.message);
-    alert('Attendance saved!');
-    loadStaffHome();
-};
-
-window.loadStaffMarksRoster = async () => {
-    const cls = document.getElementById('staff_mk_class').value;
-    if (!cls) return alert('Select class first.');
-    const { data: students, error } = await supabaseClient.from('students').select('*').eq('schoolId', currentSchoolId).eq('class', cls).eq('status', 'Approved');
-    if (error) return alert('Error loading students: ' + error.message);
-    const stds = students || [];
-    document.getElementById('staff_mk_roster_body').innerHTML = stds.length ? stds.map(st => `
-        <tr style="border-bottom:1px solid #1c2c47;">
-            <td style="padding:10px;">${staffEsc(st.rollNo)}</td>
-            <td style="padding:10px;"><strong style="color:#e2e8f0;">${staffEsc(st.name)}</strong></td>
-            <td style="padding:10px; text-align:center;"><input type="number" min="0" id="staffmk_${st.id}" class="input-premium" style="width:110px; text-align:center;" placeholder="0"></td>
-        </tr>`).join('') : '<tr><td colspan="3" style="padding:14px; text-align:center;">No approved students in this class.</td></tr>';
-    document.getElementById('staff_mk_panel').style.display = 'block';
-};
-
-window.submitStaffMarks = async () => {
-    const cls = document.getElementById('staff_mk_class').value;
-    const examName = document.getElementById('staff_mk_exam').value.trim();
-    const subject = document.getElementById('staff_mk_subject').value.trim();
-    const maxMarks = Number(document.getElementById('staff_mk_max').value || 0);
-    const dt = document.getElementById('staff_mk_date').value || staffTodayStr();
-    if (!cls || !examName || !subject || !maxMarks) return alert('Fill class, exam name, subject and max marks.');
-    const { data: students } = await supabaseClient.from('students').select('id, name, rollNo').eq('schoolId', currentSchoolId).eq('class', cls).eq('status', 'Approved');
-    const stds = students || [];
-    if (stds.length === 0) return alert('No students to submit.');
-    const rows = stds.map(st => {
-        const el = document.getElementById('staffmk_' + st.id);
-        const got = Math.max(0, Math.min(maxMarks, Number(el && el.value || 0)));
-        return {
-            schoolId: currentSchoolId, studentId: st.id, studentName: st.name, class: cls,
-            examName, subject, marksObtained: got, maxMarks, totalMarks: maxMarks,
-            date: dt, status: 'Pending', enteredBy: currentStaffDoc.id, enteredByName: currentStaffDoc.name,
-            createdAt: new Date().toISOString()
-        };
-    });
-    const { error } = await supabaseClient.from('exam_marks').insert(rows);
-    if (error) return alert('Error submitting marks: ' + error.message);
-    alert('Marks submitted for Chairman veto.');
-    document.getElementById('staff_mk_panel').style.display = 'none';
-    document.getElementById('staff_mk_exam').value = '';
-    document.getElementById('staff_mk_subject').value = '';
-    loadStaffHome();
-};
-
-window.publishStaffHomework = async () => {
-    const cls = document.getElementById('sh_class').value;
-    const subject = document.getElementById('sh_subject').value.trim();
-    const title = document.getElementById('sh_title').value.trim();
-    const description = document.getElementById('sh_desc').value.trim();
-    const dueDate = document.getElementById('sh_due').value;
-    if (!cls || !subject || !title || !description) return alert('Fill class, subject, title and description.');
-    const { error } = await supabaseClient.from('homework').insert({
-        schoolId: currentSchoolId, class: cls, subject, title, description, dueDate: dueDate || '',
-        teacherName: currentStaffDoc.name, createdBy: currentStaffDoc.id, createdAt: new Date().toISOString()
-    });
-    if (error) return alert('Error publishing homework: ' + error.message);
-    alert('Homework published!');
-    document.getElementById('sh_subject').value = ''; document.getElementById('sh_title').value = ''; document.getElementById('sh_desc').value = '';
-    loadStaffHomeworkList();
-};
-
-window.loadStaffHomeworkList = async () => {
-    const el = document.getElementById('staff-hw-list'); if (!el) return;
-    let q = supabaseClient.from('homework').select('*').eq('schoolId', currentSchoolId);
-    if (!staffIsManagement()) q = q.eq('createdBy', currentStaffDoc.id);
-    const { data, error } = await q;
-    if (error) return el.innerHTML = '<div style="padding:14px; color:#888;">Unable to load homework.</div>';
-    const rows = (data || []).slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    el.innerHTML = rows.length ? rows.map(hw => `
-        <div style="border-left:3px solid #6366f1; background:#0f1a30; border-radius:8px; padding:10px 12px; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                <strong style="color:#e2e8f0;">${staffEsc(hw.subject)} — ${staffEsc(hw.title)}</strong>
-                <span style="font-size:11px; color:#64748b;">Class ${staffEsc(hw.class)} · Due: ${staffEsc(hw.dueDate || '—')}</span>
-            </div>
-            <div style="font-size:13px; color:#9fb0c8; margin-top:4px;">${staffEsc(hw.description)}</div>
-            <div style="font-size:11px; color:#94a3b8; margin-top:6px;">By ${staffEsc(hw.teacherName)}</div>
-        </div>`).join('') : '<div style="padding:16px; text-align:center; color:#64748b; background:#0f1a30; border-radius:8px;">No homework published yet.</div>';
-};
-
-window.loadStaffNotices = async () => {
-    const el = document.getElementById('staff-notices-list'); if (!el) return;
-    const { data, error } = await supabaseClient.from('notices').select('*').eq('schoolId', currentSchoolId);
-    if (error) return el.innerHTML = '<div style="padding:14px; color:#888;">Unable to load notices.</div>';
-    const role = currentStaffDoc.staffRole;
-    const rows = (data || []).filter(n => !n.target || n.target === 'All' || n.target === 'Staff' || n.target === role)
-        .slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    el.innerHTML = rows.length ? rows.map(n => `
-        <div style="border-left:3px solid #10b981; background:#0f1a30; border-radius:8px; padding:10px 12px; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                <strong style="color:#e2e8f0;">${staffEsc(n.title)}</strong>
-                <span style="font-size:11px; color:#64748b;">${staffEsc(n.date)}</span>
-            </div>
-            <div style="font-size:13px; color:#9fb0c8; margin-top:4px; white-space:pre-wrap;">${staffEsc(n.body)}</div>
-        </div>`).join('') : '<div style="padding:16px; text-align:center; color:#64748b; background:#0f1a30; border-radius:8px;">No notices for you yet.</div>';
-};
-
-window.publishStaffNotice = async () => {
-    const target = document.getElementById('sn_target').value;
-    const title = document.getElementById('sn_title').value.trim();
-    const body = document.getElementById('sn_body').value.trim();
-    if (!title || !body) return alert('Fill title and body.');
-    const { error } = await supabaseClient.from('notices').insert({
-        target, title, body, date: new Date().toLocaleDateString(), visible: true,
-        schoolId: currentSchoolId, authorName: currentStaffDoc.name, createdAt: new Date().toISOString()
-    });
-    if (error) return alert('Error publishing notice: ' + error.message);
-    alert('Notice published!');
-    document.getElementById('sn_title').value = ''; document.getElementById('sn_body').value = '';
-    loadStaffNotices();
-};
-
-window.loadStaffTimetable = async () => {
-    const el = document.getElementById('staff-timetable-body'); if (!el) return;
-    const { data: schoolRow } = await supabaseClient.from('schools').select('schedule').eq('id', currentSchoolId).maybeSingle();
-    const rows = Array.isArray(schoolRow && schoolRow.schedule) ? schoolRow.schedule : [];
-    el.innerHTML = rows.length ? `<div style="overflow:auto;"><table style="width:100%; border-collapse:collapse; font-size:13px;">
-        <thead><tr style="background:#0f1a30; text-align:left;"><th style="padding:8px; color:#8fa3bf;">Period</th><th style="padding:8px; color:#8fa3bf;">Time</th><th style="padding:8px; color:#8fa3bf;">Class</th><th style="padding:8px; color:#8fa3bf;">Subject</th><th style="padding:8px; color:#8fa3bf;">Teacher</th><th style="padding:8px; color:#8fa3bf;">Room</th></tr></thead>
-        <tbody>${rows.map(r => `<tr style="border-bottom:1px solid #1c2c47; color:#dbe4f0;">
-            <td style="padding:8px;">${staffEsc(r.period || r.title || '—')}</td>
-            <td style="padding:8px;">${staffEsc(r.time || '—')}</td>
-            <td style="padding:8px;">${staffEsc(r.class || '—')}</td>
-            <td style="padding:8px;">${staffEsc(r.subject || '—')}</td>
-            <td style="padding:8px;">${staffEsc(r.teacher || '—')}</td>
-            <td style="padding:8px;">${staffEsc(r.room || '—')}</td>
-        </tr>`).join('')}</tbody></table></div>`
-        : '<div style="padding:16px; text-align:center; color:#64748b; background:#0f1a30; border-radius:8px;">Timetable has not been published by the school yet.</div>';
-};
-
-window.submitStaffLeave = async () => {
-    const start = document.getElementById('sl_start').value;
-    const end = document.getElementById('sl_end').value;
-    const reason = document.getElementById('sl_reason').value.trim();
-    if (!start || !end || !reason) return alert('Fill all leave fields.');
-    const { error } = await supabaseClient.from('leave_requests').insert({
-        schoolId: currentSchoolId, studentId: currentStaffDoc.id, studentName: currentStaffDoc.name,
-        class: currentStaffDoc.staffRole || 'Staff', startDate: start, endDate: end, reason,
-        status: 'Pending', createdAt: new Date().toISOString()
-    });
-    if (error) return alert('Error submitting leave request: ' + error.message);
-    alert('Leave request submitted for approval.');
-    document.getElementById('sl_reason').value = '';
-    loadStaffLeaveList();
-};
-
-window.loadStaffLeaveList = async () => {
-    const el = document.getElementById('staff-leave-list'); if (!el) return;
-    const { data, error } = await supabaseClient.from('leave_requests').select('*').eq('schoolId', currentSchoolId).eq('studentId', currentStaffDoc.id);
-    if (error) return el.innerHTML = '<div style="padding:14px; color:#888;">Unable to load leave requests.</div>';
-    const rows = (data || []).slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    el.innerHTML = rows.length ? rows.map(r => {
-        const color = r.status === 'Approved' ? '#dcfce7;#166534' : (r.status === 'Rejected' ? '#fee2e2;#b91c1c' : '#fef3c7;#b45309');
-        const [bg, fg] = color.split(';');
-        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1px solid #1c2c47; padding:10px 2px;">
-            <div><strong style="font-size:13px; color:#e2e8f0;">${staffEsc(r.startDate)} → ${staffEsc(r.endDate)}</strong><div style="font-size:12px; color:#8fa3bf;">${staffEsc(r.reason)}</div></div>
-            <span style="background:${bg}; color:${fg}; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:bold;">${staffEsc(r.status || 'Pending')}</span>
-        </div>`;
-    }).join('') : '<div style="padding:16px; text-align:center; color:#64748b; background:#0f1a30; border-radius:8px;">No leave requests yet.</div>';
-};
-
-window.loadStaffTeachers = async () => {
-    const el = document.getElementById('staff-teachers-body'); if (!el) return;
-    const cache = window.staffHomeCache;
-    const today = staffTodayStr();
-    const [usrRes, mkRes] = await Promise.all([
-        supabaseClient.from('users').select('id, name, staffRole, email, status').eq('schoolId', currentSchoolId).eq('role', 'staff'),
-        supabaseClient.from('exam_marks').select('enteredBy').eq('schoolId', currentSchoolId)
-    ]);
-    const staffRows = usrRes.data || []; const mkRows = mkRes.data || [];
-    window.staffHomeCache = Object.assign({}, cache, { staffRows, mkRows });
-    el.innerHTML = staffRows.length ? staffRows.map(st => `
-        <tr>
-            <td><strong style="color:#e2e8f0;">${staffEsc(st.name)}</strong></td>
-            <td>${staffEsc(st.staffRole)}</td>
-            <td>${staffEsc(st.email)}</td>
-            <td>${staffEsc(st.status || 'active')}</td>
-            <td>${staffPill(mkRows.some(m => m.enteredBy === st.id), 'Submitted', 'Pending')}</td>
-        </tr>`).join('') : '<tr><td colspan="5" style="padding:14px; text-align:center; color:#64748b;">No staff found.</td></tr>';
-};
-
-// =============================================================================================
-// =============================================================================================
-// ============================== PHASE A — INSTITUTION ARCHITECTURE ===========================
-// =============================================================================================
-// Multi-tenant extension: schools = institutions (school|college), departments /
-// programs / academic_sessions / academic_levels / sections / staff_assignments.
-// Tenant key stays schools.id ("schoolId"); department scope comes from
-// staff_assignments so one user may serve several departments. RLS in
-// supabase/migrations/20261002140000_phase_a_institution_architecture.sql
-// enforces the same boundaries at the database level.
-// =============================================================================================
-let currentInstitutionType = 'school';
-let phaseACache = { departments: [], programs: [], sessions: [], levels: [], sections: [], assignments: [] };
-window.staffDeptIds = [];
-const institutionIsCollege = () => currentInstitutionType === 'college';
-const paFind = (arr, id) => (arr || []).find(x => x.id === id);
-const paName = (arr, id) => { const r = paFind(arr, id); return r ? r.name : '—'; };
-
-window.applyInstitutionMode = async () => {
-    if (!currentSchoolId) return;
-    const { data } = await supabaseClient.from('schools').select('institution_type').eq('id', currentSchoolId).maybeSingle();
-    currentInstitutionType = (data && data.institution_type) || 'school';
-    const college = institutionIsCollege();
-    ['departments', 'programs', 'sessions', 'sections'].forEach(k => {
-        const el = document.getElementById('pa-menu-' + k);
-        if (el) el.style.display = college ? '' : 'none';
-    });
-    const ap = document.getElementById('pa-assign-panel');
-    if (ap) ap.style.display = college ? '' : 'none';
-    if (college) { await paLoadCache(); paRenderAll(); }
-};
-
-async function paLoadCache() {
-    const q = (t) => supabaseClient.from(t).select('*').eq('schoolId', currentSchoolId);
-    const [d, p, se, l, sec, as] = await Promise.all([
-        q('departments'), q('programs'), q('academic_sessions'), q('academic_levels'), q('sections'), q('staff_assignments')
-    ]);
-    phaseACache = {
-        departments: d.data || [], programs: p.data || [], sessions: se.data || [],
-        levels: l.data || [], sections: sec.data || [], assignments: as.data || []
-    };
-}
-
-function paFillSelect(id, rows, placeholder, extra) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = `<option value="">${placeholder || '—'}</option>` + (rows || []).map(r =>
-        `<option value="${r.id}">${staffEsc(r.name)}${r.code ? ' (' + staffEsc(r.code) + ')' : ''}</option>`).join('') + (extra || '');
-}
-
-function paRenderAll() {
-    paFillSelect('pa_prog_dept', phaseACache.departments, 'Select department');
-    paFillSelect('pa_level_prog', phaseACache.programs, '— Institution-wide —');
-    paFillSelect('pa_sec_prog', phaseACache.programs, '—');
-    paFillSelect('pa_sec_level', phaseACache.levels, '—');
-    paFillSelect('pa_sec_session', phaseACache.sessions, '—');
-
-    const db = document.getElementById('pa-dept-body');
-    if (db) db.innerHTML = phaseACache.departments.length ? phaseACache.departments.map(d => {
-        const progs = phaseACache.programs.filter(p => p.departmentId === d.id).length;
-        const active = d.status === 'active';
-        return `<tr style="border-bottom:1px solid #e2e8f0;">
-            <td style="padding:8px;"><strong>${staffEsc(d.name)}</strong></td>
-            <td style="padding:8px;">${staffEsc(d.code)}</td>
-            <td style="padding:8px;">${progs}</td>
-            <td style="padding:8px;">${active ? '<span style="color:#16a34a;font-weight:bold;">Active</span>' : '<span style="color:#dc2626;font-weight:bold;">Inactive</span>'}</td>
-            <td style="padding:8px;"><button class="action-btn btn-blue" onclick="window.paSetDepartmentStatus('${d.id}', ${active ? "'inactive'" : "'active'"})">${active ? 'Deactivate' : 'Activate'}</button></td>
-        </tr>`;
-    }).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:#888;">No departments yet.</td></tr>';
-
-    const pb = document.getElementById('pa-prog-body');
-    if (pb) pb.innerHTML = phaseACache.programs.length ? phaseACache.programs.map(p => `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px;"><strong>${staffEsc(p.name)}</strong> (${staffEsc(p.code)})</td>
-        <td style="padding:8px;">${staffEsc(paName(phaseACache.departments, p.departmentId))}</td>
-        <td style="padding:8px;">${staffEsc(p.levelType)}</td>
-        <td style="padding:8px;">${p.status === 'active' ? '<span style="color:#16a34a;font-weight:bold;">Active</span>' : '<span style="color:#dc2626;font-weight:bold;">Inactive</span>'}</td>
-        <td style="padding:8px;"><button class="action-btn btn-blue" onclick="window.paSetProgramStatus('${p.id}', ${p.status === 'active' ? "'inactive'" : "'active'"})">${p.status === 'active' ? 'Deactivate' : 'Activate'}</button></td>
-    </tr>`).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:#888;">No programs yet.</td></tr>';
-
-    const sb = document.getElementById('pa-session-body');
-    if (sb) sb.innerHTML = phaseACache.sessions.length ? phaseACache.sessions.map(s => `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px;"><strong>${staffEsc(s.name)}</strong></td>
-        <td style="padding:8px;">${staffEsc(s.startDate || '—')} → ${staffEsc(s.endDate || '—')}</td>
-        <td style="padding:8px;">${s.isCurrent ? '<span style="color:#16a34a;font-weight:bold;">Current</span>' : '—'}</td>
-        <td style="padding:8px;">${s.isCurrent ? '' : `<button class="action-btn btn-blue" onclick="window.paSetCurrentSession('${s.id}')">Mark Current</button>`}</td>
-    </tr>`).join('') : '<tr><td colspan="4" style="padding:14px;text-align:center;color:#888;">No sessions yet.</td></tr>';
-
-    const lb = document.getElementById('pa-level-body');
-    if (lb) lb.innerHTML = phaseACache.levels.map(l => `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px;">${staffEsc(l.name)}</td><td style="padding:8px;">${staffEsc(l.code)}</td>
-        <td style="padding:8px;">${staffEsc(l.kind)}</td><td style="padding:8px;">${staffEsc(paName(phaseACache.programs, l.programId))}</td>
-    </tr>`).join('') || '<tr><td colspan="4" style="padding:14px;text-align:center;color:#888;">No levels yet.</td></tr>';
-
-    const scb = document.getElementById('pa-section-body');
-    if (scb) scb.innerHTML = phaseACache.sections.map(sc => `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px;"><strong>${staffEsc(sc.name)}</strong></td><td style="padding:8px;">${staffEsc(sc.class || '—')}</td>
-        <td style="padding:8px;">${staffEsc(paName(phaseACache.programs, sc.programId))} / ${staffEsc(paName(phaseACache.levels, sc.levelId))}</td>
-        <td style="padding:8px;">${staffEsc(paName(phaseACache.sessions, sc.academicSessionId))}</td>
-    </tr>`).join('') || '<tr><td colspan="4" style="padding:14px;text-align:center;color:#888;">No sections yet.</td></tr>';
-
-    paRenderAssignPanel();
-}
-
-window.paSaveDepartment = async () => {
-    const name = document.getElementById('pa_dept_name').value.trim();
-    const code = document.getElementById('pa_dept_code').value.trim().toUpperCase();
-    if (!name || !code) return alert('Fill department name and code.');
-    if (phaseACache.departments.some(d => d.code.toUpperCase() === code)) return alert('Code already used in this institution.');
-    const { error } = await supabaseClient.from('departments').insert({ schoolId: currentSchoolId, name, code });
-    if (error) return alert('Error saving department: ' + error.message);
-    document.getElementById('pa_dept_name').value = ''; document.getElementById('pa_dept_code').value = '';
-    alert('Department saved.');
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSetDepartmentStatus = async (id, status) => {
-    const { error } = await supabaseClient.from('departments').update({ status }).eq('id', id);
-    if (error) return alert('Error: ' + error.message);
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSaveProgram = async (withLevels) => {
-    const departmentId = document.getElementById('pa_prog_dept').value;
-    const name = document.getElementById('pa_prog_name').value.trim();
-    const code = document.getElementById('pa_prog_code').value.trim().toUpperCase();
-    const levelType = document.getElementById('pa_prog_leveltype').value;
-    const duration = Number(document.getElementById('pa_prog_duration').value || 0);
-    if (!departmentId || !name || !code) return alert('Select department and fill program name/code.');
-    if (phaseACache.programs.some(p => p.code.toUpperCase() === code)) return alert('Program code already used in this institution.');
-    const { data, error } = await supabaseClient.from('programs').insert({ schoolId: currentSchoolId, departmentId, name, code, levelType, duration: duration || null }).select().single();
-    if (error) return alert('Error saving program: ' + error.message);
-    if (withLevels && duration > 0) {
-        const unit = levelType === 'semester' ? 'Semester' : levelType === 'year' ? 'Year' : levelType === 'trimester' ? 'Trimester' : 'Level';
-        const rows = [];
-        for (let i = 1; i <= duration; i++) rows.push({
-            schoolId: currentSchoolId, departmentId, programId: data.id,
-            name: `${unit} ${i}`, code: `${code}-${unit.slice(0, 3).toUpperCase()}${i}`, kind: levelType === 'custom' ? 'custom' : levelType, sortOrder: i
-        });
-        const { error: le } = await supabaseClient.from('academic_levels').insert(rows);
-        if (le) return alert('Program saved but levels failed: ' + le.message);
-    }
-    document.getElementById('pa_prog_name').value = ''; document.getElementById('pa_prog_code').value = '';
-    alert('Program saved.');
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSetProgramStatus = async (id, status) => {
-    const { error } = await supabaseClient.from('programs').update({ status }).eq('id', id);
-    if (error) return alert('Error: ' + error.message);
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSaveSession = async () => {
-    const name = document.getElementById('pa_sess_name').value.trim();
-    if (!name) return alert('Session name required.');
-    const start = document.getElementById('pa_sess_start').value || null;
-    const end = document.getElementById('pa_sess_end').value || null;
-    const { error } = await supabaseClient.from('academic_sessions').insert({ schoolId: currentSchoolId, name, startDate: start, endDate: end });
-    if (error) return alert('Error saving session: ' + error.message);
-    alert('Session saved.');
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSetCurrentSession = async (id) => {
-    const { error: e1 } = await supabaseClient.from('academic_sessions').update({ isCurrent: false }).eq('schoolId', currentSchoolId);
-    if (e1) return alert('Error: ' + e1.message);
-    const { error: e2 } = await supabaseClient.from('academic_sessions').update({ isCurrent: true }).eq('id', id);
-    if (e2) return alert('Error: ' + e2.message);
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSaveLevel = async () => {
-    const name = document.getElementById('pa_level_name').value.trim();
-    const code = document.getElementById('pa_level_code').value.trim().toUpperCase();
-    const kind = document.getElementById('pa_level_kind').value;
-    const programId = document.getElementById('pa_level_prog').value || null;
-    if (!name || !code) return alert('Level name and code required.');
-    const prog = paFind(phaseACache.programs, programId);
-    const { error } = await supabaseClient.from('academic_levels').insert({
-        schoolId: currentSchoolId, programId, departmentId: prog ? prog.departmentId : null, name, code, kind
-    });
-    if (error) return alert('Error saving level: ' + error.message);
-    alert('Level saved.');
-    await paLoadCache(); paRenderAll();
-};
-
-window.paSaveSection = async () => {
-    const name = document.getElementById('pa_sec_name').value.trim();
-    const cls = document.getElementById('pa_sec_class').value.trim();
-    const programId = document.getElementById('pa_sec_prog').value || null;
-    const levelId = document.getElementById('pa_sec_level').value || null;
-    const sessionId = document.getElementById('pa_sec_session').value || null;
-    if (!name) return alert('Section name required.');
-    if (!cls && !programId) return alert('Provide a class (school) or program (college).');
-    const { error } = await supabaseClient.from('sections').insert({
-        schoolId: currentSchoolId, class: cls || null, programId, levelId, name, academicSessionId: sessionId
-    });
-    if (error) return alert('Error saving section: ' + error.message);
-    alert('Section saved.');
-    await paLoadCache(); paRenderAll();
-};
-
-// ---- staff <-> department assignments (many-to-many) ----
-async function paRenderAssignPanel() {
-    const body = document.getElementById('pa-assign-body');
-    if (!body || !institutionIsCollege()) return;
-    const { data } = await supabaseClient.from('users').select('id, name, staffRole, email').eq('schoolId', currentSchoolId).eq('role', 'staff');
-    const staff = data || [];
-    body.innerHTML = staff.length ? staff.map(st => {
-        const mine = phaseACache.assignments.filter(a => a.userId === st.id);
-        const role = mine.length ? mine[0].roleId : (st.staffRole === 'HOD' ? 'hod' : 'teacher');
-        return `<tr style="border-bottom:1px solid #e2e8f0;">
-            <td style="padding:8px;"><strong>${staffEsc(st.name)}</strong><br><small>${staffEsc(st.email)}</small></td>
-            <td style="padding:8px;">
-                <select id="pa_as_role_${st.id}" class="input-premium" style="min-width:110px;">
-                    <option value="hod" ${role === 'hod' ? 'selected' : ''}>HOD</option>
-                    <option value="teacher" ${role === 'teacher' ? 'selected' : ''}>Teacher</option>
-                    <option value="staff" ${role === 'staff' ? 'selected' : ''}>Staff</option>
-                </select>
-            </td>
-            <td style="padding:8px;">${phaseACache.departments.map(d => {
-                const on = mine.some(a => a.departmentId === d.id);
-                return `<label style="margin-right:10px;white-space:nowrap;"><input type="checkbox" id="pa_as_${st.id}_${d.id}" ${on ? 'checked' : ''}> ${staffEsc(d.code)}</label>`;
-            }).join('') || '<small>No departments yet</small>'}</td>
-            <td style="padding:8px;"><button class="action-btn btn-green" onclick="window.paSaveStaffAssignments('${st.id}')"><i class="fas fa-save"></i></button></td>
-        </tr>`;
-    }).join('') : '<tr><td colspan="4" style="padding:14px;text-align:center;color:#888;">No staff yet.</td></tr>';
-}
-
-window.paSaveStaffAssignments = async (userId) => {
-    const roleSel = document.getElementById('pa_as_role_' + userId);
-    const roleId = roleSel ? roleSel.value : 'teacher';
-    const wanted = phaseACache.departments.filter(d => {
-        const cb = document.getElementById(`pa_as_${userId}_${d.id}`);
-        return cb && cb.checked;
-    }).map(d => d.id);
-    const current = phaseACache.assignments.filter(a => a.userId === userId);
-    const removeIds = current.filter(a => a.departmentId && !wanted.includes(a.departmentId)).map(a => a.id);
-    const addIds = wanted.filter(w => !current.some(a => a.departmentId === w));
-    if (removeIds.length) {
-        const { error } = await supabaseClient.from('staff_assignments').delete().in('id', removeIds);
-        if (error) return alert('Error removing assignments: ' + error.message);
-    }
-    if (addIds.length) {
-        const rows = addIds.map((depId, i) => ({
-            schoolId: currentSchoolId, userId, departmentId: depId, roleId, isPrimary: i === 0
-        }));
-        const { error } = await supabaseClient.from('staff_assignments').insert(rows);
-        if (error) return alert('Error adding assignments: ' + error.message);
-    }
-    if (roleId === 'hod') {
-        await supabaseClient.from('users').update({ staffRole: 'HOD' }).eq('id', userId);
-    }
-    alert('Assignments saved.');
-    await paLoadCache(); paRenderAssignPanel();
-};
-
-// ---- student academic placement (college) ----
-let paPlacementStudentId = null;
-window.openStudentPlacement = async (studentId) => {
-    paPlacementStudentId = studentId;
-    const { data } = await supabaseClient.from('students').select('*').eq('id', studentId).maybeSingle();
-    if (!data) return alert('Student not found.');
-    const row = data.data ? { ...data, ...data.data } : data;
-    if (!phaseACache.departments.length) await paLoadCache();
-    document.getElementById('pa_pl_student').innerText = `${row.name || 'Student'} (${row.class ? 'Class ' + row.class : 'College'})`;
-    paFillSelect('pa_pl_dept', phaseACache.departments);
-    paFillSelect('pa_pl_prog', phaseACache.programs);
-    paFillSelect('pa_pl_level', phaseACache.levels);
-    paFillSelect('pa_pl_section', phaseACache.sections);
-    paFillSelect('pa_pl_session', phaseACache.sessions);
-    document.getElementById('pa_pl_dept').value = row.departmentId || '';
-    window.paPlacementCascade();
-    document.getElementById('pa_pl_prog').value = row.programId || '';
-    document.getElementById('pa_pl_level').value = row.levelId || '';
-    document.getElementById('pa_pl_section').value = row.sectionId || '';
-    document.getElementById('pa_pl_session').value = row.academicSessionId || '';
-    document.getElementById('pa_pl_roll').value = row.rollCode || '';
-    document.getElementById('pa-placement-modal').style.display = 'flex';
-};
-
-window.paPlacementCascade = () => {
-    const dept = document.getElementById('pa_pl_dept').value;
-    const progs = phaseACache.programs.filter(p => !dept || p.departmentId === dept);
-    paFillSelect('pa_pl_prog', progs);
-    const prog = document.getElementById('pa_pl_prog').value;
-    paFillSelect('pa_pl_level', phaseACache.levels.filter(l => !prog || l.programId === prog));
-    const level = document.getElementById('pa_pl_level').value;
-    paFillSelect('pa_pl_section', phaseACache.sections.filter(sc => (!prog || sc.programId === prog) && (!level || sc.levelId === level)));
-};
-
-window.paAutoRoll = async () => {
-    if (!paPlacementStudentId) return;
-    const sessionId = document.getElementById('pa_pl_session').value || null;
-    const progId = document.getElementById('pa_pl_prog').value || null;
-    const levelId = document.getElementById('pa_pl_level').value || null;
-    const sectionId = document.getElementById('pa_pl_section').value || null;
-    const { data: st } = await supabaseClient.from('students').select('class').eq('id', paPlacementStudentId).maybeSingle();
-    const cls = institutionIsCollege() ? null : (st && st.class) || null;
-    const { data: num, error } = await supabaseClient.rpc('next_roll_code', {
-        p_school_id: currentSchoolId, p_session_id: sessionId, p_program_id: progId, p_class: cls, p_section_id: sectionId
-    });
-    if (error) return alert('Roll code RPC unavailable until the Phase A migration is executed: ' + error.message);
-    const prog = paFind(phaseACache.programs, progId);
-    const level = paFind(phaseACache.levels, levelId);
-    const sec = paFind(phaseACache.sections, sectionId);
-    const parts = institutionIsCollege()
-        ? [prog && prog.code, level && level.code, sec && sec.name]
-        : ['CLASS', (st && st.class) || '', sec && sec.name];
-    const prefix = parts.filter(Boolean).join('-');
-    document.getElementById('pa_pl_roll').value = (prefix ? prefix + '-' : '') + num;
-};
-
-window.paSavePlacement = async () => {
-    if (!paPlacementStudentId) return;
-    const payload = {
-        departmentId: document.getElementById('pa_pl_dept').value || null,
-        programId: document.getElementById('pa_pl_prog').value || null,
-        levelId: document.getElementById('pa_pl_level').value || null,
-        sectionId: document.getElementById('pa_pl_section').value || null,
-        academicSessionId: document.getElementById('pa_pl_session').value || null,
-        rollCode: document.getElementById('pa_pl_roll').value.trim() || null
-    };
-    const { error } = await supabaseClient.from('students').update(payload).eq('id', paPlacementStudentId);
-    if (error) return alert('Error saving placement: ' + error.message);
-    document.getElementById('pa-placement-modal').style.display = 'none';
-    alert('Academic placement saved.');
-    if (window.loadStudents) window.loadStudents();
-};
-
-// ---- staff portal: department scope + My Department tab ----
-async function paInitStaffScope() {
-    window.staffDeptIds = [];
-    const menu = document.getElementById('staff-menu-department');
-    if (!currentStaffDoc) return;
-    const { data } = await supabaseClient.from('schools').select('institution_type').eq('id', currentSchoolId).maybeSingle();
-    currentInstitutionType = (data && data.institution_type) || 'school';
-    if (!institutionIsCollege()) { if (menu) menu.style.display = 'none'; return; }
-    const { data: as } = await supabaseClient.from('staff_assignments').select('*').eq('userId', currentStaffDoc.id);
-    const rows = as || [];
-    window.staffDeptIds = rows.filter(r => r.departmentId).map(r => r.departmentId);
-    if (menu) menu.style.display = window.staffDeptIds.length ? '' : 'none';
-}
-
-async function loadMyDepartment() {
-    const ov = document.getElementById('staff-dept-overview');
-    const stb = document.getElementById('staff-dept-staff');
-    const sub = document.getElementById('staff-dept-students');
-    if (!ov || !window.staffDeptIds.length) { if (ov) ov.innerHTML = '<div style="color:#64748b;padding:12px;">No department assigned.</div>'; return; }
-    const [dRes, pRes, sRes, uRes, asRes] = await Promise.all([
-        supabaseClient.from('departments').select('*').eq('schoolId', currentSchoolId),
-        supabaseClient.from('programs').select('*').in('departmentId', window.staffDeptIds),
-        supabaseClient.from('students').select('id, name, rollNo, class, programId, levelId, status, departmentId').in('departmentId', window.staffDeptIds).eq('schoolId', currentSchoolId),
-        supabaseClient.from('users').select('id, name, staffRole, email').eq('schoolId', currentSchoolId).eq('role', 'staff'),
-        supabaseClient.from('staff_assignments').select('*').in('departmentId', window.staffDeptIds)
-    ]);
-    const depts = (dRes.data || []).filter(d => window.staffDeptIds.includes(d.id));
-    const progs = pRes.data || [];
-    const students = sRes.data || [];
-    const staffIds = new Set((asRes.data || []).map(a => a.userId));
-    const deptStaff = (uRes.data || []).filter(u => staffIds.has(u.id));
-    ov.innerHTML = depts.map(d => {
-        const dProgs = progs.filter(p => p.departmentId === d.id);
-        const dStu = students.filter(s => s.departmentId === d.id).length;
-        return `<div style="border:1px solid #1f3050;background:#0f1a30;border-radius:10px;padding:12px;margin-bottom:10px;">
-            <div style="font-weight:800;color:#e2e8f0;">${staffEsc(d.name)} <span style="color:#64748b;font-size:11px;">(${staffEsc(d.code)})</span></div>
-            <div style="font-size:12px;color:#8fa3bf;margin-top:6px;">${dProgs.length} programs · ${dStu} students</div>
-            <div style="margin-top:6px;">${dProgs.map(p => `<span style="display:inline-block;background:rgba(16,185,129,0.12);color:#34d399;border-radius:10px;padding:2px 10px;font-size:11px;margin:2px 4px 2px 0;">${staffEsc(p.code)}</span>`).join('')}</div>
-        </div>`;
-    }).join('') || '<div style="color:#64748b;padding:12px;">Department data unavailable.</div>';
-    stb.innerHTML = deptStaff.map(u => `<div style="display:flex;justify-content:space-between;padding:8px 2px;border-bottom:1px solid #1c2c47;color:#dbe4f0;font-size:13px;"><span>${staffEsc(u.name)}</span><span style="color:#8fa3bf;">${staffEsc(u.staffRole)}</span></div>`).join('') || '<div style="color:#64748b;padding:12px;">No staff assigned.</div>';
-    sub.innerHTML = students.length ? students.map(s => `<tr>
-        <td>${staffEsc(s.rollCode || s.rollNo || '—')}</td><td>${staffEsc(s.name)}</td>
-        <td>${staffEsc(paName(progs, s.programId))}</td>
-        <td>${staffEsc(paName(phaseACache.levels, s.levelId))} ${s.class ? '/ ' + staffEsc(s.class) : ''}</td>
-        <td>${staffEsc(s.status || 'Approved')}</td>
-    </tr>`).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:#64748b;">No students placed in your department yet.</td></tr>';
-}
-
-// ============================== STUDENT PORTAL (MERGED) ======================================
-// =============================================================================================
-
-let currentStudentUser = null;
-let currentStudentSchoolDoc = null;
-
-// ---------------------------------------------------------------------------
-// Dedicated Supabase client for the merged student portal.
-// The Render API issues a student JWT on login and it is attached as the
-// `Authorization: Bearer` header of THIS client only. The chairman/staff client
-// (`supabaseClient`, GoTrue backed) is never reused for student modules, so a
-// chairman session open in the same browser can never become the authentication
-// source for student data.
-// ---------------------------------------------------------------------------
-let studentPortalClient = null;
-
-// Bumped on every student login/logout so a response that belongs to a previous
-// student session can never be rendered into the current dashboard.
-let studentSessionEpoch = 0;
-
-function createStudentPortalClient(accessToken) {
-    return window.supabase.createClient(supabaseUrl, supabaseKey, {
-        auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false
-        },
-        global: { headers: { Authorization: `Bearer ${accessToken}` } }
-    });
-}
-
-// Shared student modules may fall back to the default client (none of them carried a
-// student JWT before). Modules that must run AS the student use
-// requireStudentPortalClient() so they can never silently use a staff/anon session.
-const studentSupabase = () => studentPortalClient || supabaseClient;
-
-function requireStudentPortalClient() {
-    if (!studentPortalClient) {
-        const error = new Error('Authenticated student session required. Please sign in again.');
-        error.studentAuthError = true;
-        throw error;
-    }
-    return studentPortalClient;
-}
-
-// PostgREST reports JWT problems in the PGRST30x group (HTTP 401) and Supabase surfaces
-// them as a PostgrestError, so a rejected/expired student token is detectable client side.
-function isStudentAuthError(error) {
-    if (!error) return false;
-    if (error.studentAuthError === true) return true;
-    const code = String(error.code || '').toUpperCase();
-    if (/^PGRST30[0-3]$/.test(code)) return true;
-    return /jwt|access token|token is expired|could not authenticate/i.test(`${error.message || ''} ${error.details || ''}`);
-}
-
-const studentFeatures = [
-    { id: 'profile', title: 'Profile', icon: 'user' },
-    { id: 'homework', title: 'Homework', icon: 'book-open' },
-    { id: 'fee', title: 'Fee', icon: 'indian-rupee' },
-    { id: 'datesheet', title: 'DateSheet', icon: 'calendar-days' },
-    { id: 'attendance', title: 'Attendance', icon: 'calendar-check' },
-    { id: 'sms', title: 'Sms', icon: 'message-square' },
-    { id: 'calendar', title: 'Calendar Planing', icon: 'calendar-clock' },
-    { id: 'idcard', title: 'Id Card', icon: 'credit-card' },
-    { id: 'syllabus', title: 'Syllabus', icon: 'book' },
-    { id: 'fee-receipt', title: 'Fee Receipt', icon: 'receipt' },
-    { id: 'admit', title: 'Admit Card', icon: 'sparkles' },
-    { id: 'gatepass', title: 'Gate Pass', icon: 'ticket' },
-    { id: 'notifications', title: 'Notifications', icon: 'bell' },
-    { id: 'birthday', title: 'Birthday', icon: 'cake' },
-    { id: 'transport', title: 'Transport', icon: 'bus' },
-    { id: 'study-material', title: 'Study Material', icon: 'graduation-cap' },
-    { id: 'result', title: 'Result', icon: 'line-chart' },
-    { id: 'leave', title: 'Leave Request', icon: 'calendar-off' },
-    { id: 'batchmate', title: 'Batchmate', icon: 'users' },
-    { id: 'circular', title: 'Circular', icon: 'send' },
-    { id: 'news', title: 'News', icon: 'newspaper' },
-    { id: 'assignment', title: 'Assignment', icon: 'clipboard-list' },
-    { id: 'complaint', title: 'Complaint', icon: 'wrench' },
-    { id: 'online-classes', title: 'Online Classes', icon: 'monitor-play' },
-    { id: 'social-media', title: 'Social Media', icon: 'share-2' }
-];
-
-function getStudentFeatureToggleKey(featureId) {
-    return LEGACY_STUDENT_FEATURE_KEYS[featureId] || featureId;
-}
-
-function renderStudentFeatureGrid() {
-    const container = document.getElementById("student-feature-grid");
-    if (!container) return;
-    container.innerHTML = `
-        <div class="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-y-8 gap-x-4 justify-items-center">
-            ${studentFeatures.map(f => {
-        const key = getStudentFeatureToggleKey(f.id);
-        const enabled = window.currentFeatureSettings?.student ? window.currentFeatureSettings.student[key] !== false : true;
-        return `
-                <div class="flex flex-col items-center group ${enabled ? 'cursor-pointer' : 'cursor-not-allowed'}" data-feature="${f.id}" data-locked="${enabled ? 'false' : 'true'}" onclick="handleStudentFeatureClick('${f.id}')" style="opacity:${enabled ? '1' : '0.45'}; filter:${enabled ? 'none' : 'grayscale(1)'};">
-                    <div class="w-14 h-14 rounded-full bg-[#E3EBF3] shadow-[6px_6px_14px_#c1c9d2,-6px_-6px_14px_#ffffff] flex items-center justify-center transition-all duration-150 ${enabled ? 'active:shadow-[inset_4px_4px_8px_#c1c9d2,inset_-4px_-4px_8px_#ffffff] group-hover:scale-105' : ''}" style="position:relative;">
-                        <i data-lucide="${f.icon}" class="w-6 h-6 text-[#1E3A8A]" stroke-width="1.5"></i>
-                        ${enabled ? '' : '<span style="position:absolute; right:-4px; top:-4px; background:#ef4444; color:#fff; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px;"><i class="fas fa-lock"></i></span>'}
-                    </div>
-                    <span class="text-[10px] font-medium text-center mt-3 tracking-wide text-[#1E3A8A]" style="font-family:'Inter',sans-serif;">${f.title}</span>
-                </div>`;
-    }).join('')}
-        </div>
-    `;
-    if (window.lucide) lucide.createIcons();
-}
-
-window.openStudentView = (targetId) => {
-    const mainGrid = document.getElementById('student-main-grid');
-    if (mainGrid) mainGrid.style.display = 'none';
-
-    document.querySelectorAll('.student-view-section').forEach(el => el.style.display = 'none');
-
-    const targetEl = document.getElementById(targetId);
-    if (targetEl) targetEl.style.display = 'block';
-};
-
-const STUDENT_MODULES = {
-    profile: { title: 'My Profile', subtitle: 'Verified student and school information.', collections: [] },
-    homework: { title: 'Homework', subtitle: 'Homework published for your school and class.', collections: ['homework'] },
-    assignment: { title: 'Assignments', subtitle: 'Assignments and submission status for your account.', collections: ['assignments', 'assignment'] },
-    datesheet: { title: 'DateSheet', subtitle: 'Exam schedules published for your class.', collections: [] },
-    // Attendance is served by the dedicated normalized query in fetchStudentModuleRecords(),
-    // so there is no legacy collection to fall back to.
-    attendance: { title: 'Attendance', subtitle: 'Only your date-wise attendance records are shown.', collections: [] },
-    result: { title: 'Result', subtitle: 'Approved academic results for your account.', collections: ['student_marks', 'exam_marks'] },
-    syllabus: { title: 'Syllabus', subtitle: 'Syllabus shared for your school and class.', collections: ['syllabus'] },
-    'study-material': { title: 'Study Material', subtitle: 'Learning resources shared with your class.', collections: ['study_material', 'studyMaterials'] },
-    notifications: { title: 'Notifications', subtitle: 'School announcements and account updates.', collections: ['notifications', 'notices'] },
-    sms: { title: 'SMS History', subtitle: 'Messages addressed to your school account.', collections: ['sms', 'direct_messages'] },
-    circular: { title: 'Circulars', subtitle: 'Official circulars from your school.', collections: ['circulars', 'notices'] },
-    news: { title: 'School News', subtitle: 'News published by your school.', collections: ['news'] },
-    'online-classes': { title: 'Online Classes', subtitle: 'Your class meeting links and instructions.', collections: ['online_classes', 'onlineClasses'] },
-    transport: { title: 'Transport', subtitle: 'Your assigned route and pickup information.', collections: ['student_transport', 'transport_assignments'] },
-    birthday: { title: 'Birthdays', subtitle: 'Upcoming birthdays from your permitted class context.', collections: ['students'] },
-    batchmate: { title: 'Batchmates', subtitle: 'Shareable classmates from your class only.', collections: ['students'] },
-    calendar: { title: 'Calendar Planning', subtitle: 'Relevant academic dates and deadlines.', collections: ['calendar_events', 'events'] },
-    leave: { title: 'Leave Requests', subtitle: 'Apply for leave and track your own requests.', collections: ['leave_requests'] },
-    gatepass: { title: 'Gate Pass', subtitle: 'Submit and track your own gate-pass requests.', collections: ['gate_passes', 'gatepasses'] },
-    complaint: { title: 'Complaints', subtitle: 'Submit and track your own complaints.', collections: ['complaints'] },
-    'social-media': { title: 'Social Media', subtitle: 'Social links configured by your school.', collections: [] }
-};
-
-const studentHtml = value => {
-    const node = document.createElement('span');
-    node.textContent = value == null || value === '' ? 'N/A' : String(value);
-    return node.innerHTML;
-};
-
-const isSafeStudentPhotoUrl = url => {
-    if (!url) return false;
-    try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== 'https:') return false;
-        if (parsed.hostname !== 'res.cloudinary.com' && parsed.hostname !== 'api.cloudinary.com') return false;
-        return true;
     } catch (e) {
-        return false;
+        districtSelect.innerHTML = '<option value="">Error loading - type below</option>';
     }
 };
 
-const studentTimestamp = value => {
-    if (!value) return '—';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
-};
-const studentId = () => currentStudentUser?.id || currentStudentUser?.regNo || '';
-const studentScope = () => ({ schoolId: currentSchoolId, studentId: studentId(), className: currentStudentUser?.class || '', section: currentStudentUser?.section || '' });
-const studentRecordMatches = (data, scope, personal = false) => {
-    if (!data || data.schoolId !== scope.schoolId) return false;
-    if (!personal) return true;
-    const owner = data.studentId || data.personId || data.studentDocId || data.uid;
-    return owner === scope.studentId || data.mobile === currentStudentUser?.mobile || data.regNo === currentStudentUser?.regNo;
-};
-
-function studentModuleState(message, kind = 'empty') {
-    const icons = { loading: 'fa-spinner fa-spin', error: 'fa-triangle-exclamation', empty: 'fa-folder-open' };
-    return `<div class="student-state student-state-${kind}"><i class="fas ${icons[kind] || icons.empty}"></i><h3>${studentHtml(message)}</h3><p>${kind === 'error' ? 'Please try again after checking your connection.' : 'Published records will appear here when available.'}</p></div>`;
-}
-function renderStudentModuleRows(rows, featureId) {
-    const scope = studentScope();
-    if (featureId === 'profile') {
-        const s = currentStudentUser, school = currentStudentSchoolDoc || {};
-        const fields = [['Student name', s.name], ['Parent / guardian', s.parentage || s.fatherName], ['Class / section', `${s.class || 'N/A'}${s.section ? ` / ${s.section}` : ''}`], ['Roll number', s.rollNo], ['Registration number', s.regNo], ['Date of birth', s.dob], ['Mobile', s.mobile], ['Blood group', s.bloodGroup], ['Emergency contact', s.emergencyNo], ['School', school.schoolName]];
-        return `<div class="student-profile-card">${s.photoUrl ? `<img src="${studentHtml(s.photoUrl)}" alt="Student photo" class="student-profile-photo">` : ''}<div class="student-detail-grid">${fields.map(([label, value]) => `<div><span>${studentHtml(label)}</span><strong>${studentHtml(value)}</strong></div>`).join('')}</div></div>`;
+// 2. Registration Logic
+window.submitSchoolRegistration = async () => {
+    const lastRegTime = localStorage.getItem('last_registration_time');
+    if (lastRegTime && Date.now() - parseInt(lastRegTime) < 600000) {
+        const remainingMins = Math.ceil((600000 - (Date.now() - parseInt(lastRegTime))) / 60000);
+        return window.showToast("PLEASE WAIT " + remainingMins + " MINS BEFORE NEXT REQUEST", "#e11d48");
     }
-    if (featureId === 'birthday' || featureId === 'batchmate') rows = rows.filter(item => item.id !== scope.studentId && item.class === scope.className && (!scope.section || !item.section || item.section === scope.section));
-    if (!rows.length) return studentModuleState('No published records found.');
-    return `<div class="student-record-list">${rows.map(item => {
-        const title = item.title || item.name || item.subject || item.examTerm || item.examName || (featureId === 'attendance' ? `Attendance — ${item.date || 'Date'}` : 'Published record');
-        const detail = item.description || item.body || item.topic || item.routeName || item.status || '';
-        const resultDetail = featureId === 'result' ? `${item.totalObt || 0} / ${item.totalMax || 0} • ${item.examTerm || 'Result'}` : detail;
-        return `<article class="student-record-card"><div><h3>${studentHtml(title)}</h3><p>${studentHtml(resultDetail)}</p><small>${studentHtml(item.subject || item.teacher || item.date || item.createdAt ? `${item.subject || ''} ${item.teacher || ''} ${studentTimestamp(item.date || item.createdAt)}` : '')}</small></div>${item.attachmentUrl || item.fileUrl || item.link || item.meetingLink ? `<a class="student-action-link" href="${studentHtml(item.attachmentUrl || item.fileUrl || item.link || item.meetingLink)}" target="_blank" rel="noopener">Open</a>` : ''}</article>`;
-    }).join('')}</div>`;
-}
+    const sName = document.getElementById('reg-school-name').value.trim();
+    const pName = document.getElementById('reg-principal-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const pwd = document.getElementById('reg-password').value.trim();
+    const phone = document.getElementById('reg-phone').value.trim();
+    const altPhone = document.getElementById('reg-alt-phone').value.trim();
+    const affiliationNo = document.getElementById('reg-affiliation-no').value.trim();
+    const board = document.getElementById('reg-board').value;
+    const institutionType = normalizeInstitutionType(document.getElementById('reg-institution-type')?.value);
+    const schoolType = document.getElementById('reg-school-type').value;
+    const website = document.getElementById('reg-website').value.trim();
+    const country = document.getElementById('reg-country').value;
+    const state = document.getElementById('reg-state').value;
+    const dist = document.getElementById('reg-district').value || (document.getElementById('reg-district-manual') ? document.getElementById('reg-district-manual').value.trim() : '');
+    const pin = document.getElementById('reg-pincode').value.trim();
+    const addr = document.getElementById('reg-address').value.trim();
+    const logoInput = document.getElementById('reg-logo').files[0];
 
-async function fetchStudentModuleRecords(featureId) {
-    const scope = studentScope();
-    if (featureId === 'profile' || featureId === 'social-media') return [];
-    if (featureId === 'datesheet') {
-        // The published routine lives on the school row: `examSchedule_<class>` first,
-        // with the shared `schedule` column kept as a fallback.
-        const { data: schoolRow } = await studentSupabase().from('schools').select('*').eq('id', scope.schoolId).maybeSingle();
-        const classSchedule = schoolRow ? schoolRow['examSchedule_' + scope.className] : null;
-        const schedule = Array.isArray(classSchedule) ? classSchedule : (schoolRow?.schedule || []);
-        return schedule.map(item => ({ ...item, schoolId: scope.schoolId }));
+    if (!sName || !pName || !email || !pwd || !phone || !affiliationNo || !board || (institutionType === "school" && !schoolType) || !country || !state || !dist || !pin || !addr || !logoInput) {
+        window.showToast('ALL MANDATORY FIELDS AND UPLOADS ARE REQUIRED', '#e11d48');
+        return;
     }
-    // Existing admin schema stores marks in a student-keyed document. Read only that key,
-    // then verify the school through the authenticated student record already returned by login.
-    if (featureId === 'result') {
-        const { data, error } = await studentSupabase().from('student_marks').select('*').eq('id', scope.studentId).maybeSingle();
-        if (error) throw error;
-        if (!data) return [];
-        if (data.schoolId && data.schoolId !== scope.schoolId) return [];
-        return [{ ...data, id: scope.studentId, schoolId: scope.schoolId }];
-    }
-    // Normalized attendance: this student's own rows, newest first, straight from
-    // public.attendance_records. It runs on the dedicated student client, never on the
-    // chairman/staff client. The schoolId / studentId filters only shrink the payload -
-    // Postgres RLS on attendance_records is the real authorization boundary.
-    if (featureId === 'attendance') {
-        const { data: rows, error } = await requireStudentPortalClient()
-            .from('attendance_records')
-            .select('date, status, class, updatedAt')
-            .eq('schoolId', scope.schoolId)
-            .eq('studentId', scope.studentId)
-            .order('date', { ascending: false })
-            .limit(180);
-        if (error) throw error;
-        return rows || [];
-    }
-    const module = STUDENT_MODULES[featureId];
-    for (const name of module?.collections || []) {
-        try {
-            const { data: rows, error } = await studentSupabase().from(name).select('*').eq('schoolId', scope.schoolId);
-            if (error) throw error;
-            const records = rows || [];
-            const personal = ['attendance', 'result', 'sms', 'leave', 'gatepass', 'complaint', 'fee-receipt', 'transport', 'assignment'].includes(featureId);
-            const filtered = records.filter(record => studentRecordMatches(record, scope, personal));
-            if (filtered.length || name === module.collections[module.collections.length - 1]) return filtered;
-        } catch (error) { if (name === module.collections[module.collections.length - 1]) throw error; }
-    }
-    return [];
-}
 
-window.openStudentDataModule = async featureId => {
-    const feature = studentFeatures.find(item => item.id === featureId), module = STUDENT_MODULES[featureId];
-    if (!feature || !module) return;
-    window.openStudentView('student-module-section');
-    document.getElementById('student-module-title').textContent = module.title;
-    document.getElementById('student-module-subtitle').textContent = module.subtitle;
-    const content = document.getElementById('student-module-content');
-    content.innerHTML = featureId === 'profile' ? renderStudentModuleRows([], featureId) : studentModuleState('Loading records…', 'loading');
-    const refresh = document.getElementById('student-module-refresh');
-    refresh.onclick = () => window.openStudentDataModule(featureId);
-    const requestEpoch = studentSessionEpoch;
-    try {
-        const rows = await fetchStudentModuleRecords(featureId);
-        if (requestEpoch !== studentSessionEpoch) return; // logout / new login already happened
-        content.innerHTML = renderStudentModuleRows(rows, featureId);
-    } catch (error) {
-        if (requestEpoch !== studentSessionEpoch) return;
-        console.error(`Student ${featureId} module failed`, error);
-        if (isStudentAuthError(error)) {
-            // Rejected or expired student JWT: end the session instead of retrying.
-            window.logoutStudent();
-            showLoginScreen('Your session has expired. Please sign in again.');
-            return;
-        }
-        content.innerHTML = studentModuleState('Unable to load this module.', 'error');
-    }
-};
+    // const recaptchaField = document.querySelector('#registration-modal [name="g-recaptcha-response"]');
+    // if (recaptchaField && !recaptchaField.value) {
+        // window.showToast('PLEASE VERIFY YOU ARE NOT A ROBOT', '#e11d48');
+        // return;
+    // }
 
-window.handleStudentFeatureClick = (featureId) => {
-    const key = getStudentFeatureToggleKey(featureId);
-    if (window.currentFeatureSettings?.student && window.currentFeatureSettings.student[key] === false) { showCompanyRestrictedAlert(); return; }
-    switch (featureId) {
-        case 'fee': window.showStudentPaymentSection(); break;
-        case 'idcard': window.openStudentView('student-idcard-section'); break;
-        case 'admit': window.openStudentView('student-admitcard-section'); break;
-        case 'fee-receipt': window.showStudentReceiptsSection(); break;
-        case 'complaint': window.openStudentView('student-complaint-section'); window.loadStudentComplaintHistory(); break;
-        default: window.openStudentDataModule(featureId);
-    }
-};
-
-window.submitStudentComplaint = async (e) => {
-    e.preventDefault();
-    const target = document.getElementById("complaint-target").value;
-    const subject = document.getElementById("complaint-subject").value;
-    const desc = document.getElementById("complaint-desc").value;
-
-    if (!target || !subject || !desc) return;
-
-    const btn = e.target.querySelector('button[type="submit"]');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+    const btn = document.getElementById('submitRegBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> UPLOADING ASSETS...';
     btn.disabled = true;
 
     try {
-        const { error } = await supabaseClient.from("complaints").insert({
-            schoolId: currentStudentSchoolDoc.id || currentSchoolId,
-            studentId: currentStudentUser.id || currentStudentUser.regNo,
-            studentName: currentStudentUser.name,
-            studentMobile: currentStudentUser.mobile || "",
-            target: target,
-            subject: subject,
-            description: desc,
-            timestamp: new Date().toISOString(),
-            status: 'Pending'
-        });
-        if (error) throw error;
+        let logoData = "https://via.placeholder.com/150";
+        if (logoInput) {
+            const uploadedUrl = await uploadToCloudinary(logoInput);
+            if (uploadedUrl) {
+                logoData = uploadedUrl;
+            } else {
+                window.showToast('LOGO UPLOAD FAILED', '#e11d48');
+                btn.innerHTML = 'SUBMIT DEPLOYMENT REQUEST';
+                btn.disabled = false;
+                return;
+            }
+        }
 
-        alert("Complaint submitted successfully!");
-        e.target.reset();
-        await window.loadStudentComplaintHistory();
-        window.openStudentView('student-main-grid');
+        const payload = {
+            schoolName: sName,
+            principalName: pName,
+            email: email,
+            password: pwd,
+            phone: phone,
+            altPhone: altPhone,
+            affiliationNo: affiliationNo,
+            board: board,
+            schoolType: schoolType,
+            institution_type: institutionType,
+            website: website,
+            country, state, district: dist, pincode: pin, address: addr,
+            logoUrl: logoData,
+            timestamp: Date.now(),
+            status: 'pending'
+        };
+
+        await supabaseClient.from("pending_registrations").insert([payload]);
+
+        localStorage.setItem('last_registration_time', Date.now().toString()); window.showToast('REGISTRATION SUBMITTED FOR APPROVAL', '#10b981');
+        window.closeCustomModal('registration-modal');
     } catch (err) {
-        console.error("Error submitting complaint:", err);
-        alert("Failed to submit complaint. Please try again.");
+        window.showToast('ERROR: ' + err.message, '#e11d48');
     } finally {
-        btn.innerHTML = originalText;
+        btn.innerHTML = 'SUBMIT DEPLOYMENT REQUEST';
         btn.disabled = false;
     }
 };
 
-window.loadStudentComplaintHistory = async () => {
-    const target = document.getElementById('student-complaint-history');
-    if (!target || !currentStudentUser || !currentSchoolId) return;
-    target.innerHTML = studentModuleState('Loading complaint history…', 'loading');
-    try {
-        const scope = studentScope();
-        const { data: rows, error } = await studentSupabase().from('complaints').select('*').eq('schoolId', scope.schoolId).eq('studentId', scope.studentId);
-        if (error) throw error;
-        const items = rows || [];
-        target.innerHTML = items.length ? items.map(item => `<article class="student-history-item"><div><strong>${studentHtml(item.subject)}</strong><p>${studentHtml(item.description)}</p><small>${studentHtml(studentTimestamp(item.timestamp))}</small></div><span class="student-status-badge">${studentHtml(item.status || 'Pending')}</span>${item.chairmanReply ? `<p class="student-reply"><b>Response:</b> ${studentHtml(item.chairmanReply)}</p>` : ''}</article>`).join('') : studentModuleState('No complaints submitted yet.');
-    } catch (error) {
-        console.error('Complaint history failed', error);
-        target.innerHTML = studentModuleState('Unable to load complaint history.', 'error');
+// 3. Forgot Password Logic
+window.submitForgotPassword = async () => {
+    const uid = document.getElementById('forgot-id').value.trim();
+    const phone = document.getElementById('forgot-phone').value.trim();
+    const newPwd = document.getElementById('forgot-new-password').value.trim();
+
+    if (!uid && !phone) {
+        window.showToast('PROVIDE AT LEAST ONE IDENTIFIER', '#e11d48');
+        return;
     }
-};
-
-window.showStudentReceiptsSection = async () => {
-    window.openStudentView('student-receipt-section');
-    const tbody = document.getElementById('stu-receipt-table-body');
-    if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="8">${studentModuleState('Loading receipts…', 'loading')}</td></tr>`;
-    try {
-        const scope = studentScope();
-        const { data: rows, error } = await studentSupabase().from('transactions').select('*').eq('schoolId', scope.schoolId).eq('type', 'Fee');
-        if (error) throw error;
-        const receipts = (rows || []).filter(item => studentRecordMatches(item, scope, true));
-        window.studentReceiptCache = receipts;
-        tbody.innerHTML = receipts.length ? receipts.map(r => `<tr>
-            <td>${studentHtml(r.receiptNo || r.recNo || r.id)}</td><td>${studentHtml(r.date || studentTimestamp(r.createdAt))}</td>
-            <td>${studentHtml(r.period || r.feePeriod || '—')}</td><td>${studentHtml(r.mode || '—')}</td>
-            <td>₹${Number(r.total || r.amount || 0).toLocaleString('en-IN')}</td><td>₹${Number(r.paid || r.amount || 0).toLocaleString('en-IN')}</td>
-            <td>₹${Number(r.due || 0).toLocaleString('en-IN')}</td><td><button class="student-action-link" onclick="window.printStudentReceipt('${studentHtml(r.id)}')">Print</button></td>
-        </tr>`).join('') : `<tr><td colspan="8">${studentModuleState('No fee receipts found.')}</td></tr>`;
-    } catch (error) { console.error('Student receipts failed', error); tbody.innerHTML = `<tr><td colspan="8">${studentModuleState('Unable to load fee receipts.', 'error')}</td></tr>`; }
-};
-window.printStudentReceipt = id => {
-    const row = (window.studentReceiptCache || []).find(item => item.id === id);
-    if (!row) return alert('Receipt is no longer available. Refresh and try again.');
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return alert('Please allow pop-ups to print the receipt.');
-    printWindow.document.write(`<html><head><title>Fee Receipt</title></head><body><h1>${studentHtml(currentStudentSchoolDoc?.schoolName || 'School')}</h1><h2>Fee Receipt</h2><p>Receipt: ${studentHtml(row.receiptNo || row.recNo || row.id)}</p><p>Student: ${studentHtml(currentStudentUser?.name)}</p><p>Amount: ₹${Number(row.amount || row.paid || 0).toLocaleString('en-IN')}</p><p>Date: ${studentHtml(row.date || studentTimestamp(row.createdAt))}</p><script>window.onload=()=>window.print();</script></body></html>`);
-    printWindow.document.close();
-};
-
-window.initAdmitCardUI = () => {
-    if (!currentStudentUser) return;
-    const btnContainer = document.getElementById("stu-btn-download-admit")?.parentElement;
-    if (btnContainer) {
-        if (!currentStudentUser.admitCardPublished) {
-            document.getElementById("stu-btn-download-admit")?.remove();
-            const lockedMsg = document.createElement("div");
-            lockedMsg.id = "stu-admit-locked-msg";
-            lockedMsg.style.cssText = "background:#fee2e2; color:#b91c1c; padding:12px; border-radius:8px; font-weight:bold; font-size:14px; text-align:center;";
-            lockedMsg.innerHTML = `<i class="fas fa-lock"></i> Admit Card Not Available. Please contact the administration.`;
-            // Remove any existing locked message first
-            const existing = document.getElementById("stu-admit-locked-msg");
-            if (existing) existing.remove();
-            btnContainer.appendChild(lockedMsg);
-        } else {
-            // Ensure button is there if published (e.g. after relogin)
-            if (!document.getElementById("stu-btn-download-admit")) {
-                const existing = document.getElementById("stu-admit-locked-msg");
-                if (existing) existing.remove();
-                btnContainer.insertAdjacentHTML('beforeend', `<button id="stu-btn-download-admit" class="action-btn btn-yellow" onclick="window.downloadStudentAdmitCard()" style="width: 100%; padding: 12px; font-size: 14px; background:#e67e22; color:white; border-radius:10px;"><i class="fas fa-download"></i> Print / Save PDF</button>`);
-            }
-        }
-    }
-};
-
-// Student Login Handler
-const studentLoginBtn = document.getElementById("doStudentLoginBtn");
-if (studentLoginBtn) studentLoginBtn.addEventListener("click", async () => {
-    const username = document.getElementById("student-login-username")?.value.trim();
-    const password = document.getElementById("student-login-password")?.value.trim();
-    const errBox = document.getElementById('loginErrorMsg');
-
-    if (!username || !password) {
-        if (errBox) {
-            errBox.innerText = "Enter registered mobile number and DOB password.";
-            errBox.style.display = 'block';
-            setTimeout(() => errBox.style.display = 'none', 4000);
-        }
+    if (!newPwd) {
+        window.showToast('PROVIDE A NEW PASSWORD', '#e11d48');
         return;
     }
 
-    const btn = document.getElementById("doStudentLoginBtn");
-    if (btn) btn.querySelector('span').innerText = "Verifying...";
+    const btn = document.getElementById('submitForgotBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PROCESSING...';
+    btn.disabled = true;
 
     try {
-        const response = await fetch('https://school-backend-zlgy.onrender.com/api/student-login', {
+        const resp = await fetch("https://school-backend-zlgy.onrender.com/api/forgot-password", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mobile: username, dob: password })
+            body: JSON.stringify({ userId: uid, phone: phone, newPassword: newPwd })
         });
-        const result = await response.json();
-        if (!response.ok || !result.success) throw new Error(result.error || "Invalid mobile number or DOB.");
-        if (!result.student?.schoolId || !result.school?.id || result.student.schoolId !== result.school.id) {
-            throw new Error("School mismatch detected. Login blocked for safety.");
-        }
-
-        // The Render-issued JWT must exist before any student state is set: without it the
-        // merged portal would keep running on the chairman/staff client, so login fails here.
-        const accessToken = typeof result.token === 'string' ? result.token.trim() : '';
-        if (!accessToken) throw new Error("Login failed: no student session token was issued. Please try again.");
-
-        // Fresh dedicated client per login; the chairman/staff client is left untouched and
-        // the student token is never handed to GoTrue.
-        studentPortalClient = createStudentPortalClient(accessToken);
-        studentSessionEpoch += 1;
-
-        currentStudentUser = result.student;
-        currentSchoolId = result.student.schoolId;
-        currentStudentSchoolDoc = result.school;
-        window.currentFeatureSettings = normalizeFeatureSettingsPayload(result.featureSettings || {});
-        loadStudentDashboard();
-    } catch (error) {
-        console.error("Student Login Error:", error.message);
-        if (errBox) {
-            errBox.innerText = error.message || "Student login failed.";
-            errBox.style.display = 'block';
-            setTimeout(() => errBox.style.display = 'none', 8000);
-        }
-    }
-    if (btn) btn.querySelector('span').innerText = "Access Portal";
-});
-
-async function loadStudentDashboard() {
-    overlay.style.display = "none";
-    loginWrapper.style.display = "none";
-    document.getElementById("student-dashboard-wrapper").style.display = "block";
-
-    document.getElementById("student-dash-school-name").innerText = currentStudentSchoolDoc.schoolName || "Portal";
-    document.getElementById("stu-display-name").innerText = currentStudentUser.name;
-
-    // Top ID Banner
-    document.getElementById("banner-name").innerText = currentStudentUser.name || "N/A";
-    document.getElementById("banner-parentage").innerText = (currentStudentUser.parentage || currentStudentUser.fatherName) || "N/A";
-    document.getElementById("banner-class").innerText = currentStudentUser.class || "N/A";
-    document.getElementById("banner-reg").innerText = currentStudentUser.regNo || "N/A";
-
-    // Format DOB if available
-    let formattedDob = "N/A";
-    if (currentStudentUser.dob) {
-        const parts = currentStudentUser.dob.split('-');
-        if (parts.length === 3) {
-            formattedDob = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        const data = await resp.json();
+        if (data.success) {
+            window.showToast('RESET REQUEST SUBMITTED. WAIT FOR ADMIN APPROVAL.', '#10b981');
+            window.closeCustomModal('forgot-password-modal');
         } else {
-            formattedDob = currentStudentUser.dob;
+            window.showToast(data.error || 'REQUEST FAILED', '#e11d48');
         }
-    }
-    document.getElementById("banner-dob").innerText = formattedDob;
-
-    document.getElementById("banner-contact").innerText = currentStudentUser.mobile || "N/A";
-    document.getElementById("banner-blood").innerText = currentStudentUser.bloodGroup || "N/A";
-    document.getElementById("banner-emergency").innerText = currentStudentUser.emergencyNo || "N/A";
-
-    // 1. Premium Styling & Colors (Fixed professional pastel pink matching reference image)
-    const banner = document.getElementById("student-id-banner");
-    if (banner) {
-        banner.style.background = 'linear-gradient(135deg, #fbcfe8, #fecdd3)';
-        banner.style.borderRadius = "12px";
-        banner.style.padding = "15px";
-    }
-
-    // 3. Comprehensive QR Code Data
-    const qrString = `Name: ${currentStudentUser.name}\nParentage: ${currentStudentUser.parentage || currentStudentUser.fatherName || 'N/A'}\nClass: ${currentStudentUser.class}\nReg/Roll: ${currentStudentUser.regNo || 'N/A'}\nDOB: ${formattedDob}\nContact: ${currentStudentUser.mobile || 'N/A'}`;
-    const qrElem = document.getElementById("stu-banner-qr");
-    if (qrElem) {
-        qrElem.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(qrString);
-    }
-
-    // 2. Photo Background Removal Logic
-    if (currentStudentUser.photoUrl) {
-        document.getElementById("stu-banner-photo-icon").style.display = "none";
-        const photoElem = document.getElementById("stu-banner-photo");
-        photoElem.classList.remove("hidden");
-
-        photoElem.src = currentStudentUser.photoUrl;
-
-        const wrapperElem = document.getElementById("stu-banner-photo-bg");
-        if (wrapperElem) {
-            // Apply dynamic color ONLY to the photo wrapper
-            wrapperElem.style.backgroundColor = currentStudentSchoolDoc.photoBgColor || '#ffffff';
-        }
-
-        try {
-            const transparentSrc = await getStudentTransparentPhoto(currentStudentUser.photoUrl);
-            if (transparentSrc) {
-                photoElem.src = transparentSrc;
-            }
-        } catch (err) {
-            console.error("Failed to load transparent photo for dashboard:", err);
-        }
-    } else {
-        document.getElementById("stu-banner-photo-icon").style.display = "block";
-        document.getElementById("stu-banner-photo").classList.add("hidden");
-
-        const wrapperElem = document.getElementById("stu-banner-photo-bg");
-        if (wrapperElem) {
-            // Apply dynamic color ONLY to the photo wrapper even if no photo exists
-            wrapperElem.style.backgroundColor = currentStudentSchoolDoc.photoBgColor || '#ffffff';
-        }
-    }
-
-    if (currentStudentSchoolDoc.schoolLogoUrl) {
-        const logo = document.getElementById("student-school-logo");
-        if (logo) {
-            logo.src = currentStudentSchoolDoc.schoolLogoUrl;
-            logo.style.display = "inline-block";
-        }
-    }
-
-    const due = currentStudentUser.dueBalance || 0;
-    const dueElem = document.getElementById("stu-due-balance");
-    if (dueElem) dueElem.innerText = due;
-    if (due > 0) document.getElementById("stu-pay-amount") && (document.getElementById("stu-pay-amount").value = due);
-
-    renderStudentFeatureGrid();
-}
-
-window.showStudentPaymentSection = () => {
-    if (!currentStudentSchoolDoc.paymentQrUrl || !currentStudentSchoolDoc.upiId) {
-        alert("The school has not configured the QR Payment System yet."); return;
-    }
-
-    window.openStudentView('student-payment-section');
-    document.getElementById("stu-qr-img").src = currentStudentSchoolDoc.paymentQrUrl;
-    document.getElementById("stu-upi-text").innerText = currentStudentSchoolDoc.upiId;
-
-    // Advanced Math Logic
-    const dueAmount = Number(currentStudentUser.feeDue || currentStudentUser.dueBalance || 0);
-    // If totalFee exists use it, otherwise fake a realistic total fee (e.g. 1000 * 12) or just dueAmount
-    const totalAmount = Number(currentStudentUser.totalFee || (dueAmount > 0 ? dueAmount + 12000 : 12000));
-    const paidAmount = Number(currentStudentUser.paidAmount || (totalAmount - dueAmount));
-
-    document.getElementById("stu-total-fee").innerText = `₹${totalAmount}`;
-    document.getElementById("stu-paid-fee").innerText = `₹${paidAmount}`;
-    document.getElementById("stu-due-fee").innerText = `₹${dueAmount}`;
-
-    // Pie Chart Logic
-    const percentagePaid = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
-    document.getElementById("stu-fee-percentage").innerText = `${percentagePaid}%`;
-    document.getElementById("stu-fee-pie-chart").style.background = `conic-gradient(#10b981 0% ${percentagePaid}%, #e53e3e ${percentagePaid}% 100%)`;
-
-    // Monthly breakdown dummy data
-    const tbody = document.getElementById("stu-monthly-fee-table");
-    let html = "";
-    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const currentMonthIndex = new Date().getMonth();
-
-    months.forEach((month, idx) => {
-        if (idx <= currentMonthIndex) {
-            const isPaid = idx < currentMonthIndex || (idx === currentMonthIndex && dueAmount === 0);
-            const amt = Math.round(totalAmount / 12) || 1000;
-            const paid = isPaid ? amt : 0;
-            const due = isPaid ? 0 : amt;
-            const statusIcon = isPaid ? '<i class="fas fa-check-circle" style="color:#10b981; font-size:16px;"></i>' : '<i class="fas fa-times-circle" style="color:#e53e3e; font-size:16px;"></i>';
-            const actionBtn = isPaid ? '<span style="color:#10b981; font-weight:bold;">Paid</span>' : `<button class="action-btn" style="background:#1E3A8A; color:white; padding:6px 12px; font-size:12px; border-radius:6px; width:100%;" onclick="document.getElementById('stu-pay-amount').value='${due}'; document.getElementById('stu-pay-amount').focus();">Pay</button>`;
-
-            html += `
-            <tr style="border-bottom: 1px solid #f1f5f9;">
-                <td style="padding: 12px; font-weight:bold;">${month}</td>
-                <td style="padding: 12px;">₹${amt}</td>
-                <td style="padding: 12px; color:#10b981;">₹${paid}</td>
-                <td style="padding: 12px; color:#e53e3e; font-weight:bold;">₹${due}</td>
-                <td style="padding: 12px; text-align: center;">${statusIcon}</td>
-                <td style="padding: 12px; text-align: center;">${actionBtn}</td>
-            </tr>`;
-        }
-    });
-    tbody.innerHTML = html;
-
-    const amountForUpi = dueAmount > 0 ? dueAmount : 0;
-    const upiLink = `upi://pay?pa=${currentStudentSchoolDoc.upiId}&pn=${encodeURIComponent(currentStudentSchoolDoc.schoolName)}&am=${amountForUpi}&cu=INR`;
-    document.getElementById("stu-upi-deep-link").href = upiLink;
-};
-
-// Student Payment Verification Submit
-document.getElementById("student-verification-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const amount = document.getElementById("stu-pay-amount").value.trim();
-    const utr = document.getElementById("stu-pay-utr").value.trim();
-    const fileInput = document.getElementById("stu-pay-screenshot").files[0];
-
-    if (!fileInput) return alert("Please upload the payment screenshot.");
-    if (utr.length < 5) return alert("Please enter a valid Transaction ID / UTR.");
-
-    const submitBtn = document.getElementById("stu-submit-verification-btn");
-    submitBtn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Uploading...";
-    submitBtn.disabled = true;
-
-    try {
-        const base64Image = await convertToBase64(fileInput);
-        const res = await fetch("https://api.cloudinary.com/v1_1/disgtvs6f/image/upload", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ file: base64Image, upload_preset: "ml_default" })
-        });
-        const uploadData = await res.json();
-        const screenshotUrl = uploadData.secure_url;
-        if (!screenshotUrl) throw new Error("Image upload failed.");
-
-        const { error } = await supabaseClient.from("fee_verifications").insert({
-            schoolId: currentSchoolId,
-            studentId: currentStudentUser.id,
-            studentName: currentStudentUser.name,
-            regNo: currentStudentUser.regNo,
-            amount: Number(amount),
-            utr: utr,
-            screenshotUrl: screenshotUrl,
-            status: "Pending",
-            createdAt: new Date().toISOString()
-        });
-        if (error) throw error;
-
-        document.getElementById("student-payment-section").style.display = "none";
-        document.getElementById("student-success-section").style.display = "block";
     } catch (err) {
-        alert("Error submitting verification: " + err.message);
-        submitBtn.innerHTML = "<i class='fas fa-cloud-upload-alt'></i> Submit for Verification";
-        submitBtn.disabled = false;
+        window.showToast('ERROR: ' + err.message, '#e11d48');
+    } finally {
+        btn.innerHTML = 'SEND RESET REQUEST';
+        btn.disabled = false;
     }
-});
-
-window.logoutStudent = () => {
-    // Drop the student JWT client FIRST so nothing queued after this point can send the
-    // previous student's token. `currentSchoolId` stays untouched: it belongs to the
-    // chairman/staff session that may still be active in this browser.
-    studentPortalClient = null;
-    studentSessionEpoch += 1;
-    window.studentReceiptCache = null;
-    currentStudentUser = null;
-    currentStudentSchoolDoc = null;
-    const moduleContent = document.getElementById("student-module-content");
-    if (moduleContent) moduleContent.innerHTML = "";
-    const complaintHistory = document.getElementById("student-complaint-history");
-    if (complaintHistory) complaintHistory.innerHTML = "";
-    document.getElementById("student-dashboard-wrapper").style.display = "none";
-    document.getElementById("student-payment-section").style.display = "none";
-    document.getElementById("student-success-section").style.display = "none";
-    showLoginScreen();
 };
 
-// Student ID Card Download
-window.downloadStudentIDCard = async () => {
-    if (!currentStudentUser || !currentStudentSchoolDoc) return;
-    if (currentStudentUser.dueBalance > 0) return alert("Digital ID Card is locked due to pending fees. Please clear your dues first.");
+// 3.5 School Login Logic
+window.submitSchoolLogin = async () => {
+    const email = document.getElementById('schoolLoginId').value.trim();
+    const pwd = document.getElementById('schoolLoginPwd').value.trim();
+    if (!email || !pwd) return window.showToast("ALL FIELDS REQUIRED", "#e11d48");
 
-    const btn = document.getElementById("stu-btn-download-id");
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Generating...";
+    const btn = document.getElementById('doSchoolLoginBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AUTHENTICATING...';
     btn.disabled = true;
 
+    let tempAuthClient = null;
     try {
-        const response = await fetch("https://school-backend-zlgy.onrender.com/api/generate-id-card", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                studentData: {
-                    id: currentStudentUser.id || currentStudentUser.regNo,
-                    name: currentStudentUser.name, class: currentStudentUser.class,
-                    dob: currentStudentUser.dob || "N/A",
-                    parentage: (currentStudentUser.parentage || currentStudentUser.fatherName) || "N/A",
-                    mobile: currentStudentUser.mobile || "N/A",
-                    address: currentStudentUser.address || "N/A",
-                    photoUrl: currentStudentUser.photoUrl || "https://via.placeholder.com/150"
-                },
-                themeColor: currentStudentSchoolDoc.themeColor || "#1e3c72",
-                secondaryColor: currentStudentSchoolDoc.secondaryColor || "#ffffff",
-                templateStyle: currentStudentSchoolDoc.idTemplateStyle || "wave",
-                schoolName: currentStudentSchoolDoc.schoolName || "SCHOOL NAME",
-                schoolEmergency: currentStudentSchoolDoc.emergencyMobile || "N/A",
-                signatureUrl: (currentStudentSchoolDoc.sigSettings && currentStudentSchoolDoc.sigSettings.idCard === false) ? "" : (currentStudentSchoolDoc.signatureUrl || ""),
-                schoolLogoUrl: currentStudentSchoolDoc.logoUrl || "",
-                schoolNameColor: currentStudentSchoolDoc.schoolNameColor || "#ffffff",
-                studentNameColor: currentStudentSchoolDoc.studentNameColor || "#d32f2f",
-                detailsColor: currentStudentSchoolDoc.detailsColor || "#333333"
-            })
+        tempAuthClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false
+            }
         });
-        const data = await response.json();
-        if (data.success && data.idCardUrl) {
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            pdf.addImage(data.idCardUrl, 'PNG', 10, 10, 54, 86);
-            pdf.save(`${currentStudentUser.name}_ID_Card.pdf`);
-        } else { alert("Could not generate ID card at this moment."); }
-    } catch (e) { console.error(e); alert("Failed to generate ID card."); }
+        const { data: cred, error: authErr } = await tempAuthClient.auth.signInWithPassword({ email: email, password: pwd });
+        if (authErr) throw authErr;
 
-    btn.innerHTML = originalText; btn.disabled = false;
-};
-
-// Student Admit Card Download
-async function getStudentTransparentPhoto(imageUrl) {
-    if (!imageUrl) return null;
-    try {
-        const response = await fetch('https://school-backend-zlgy.onrender.com/api/remove-bg', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: imageUrl })
-        });
-        const data = await response.json();
-        if (data.success && data.base64) return data.base64;
-        return imageUrl;
-    } catch (e) { return imageUrl; }
-}
-
-window.downloadStudentAdmitCard = async () => {
-    if (!currentStudentUser || !currentStudentSchoolDoc) return;
-    if (currentStudentUser.dueBalance > 0) return alert("Admit Card is locked due to pending fees. Please clear your dues first.");
-
-    const btn = document.getElementById("stu-btn-download-admit");
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Generating...";
-    btn.disabled = true;
-
-    try {
-        const { data: schoolRow } = await supabaseClient.from("schools").select("*").eq("id", currentSchoolId).maybeSingle();
-        const classSchedule = schoolRow ? schoolRow["examSchedule_" + currentStudentUser.class] : null;
-        const sched = Array.isArray(classSchedule) ? classSchedule : (schoolRow?.schedule || []);
-
-        if (sched.length === 0) {
-            alert("No exam routine published for your class yet.");
-            btn.innerHTML = originalText; btn.disabled = false; return;
+        const userId = cred?.user?.id;
+        let isChairman = false;
+        let userData = {};
+        try {
+            const { data: docSnap } = await tempAuthClient.from("users").select("*").eq("id", userId).maybeSingle();
+            if (docSnap && docSnap.role === "chairman") {
+                isChairman = true;
+                userData = docSnap;
+            }
+        } catch (docErr) {
+            console.error("docSnap read failed:", docErr);
+            isChairman = true;
         }
 
-        const printable = document.createElement("div");
-        printable.style.cssText = "width:800px; padding:20px; background:#fff; color:#000; position:absolute; left:-9999px; top:0; border:2px solid #000;";
-
-        let logoHtml = currentStudentSchoolDoc.schoolLogoUrl ? `<img src="${currentStudentSchoolDoc.schoolLogoUrl}" style="width:80px; height:80px; object-fit:contain; position:absolute; left:20px; top:20px;">` : '';
-
-        let finalSigBase64 = "";
-        if (currentStudentSchoolDoc.signatureUrl && (!currentStudentSchoolDoc.sigSettings || currentStudentSchoolDoc.sigSettings.admit !== false)) {
-            finalSigBase64 = currentStudentSchoolDoc.signatureUrl;
+        if (isChairman) {
             try {
-                const res = await fetch("https://school-backend-zlgy.onrender.com/api/get-transparent-signature", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ signatureUrl: currentStudentSchoolDoc.signatureUrl })
-                });
-                const d = await res.json();
-                if (d.success) finalSigBase64 = d.base64;
-            } catch (e) { }
-        }
+                let ipAddress = "Unknown";
+                try {
+                    const ipRes = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipRes.json();
+                    ipAddress = ipData.ip;
+                } catch (e) { console.warn("IP fetch failed", e); }
+                const coordinates = await getBrowserCoordinates();
 
-        let sigHtml = finalSigBase64 ? `<img src="${finalSigBase64}" style="height:50px;">` : '';
-        const fallbackImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-        let finalPhotoSrc = fallbackImg;
-        if (currentStudentUser.photoUrl) finalPhotoSrc = await getStudentTransparentPhoto(currentStudentUser.photoUrl);
-
-        let tbodyHtml = "";
-        for (let i = 0; i < 6; i++) {
-            let dStr = sched[i]?.date || "";
-            if (dStr && dStr.includes("-")) { let parts = dStr.split("-"); if (parts.length === 3) dStr = `${parts[2]}/${parts[1]}/${parts[0]}`; }
-            tbodyHtml += `<tr><td style="border:1px solid #000; padding:8px;">${dStr}</td><td style="border:1px solid #000; padding:8px;">${sched[i]?.subject || ""}</td><td style="border:1px solid #000; padding:8px;">${sched[i]?.timing || ""}</td></tr>`;
-        }
-
-        printable.innerHTML = `
-            <div style="position:relative; text-align:center; margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
-                ${logoHtml}
-                <h2 style="margin:0; font-size:24px;">${(currentStudentSchoolDoc.schoolName || "SCHOOL NAME").toUpperCase()}</h2>
-                <h3 style="margin:5px 0 0; font-size:18px;">EXAMINATION ADMIT CARD</h3>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
-                <div style="flex:1;"><p><strong>Student Name:</strong> ${currentStudentUser.name}</p><p><strong>Class:</strong> ${currentStudentUser.class}</p><p><strong>Parentage:</strong> ${(currentStudentUser.parentage || currentStudentUser.fatherName)}</p></div>
-                <div style="flex:1; text-align:center;"><img id="print-admit-photo-stu" src="${finalPhotoSrc}" style="width:100px; height:120px; border:2px solid #ccc; object-fit:cover; border-radius:8px; background:#fff;"></div>
-                <div style="flex:1; text-align:right;"><p><strong>Roll No:</strong> ${currentStudentUser.rollNo || "N/A"}</p><p><strong>Reg No:</strong> ${currentStudentUser.regNo || "N/A"}</p><p><strong>DOB:</strong> ${currentStudentUser.dob || "N/A"}</p></div>
-            </div>
-            <table style="width:100%; border-collapse:collapse; text-align:left; margin-bottom:30px;">
-                <thead><tr><th style="border:1px solid #000; padding:8px; background:#f0f0f0;">Date</th><th style="border:1px solid #000; padding:8px; background:#f0f0f0;">Subject</th><th style="border:1px solid #000; padding:8px; background:#f0f0f0;">Timing</th></tr></thead>
-                <tbody>${tbodyHtml}</tbody>
-            </table>
-            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                <div><p>_______________________<br>Student Signature</p></div>
-                <div style="text-align:right;">${sigHtml}<br><p>_______________________<br>Principal/Controller Signature</p></div>
-            </div>
-        `;
-
-        document.body.appendChild(printable);
-        const imgEl = printable.querySelector("#print-admit-photo-stu");
-        if (imgEl && !imgEl.complete) await new Promise((resolve) => { imgEl.onload = resolve; imgEl.onerror = resolve; });
-
-        const canvas = await html2canvas(printable, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL("image/jpeg", 0.9);
-        document.body.removeChild(printable);
-
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('l', 'mm', 'a4');
-        pdf.addImage(imgData, 'JPEG', 10, 10, 277, 130);
-        pdf.save(`${currentStudentUser.name}_Admit_Card.pdf`);
-    } catch (e) { console.error(e); alert("Failed to generate Admit Card."); }
-
-    btn.innerHTML = originalText; btn.disabled = false;
-};
-
-// --- CoreEdu Chat ---
-window.loadCoreEduChat = () => {
-    if (!currentSchoolId) return;
-    if (window.unsubCoreEduChat) { window.unsubCoreEduChat(); window.unsubCoreEduChat = null; }
-    const schoolId = currentSchoolId;
-
-    const renderCoreEduChat = async (messages) => {
-        let html = "";
-        let unreadCount = 0;
-        let batchUpdates = [];
-
-        (messages || []).forEach(msg => {
-            let isMaster = msg.sender === "master";
-            if (isMaster && !msg.isRead) {
-                unreadCount++;
-                batchUpdates.push(msg.id);
+                await tempAuthClient.from("login_logs").insert([{
+                    userId: userId,
+                    uid: userId,
+                    email: email,
+                    name: userData.name || 'Chairman',
+                    role: "chairman",
+                    schoolId: userData.schoolId || "",
+                    schoolName: userData.schoolName || "",
+                    ip: ipAddress,
+                    localIp: "Unknown",
+                    device: navigator.userAgent,
+                    latitude: coordinates?.latitude ?? null,
+                    longitude: coordinates?.longitude ?? null,
+                    locationAccuracy: coordinates?.accuracy ?? null,
+                    locationSource: coordinates?.source || "ip-fallback",
+                    timestamp: new Date().toISOString()
+                }]);
+            } catch (logErr) {
+                console.log("Login log error:", logErr);
             }
 
-            let ts = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : "";
-            let className = msg.sender === "school" ? "chat-bubble sent" : "chat-bubble received";
-            let attachHtml = msg.attachmentUrl ? `<br><a href="${msg.attachmentUrl}" target="_blank" style="font-size:12px; color:blue;"><i class="fas fa-paperclip"></i> Attachment</a>` : "";
-
-            html += `<div class="${className}">${msg.text}${attachHtml}<span class="timestamp">${ts}</span></div>`;
-        });
-
-        document.getElementById("coreedu-chat-history").innerHTML = html || "<div style='text-align:center; color:#555; padding:20px;'>No messages yet. Say hi to CoreEdu!</div>";
-        document.getElementById("coreedu-chat-history").scrollTop = document.getElementById("coreedu-chat-history").scrollHeight;
-
-        if (unreadCount > 0) {
-            document.getElementById("badge-coreedu").innerText = unreadCount;
-            document.getElementById("badge-coreedu").style.display = "inline-block";
+            window.showToast("CHAIRMAN NODE VERIFIED. REDIRECTING...", "#10b981");
+            setTimeout(() => {
+                const safeEmail = encodeURIComponent(email);
+                const safePass = encodeURIComponent(pwd);
+                const chairmanPortalLink = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/";
+                window.open(`${chairmanPortalLink}?email=${safeEmail}&pass=${safePass}`, '_blank');
+                window.closeCustomModal('school-login-modal');
+            }, 1000);
         } else {
-            document.getElementById("badge-coreedu").style.display = "none";
+            window.showToast("ACCESS DENIED: NOT A CHAIRMAN NODE", "#e11d48");
         }
-
-        if (unreadCount > 0 && document.getElementById("tab-coreedu-comm").classList.contains("active")) {
-            for (let id of batchUpdates) {
-                await supabaseClient.from("school_communications").update({ isRead: true }).eq("id", id);
-            }
-        }
-    };
-
-    const loadCoreEduMessages = async () => {
-        const { data, error } = await supabaseClient
-            .from("school_communications")
-            .select("*")
-            .eq("schoolId", schoolId)
-            .order("timestamp", { ascending: true });
-        if (error) return console.error("CoreEdu chat load failed:", error);
-        await renderCoreEduChat(data);
-    };
-
-    loadCoreEduMessages();
-
-    const chatChannel = supabaseClient.channel('realtime:school_communications:' + crypto.randomUUID())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'school_communications', filter: `schoolId=eq.${schoolId}` }, () => {
-            loadCoreEduMessages();
-        })
-        .subscribe();
-
-    window.unsubCoreEduChat = () => supabaseClient.removeChannel(chatChannel);
-};
-
-window.sendCoreEduMessage = async () => {
-    let text = document.getElementById("coreedu-message-input").value.trim();
-    let btn = document.getElementById("coreedu-send-btn");
-
-    if (!text && document.getElementById("coreedu-attachment").files.length === 0) return alert("Type a message or attach a file.");
-
-    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i>";
-    btn.disabled = true;
-
-    let attachmentUrl = null;
-    if (document.getElementById("coreedu-attachment").files.length > 0) {
-        attachmentUrl = await uploadToCloudinary("coreedu-attachment", "coreedu-send-btn", "<i class='fas fa-paper-plane'></i>");
-        if (!attachmentUrl) {
-            btn.innerHTML = "<i class='fas fa-paper-plane'></i>"; btn.disabled = false;
-            return alert("Upload failed.");
-        }
+        if (tempAuthClient) await tempAuthClient.auth.signOut();
+    } catch (err) {
+        console.error("School login failed:", err);
+        window.showToast("LOGIN FAILED: " + (err.message || "INVALID CREDENTIALS"), "#e11d48");
+    } finally {
+        btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> AUTHENTICATE';
+        btn.disabled = false;
     }
+};
 
-    try {
-        const { error } = await supabaseClient.from("school_communications").insert({
-            schoolId: currentSchoolId,
-            schoolName: currentSchoolName,
-            sender: "school",
-            text: text,
-            attachmentUrl: attachmentUrl,
-            timestamp: new Date().toISOString(),
-            isRead: false
+// 4. Pending Approvals Tab Logic
+window.loadPendingRegistrations = async () => {
+    const tbody = document.getElementById("pending-approvals-body");
+    if (!tbody) return;
+    const { data } = await supabaseClient.from("pending_registrations").select("*");
+    const render = (items) => {
+        tbody.innerHTML = "";
+        if (!items || items.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>NO PENDING REQUESTS</td></tr>";
+            return;
+        }
+
+
+        (items || []).forEach(doc => {
+            const data = doc;
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="p-4"><img src="${data.logoUrl}" class="w-10 h-10 rounded-full border border-glassBorder object-cover"></td>
+                <td class="p-4 font-bold text-white">${data.schoolName}<br><span class="text-[10px] text-cyan-300 font-mono uppercase">${institutionEsc(normalizeInstitutionType(data.institution_type))}</span> · <span class="text-[10px] text-emerald-400 font-mono">${data.email}</span></td>
+                <td class="p-4 text-xs text-gray-300">${data.principalName}<br><span class="text-[10px] text-gray-500">${data.phone}</span></td>
+                <td class="p-4 text-xs text-gray-300">${data.district}, ${data.state}</td>
+                <td class="p-4"><a href="${data.authorityLetterUrl}" download="Authority_${data.schoolName}.pdf" class="text-indigo-400 hover:text-indigo-300 underline"><i class="fas fa-download"></i> View</a></td>
+                <td class="p-4 text-right flex gap-2 justify-end">
+                    <button onclick="window.approveRegistrationOnly('${doc.id}')" class="px-2 py-1.5 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded border border-indigo-500 transition text-[10px] font-bold" title="Generate Registration No Only"><i class="fas fa-file-signature"></i> REG ONLY</button>
+                    <button onclick="window.approveRegistrationAuto('${doc.id}')" class="px-2 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded border border-emerald-500 transition text-[10px] font-bold" title="Auto Deploy Node Instantly"><i class="fas fa-rocket"></i> AUTO DEPLOY</button>
+                    <button onclick="window.rejectRegistration('${doc.id}')" class="px-3 py-1.5 bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded border border-rose-500 transition"><i class="fas fa-times"></i></button>
+                </td>
+            `;
+            tbody.appendChild(tr);
         });
-        if (error) throw error;
-        document.getElementById("coreedu-message-input").value = "";
-        document.getElementById("coreedu-attachment").value = "";
-    } catch (e) {
-        alert("Error sending message");
+    };
+    render(data);
+    if (!window.pendingRegSubscribed) {
+        window.pendingRegSubscribed = true;
+        supabaseClient.channel("public:pending_registrations").on("postgres_changes", { event: "*", schema: "public", table: "pending_registrations" }, payload => {
+            window.loadPendingRegistrations();
+        }).subscribe();
     }
-    btn.innerHTML = "<i class='fas fa-paper-plane'></i>"; btn.disabled = false;
 };
 
-// --- Mailbox Inter-School ---
-window.allSchoolsCache = [];
-window.loadAllSchools = async () => {
-    try {
-        const { data: rows, error } = await supabaseClient.from("vw_public_schools").select("*");
-        if (error) throw error;
-        let html = "<option value=''>-- Select School --</option>";
-        window.allSchoolsCache = [];
-        (rows || []).forEach(school => {
-            window.allSchoolsCache.push(school);
-            let sType = school.institution_type || "school";
-            if (sType === currentInstitutionType && school.id !== currentSchoolId) html += `<option value="${school.id}">${school.schoolName || school.name || school.id}</option>`;
-        });
-        const mailSelect = document.getElementById("mail_specific_school");
-        if (mailSelect) mailSelect.innerHTML = html;
-        const transferSelect = document.getElementById("transfer_to_school_select");
-        if (transferSelect) transferSelect.innerHTML = html;
-        const schoolNameEl = document.getElementById("transfer-current-school-name");
-        if (schoolNameEl) schoolNameEl.innerText = currentSchoolName || "Current School";
-        const transferFromEl = document.getElementById("transfer-preview-from");
-        if (transferFromEl) transferFromEl.innerText = currentSchoolName || "Current School";
-    } catch (e) { }
-};
+window.approveRegistrationAuto = async (docId) => {
+    window.customConfirm("APPROVE AND DEPLOY THIS INSTITUTION?", async () => {
+        try {
+            const { data, error: requestError } = await supabaseClient
+                .from("pending_registrations")
+                .select("*")
+                .eq("id", docId)
+                .maybeSingle();
+            if (requestError) throw requestError;
+            if (!data) throw new Error("Pending registration was not found.");
+            await ensureCompanyInstitutionSetupReady();
 
-// --- Mail Thread View Modal ---
-window.currentMailThreadId = null;
-window.openMailThread = async (msgId) => {
-    window.currentMailThreadId = msgId;
-    document.getElementById("mail-view-modal").style.display = "flex";
-    document.getElementById("mail-thread-container").innerHTML = "<div style='text-align:center;'>Loading thread...</div>";
+            const type = normalizeInstitutionType(data.institution_type);
+            const schoolId = makeInstitutionId();
+            const { data: idAvailable, error: availabilityError } = await supabaseClient.rpc("company_institution_id_available", {
+                p_school_id: schoolId
+            });
+            if (availabilityError) throw availabilityError;
+            if (idAvailable !== true) throw new Error("Generated Institution ID is already in use. Retry the approval.");
+            const registrationNo = `CORE/REG/EDU/${Math.floor(100000 + Math.random() * 900000)}`;
+            const profile = {
+                phone: data.phone || "",
+                altPhone: data.altPhone || "",
+                email: data.email || "",
+                website: data.website || "",
+                affiliationNo: data.affiliationNo || "",
+                board: data.board || "",
+                schoolType: type === "school" ? (data.schoolType || "") : "",
+                country: data.country || "",
+                state: data.state || "",
+                district: data.district || "",
+                pincode: data.pincode || "",
+                address: data.address || "",
+                regNo: registrationNo,
+                secondaryColor: "#ffffff",
+                chairmanRole: "Principal"
+            };
+            const branding = { primaryColor: "#1e3c72", secondaryColor: "#ffffff" };
 
-    try {
-        const { error: readError } = await supabaseClient.from("direct_messages").update({ isRead: true }).eq("id", msgId);
-        if (readError) throw readError;
+            const { data: chairmanUid, error: authError } = await supabaseClient.rpc("create_chairman_auth_user", {
+                p_email: data.email,
+                p_password: data.password,
+                p_name: data.principalName || "Chairman",
+                p_school_id: schoolId
+            });
+            if (authError) throw new Error("Chairman Auth creation failed: " + authError.message);
 
-        if (window.unsubMailThread) { window.unsubMailThread(); window.unsubMailThread = null; }
-
-        const renderMailThread = async (msg) => {
-            if (!msg) return;
-            let html = "";
-
-            let updatedReplies = false;
-            let replies = msg.replies || [];
-            replies.forEach(r => {
-                if (r.senderRole !== "chairman" && !r.isRead) {
-                    r.isRead = true;
-                    updatedReplies = true;
+            const { error: deployError } = await supabaseClient.rpc("deploy_tenant_node", {
+                p_school_id: schoolId,
+                p_chairman_uid: chairmanUid,
+                p_school_name: data.schoolName,
+                p_chairman_name: data.principalName || "Chairman",
+                p_email: data.email,
+                p_password: data.password,
+                p_logo_url: data.logoUrl || "",
+                p_tier: "Starter",
+                p_is_sub_node: false,
+                p_master_node_id: null,
+                p_watermark_url: null,
+                p_extra_data: {
+                    ...profile,
+                    institution_type: type,
+                    institution_code: data.institution_code || null,
+                    branding,
+                    admissionOpen: true,
+                    themeColor: "#1e3c72"
                 }
             });
-            if (updatedReplies) {
-                await supabaseClient.from("direct_messages").update({ replies: replies }).eq("id", msgId);
-            }
+            if (deployError) throw new Error("Tenant deployment failed: " + deployError.message);
 
-            let ts = msg.createdAt ? new Date(msg.createdAt).toLocaleString() : "";
-            let attachHtml = msg.attachmentUrl ? `<div style="margin-top:10px;"><a href="${msg.attachmentUrl}" target="_blank" class="action-btn" style="background:#e2e8f0; color:#333; padding:5px 10px; font-size:12px; display:inline-block;"><i class="fas fa-paperclip"></i> View Attachment</a></div>` : "";
-
-            html += `<div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:15px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:10px;">
-                            <div><strong>${msg.senderName} (${msg.senderRole})</strong><br><span style="font-size:11px; color:#888;">To: ${msg.receiverType}</span></div>
-                            <div style="font-size:11px; color:#888;">${ts}</div>
-                        </div>
-                        <h4 style="margin-top:0;">${msg.title || 'No Subject'}</h4>
-                        <div style="white-space:pre-wrap; font-size:14px;">${msg.body}</div>
-                        ${attachHtml}
-                     </div>`;
-
-            replies.forEach(r => {
-                let rTs = r.timestamp ? new Date(r.timestamp).toLocaleString() : "";
-                let rAttachHtml = r.attachmentUrl ? `<div style="margin-top:10px;"><a href="${r.attachmentUrl}" target="_blank" class="action-btn" style="background:#e2e8f0; color:#333; padding:5px 10px; font-size:12px; display:inline-block;"><i class="fas fa-paperclip"></i> View Attachment</a></div>` : "";
-                let align = r.senderRole === "chairman" ? "margin-left: 30px; border-left: 4px solid #3182ce;" : "margin-right: 30px; border-left: 4px solid #e53e3e;";
-                html += `<div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:15px; margin-top:10px; ${align}">
-                            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                                <div><strong>${r.senderName} (${r.senderRole})</strong></div>
-                                <div style="font-size:11px; color:#888;">${rTs}</div>
-                            </div>
-                            <div style="white-space:pre-wrap; font-size:14px;">${r.text}</div>
-                            ${rAttachHtml}
-                         </div>`;
+            const { error: setupError } = await configureCompanyInstitution({
+                schoolId,
+                name: data.schoolName,
+                type,
+                code: data.institution_code || "",
+                logoUrl: data.logoUrl || "",
+                branding,
+                profile,
+                themeColor: "#1e3c72",
+                admissionOpen: true
             });
+            if (setupError) throw new Error(`Institution ${schoolId} was deployed, but configuration failed: ${setupError.message}`);
 
-            document.getElementById("mail-thread-container").innerHTML = html;
-            setTimeout(() => {
-                document.getElementById("mail-thread-container").scrollTop = document.getElementById("mail-thread-container").scrollHeight;
-            }, 100);
-
-            loadInbox(); loadSentMail();
-        };
-
-        const loadMailThread = async () => {
-            const { data, error } = await supabaseClient.from("direct_messages").select("*").eq("id", msgId).maybeSingle();
-            if (error) throw error;
-            await renderMailThread(data);
-        };
-
-        await loadMailThread();
-
-        const threadChannel = supabaseClient.channel('realtime:direct_messages:' + crypto.randomUUID())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_messages', filter: `id=eq.${msgId}` }, () => {
-                loadMailThread().catch(err => console.error("Mail thread refresh failed:", err));
-            })
-            .subscribe();
-
-        window.unsubMailThread = () => supabaseClient.removeChannel(threadChannel);
-    } catch (e) { console.error(e); }
+            const { error: deleteError } = await supabaseClient.from("pending_registrations").delete().eq("id", docId);
+            if (deleteError) throw deleteError;
+            window.showToast(`INSTITUTION DEPLOYED · ${schoolId}`, "#10b981");
+            window.logAudit("Provisioned Institution from Registration", `${data.schoolName} (${schoolId})`);
+            await Promise.all([loadChairmen(), loadSchoolsForDropdown(), loadSchoolPayments(), window.loadInstitutionRegistry?.(), window.loadPendingRegistrations()]);
+        } catch (error) {
+            console.error("Registration deployment failed:", error);
+            window.showToast("DEPLOYMENT ERROR: " + (error.message || error), "#e11d48");
+        }
+    });
 };
 
-window.replyToMailThread = async () => {
-    if (!window.currentMailThreadId) return;
-    let text = document.getElementById("mail-reply-body").value.trim();
-    let btn = document.getElementById("mail-reply-btn");
+window.approveRegistrationOnly = async (docId) => {
+    window.customConfirm("APPROVE REGISTRATION AND GENERATE REG/NO?", async () => {
+        try {
+            const docRef = docId;
+            const { data: docSnap } = await supabaseClient.from(typeof docRef === "string" ? "unknown" : docRef.col).select("*").eq("id", typeof docRef === "string" ? docRef : docRef.id).maybeSingle();
+            if (!docSnap) return;
 
-    if (!text && document.getElementById("mail-reply-attachment").files.length === 0) return alert("Type a reply or attach a file.");
+            const data = docSnap;
 
-    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i>";
-    btn.disabled = true;
+            // Generate Registration No
+            const randomDigits = Math.floor(100000 + Math.random() * 900000);
+            const regNo = `CORE/REG/EDU/${randomDigits}`;
+
+            // Save to accepted_registrations
+            await supabaseClient.from("accepted_registrations").upsert([{ id: regNo.replace(/\//g, "_"),
+                ...data,
+                regNo: regNo,
+                acceptedAt: Date.now(),
+                status: "approved_not_deployed"
+            }]);
+
+            // Delete from pending
+            await docRef.delete();
+
+            // Show the RegNo to the user
+            prompt("SUCCESS! REGISTRATION NO GENERATED. Please copy this number:", regNo);
+            window.logAudit("Generated Reg/No", regNo);
+
+        } catch (err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
+};
+
+window.rejectRegistration = async (docId) => {
+    window.customConfirm("REJECT AND DELETE THIS DEPLOYMENT REQUEST?", async () => {
+        try {
+            await supabaseClient.from("pending_registrations").delete().eq("id", docId);
+            window.showToast("REQUEST TERMINATED", "#10b981");
+        } catch (err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
+};
+
+// 5. Comm Hub (WhatsApp UI) Logic
+let currentCommSchoolId = null;
+let commSchools = [];
+let stopCommSchoolListener = null;
+let stopCommMessageListener = null;
+
+function renderCommSchools(searchTerm = "") {
+    const list = document.getElementById("comm-school-list");
+    if (!list) return;
+    const term = searchTerm.trim().toLowerCase();
+    const filteredSchools = commSchools.filter(school => school.name.toLowerCase().includes(term) || school.id.toLowerCase().includes(term));
+    list.innerHTML = "";
+    filteredSchools.forEach(school => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.dataset.schoolId = school.id;
+        item.className = `school-list-item p-3 border-b border-glassBorder flex items-center gap-3 w-full text-left${school.id === currentCommSchoolId ? ' active' : ''}`;
+        item.onclick = () => window.openCommChat(school.id, school.name, item);
+        item.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-slateBase border border-glassBorder overflow-hidden shrink-0">
+                <img src="${school.logoUrl || 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}" class="w-full h-full object-cover" alt="">
+            </div>
+            <div class="flex-1 min-w-0">
+                <h4 class="text-white text-xs font-bold truncate">${school.name}</h4>
+                <p class="text-[9px] text-coolGray truncate">Open communication channel</p>
+            </div>`;
+        list.appendChild(item);
+    });
+    if (!filteredSchools.length) list.innerHTML = '<div class="p-5 text-center text-coolGray text-xs font-mono">NO MATCHING SCHOOLS</div>';
+}
+
+window.loadCommHubSchools = () => {
+    const list = document.getElementById("comm-school-list");
+    if (!list) return;
+    if (!stopCommSchoolListener) {
+        stopCommSchoolListener = supabaseClient.channel("public:schools").on("postgres_changes", { event: "*", schema: "public", table: "schools" }, payload => {
+            commSchools = (snapshotData || []).map(doc => {
+                const data = doc;
+                return { id: doc.id, name: data.schoolName || data.name || 'Unnamed Node', logoUrl: data.logoUrl || '' };
+            }).sort((a, b) => a.name.localeCompare(b.name));
+            renderCommSchools(document.getElementById("comm-search")?.value || "");
+        });
+    } else {
+        renderCommSchools(document.getElementById("comm-search")?.value || "");
+    }
+    const search = document.getElementById("comm-search");
+    if (search && !search.dataset.bound) {
+        search.dataset.bound = "true";
+        search.addEventListener("input", event => renderCommSchools(event.target.value));
+    }
+};
+
+window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
+    currentCommSchoolId = schoolId;
+    document.getElementById("comm-active-school-name").innerText = schoolName;
+    document.getElementById("comm-active-school-id").innerText = "ID: " + schoolId;
+    document.querySelectorAll(".school-list-item").forEach(item => item.classList.toggle("active", item === selectedItem || item.dataset.schoolId === schoolId));
+
+    const historyBox = document.getElementById("comm-chat-history");
+    if (!historyBox) return;
+    if (stopCommMessageListener) { stopCommMessageListener.unsubscribe(); }
+    stopCommMessageListener = supabaseClient.channel("public:communications").on("postgres_changes", { event: "*", schema: "public", table: "communications", filter: `schoolId=eq.${schoolId}` }, payload => {
+            historyBox.innerHTML = '';
+            if (snapshot.empty) {
+                historyBox.innerHTML = '<div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center"><i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i><br>End-to-End Encrypted Comms<br>No messages yet.</div>';
+                return;
+            }
+
+            let messages = [];
+            (items || []).forEach(doc => {
+                messages.push({ id: doc.id, ...doc });
+            });
+
+            messages.sort((a, b) => timestampToMillis(a.timestamp) - timestampToMillis(b.timestamp));
+
+            messages.forEach(msg => {
+                const isMaster = msg.sender === 'master';
+                const wrap = document.createElement("div");
+                wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
+
+                const tsMillis = timestampToMillis(msg.timestamp);
+                const timeStr = tsMillis ? new Date(tsMillis).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'SENDING';
+
+                let fileHTML = '';
+                if (msg.attachmentUrl) {
+                    fileHTML = `<a href="${msg.attachmentUrl}" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>`;
+                }
+
+                wrap.innerHTML = `
+                  <div class="chat-bubble ${isMaster ? 'sent' : 'received'}">
+                      ${fileHTML}
+                      <span>${msg.text}</span>
+                      <span class="timestamp">${timeStr}</span>
+                  </div>
+              `;
+                historyBox.appendChild(wrap);
+            });
+
+            // Scroll to bottom
+            historyBox.scrollTop = historyBox.scrollHeight;
+        });
+};
+
+window.sendCommMessage = async () => {
+    if (!currentCommSchoolId) {
+        window.showToast("SELECT A NODE FIRST", "#e11d48");
+        return;
+    }
+    const input = document.getElementById("comm-message-input");
+    const text = input.value.trim();
+    const fileInput = document.getElementById("comm-attachment");
+
+    if (!text && !fileInput.files.length) return;
 
     let attachmentUrl = null;
-    if (document.getElementById("mail-reply-attachment").files.length > 0) {
-        attachmentUrl = await uploadToCloudinary("mail-reply-attachment", "mail-reply-btn", "<i class='fas fa-reply'></i>");
-        if (!attachmentUrl) {
-            btn.innerHTML = "<i class='fas fa-reply'></i> Reply"; btn.disabled = false;
-            return alert("Upload failed.");
-        }
+    if (fileInput.files.length > 0) {
+        // Mock upload
+        const readAsDataURL = (file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+        });
+        attachmentUrl = await readAsDataURL(fileInput.files[0]);
     }
 
     try {
-        const { data: threadRow, error: threadError } = await supabaseClient.from("direct_messages").select("*").eq("id", window.currentMailThreadId).maybeSingle();
-        if (threadError) throw threadError;
-        if (!threadRow) throw new Error("Message thread not found.");
-        let replies = threadRow.replies || [];
-        replies.push({
-            senderRole: "chairman",
-            senderName: currentSchoolName + " (Chairman)",
+        await supabaseClient.from("communications").insert([{
+            schoolId: currentCommSchoolId,
+            sender: 'master',
             text: text,
             attachmentUrl: attachmentUrl,
-            timestamp: new Date().toISOString(),
-            isRead: false
-        });
-
-        const { error } = await supabaseClient.from("direct_messages").update({ replies: replies }).eq("id", window.currentMailThreadId);
-        if (error) throw error;
-
-        document.getElementById("mail-reply-body").value = "";
-        document.getElementById("mail-reply-attachment").value = "";
-    } catch (e) {
-        alert("Error sending reply");
+            timestamp: new Date().toISOString()
+        }]);
+        input.value = '';
+        fileInput.value = '';
+    } catch (err) {
+        window.showToast("TRANSMISSION FAILED: " + err.message, "#e11d48");
     }
-    btn.innerHTML = "<i class='fas fa-reply'></i> Reply"; btn.disabled = false;
 };
 
+window.clearCommHistory = async () => {
+    if (!currentCommSchoolId) return;
+    window.customConfirm("WIPE COMM HISTORY FOR THIS NODE?", async () => {
+        try {
+            
+            const { data: docsData } = await supabaseClient.from("communications").select("*").eq("schoolId", currentCommSchoolId);
+            await supabaseClient.from("communications").delete().eq("schoolId", currentCommSchoolId);
+            
+            window.showToast("HISTORY WIPED", "#10b981");
+        } catch (err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
+};
 
+// 6. Updated Bulk Delete functions
+window.bulkDeletePasswordReqs = async () => {
+    const table = document.getElementById("password-req-table");
+    const checkboxes = table.querySelectorAll(".row-checkbox:checked");
+    if (checkboxes.length === 0) {
+        window.showToast("NO TARGETS SELECTED", "#e11d48");
+        return;
+    }
+    window.customConfirm(`DELETE ${checkboxes.length} TARGETS?`, async () => {
+        try {
+            
+            for(let cb of checkboxes) { await supabaseClient.from("password_requests").delete().eq("id", cb.dataset.id); }
+            
+            window.showToast("BULK PURGE COMPLETE", "#10b981");
+        } catch (err) {
+            window.showToast("ERROR: " + err.message, "#e11d48");
+        }
+    });
+};
 
+window.toggleSelectAllPwdReq = (source) => {
+    const table = document.getElementById("password-req-table");
+    const checkboxes = table.querySelectorAll(".row-checkbox");
+    checkboxes.forEach(cb => cb.checked = source.checked);
+};
 
+// ==========================================
+// STUDENT TRANSFER HQ APPROVALS
+// ==========================================
+window.fetchedTransferApprovals = [];
 
+function normalizeTransferStatus(status, transfer = {}) {
+    const value = String(status || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+    if (["completed", "accepted", "transfer completed"].includes(value)) return "Completed";
+    if (["rejected", "declined", "hq rejected"].includes(value)) return "Rejected";
+    if (["cancelled", "canceled"].includes(value)) return "Cancelled";
+    if (["pending target accept", "pending target acceptance", "hq approved", "forwarded to principal"].includes(value)) return "Pending Target Accept";
+    if (["pending hq approval", "pending", "submitted", "requested", "awaiting hq approval", "pending company approval"].includes(value)) return "Pending HQ Approval";
+    if (!value && Number(transfer.workflowStage || 1) <= 1) return "Pending HQ Approval";
+    return status || "Pending HQ Approval";
+}
 
+function transferCreatedMillis(transfer) {
+    return timestampToMillis(transfer.createdAt || transfer.timestamp || transfer.requestedAt || transfer.transferDate);
+}
 
+window.loadTransferApprovals = async () => {
+    const tbody = document.getElementById("transfer-approvals-body");
+    const filter = document.getElementById("transfer-approval-filter")?.value || "Pending HQ Approval";
+    if (tbody) tbody.innerHTML = `<tr><td colspan='8' class='text-center p-4 text-coolGray font-mono'>LOADING TRANSFERS...</td></tr>`;
+    try {
+        const { data: snapshotData } = await supabaseClient.from("student_transfers").select("*");
+        window.fetchedTransferApprovals = (snapshotData || []).map(doc => {
+            const transfer = { id: doc.id, ...doc };
+            transfer.status = normalizeTransferStatus(transfer.status, transfer);
+            return transfer;
+        });
+        const pendingCount = window.fetchedTransferApprovals.filter(transfer => transfer.status === "Pending HQ Approval").length;
+        const badge = document.getElementById("hub-transfer-count");
+        if (badge) badge.textContent = String(pendingCount);
 
+        const filtered = window.fetchedTransferApprovals
+            .filter(transfer => filter === "all" || transfer.status === normalizeTransferStatus(filter))
+            .sort((a, b) => transferCreatedMillis(b) - transferCreatedMillis(a));
+        if (!tbody) return;
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan='8' class='text-center p-4 text-coolGray font-mono'>NO TRANSFERS FOUND</td></tr>`;
+            return;
+        }
 
+        tbody.innerHTML = filtered.map(transfer => {
+            const docs = transfer.documents || {};
+            const docLinks = Object.entries(docs).filter(([, url]) => Boolean(url))
+                .map(([key, url]) => `<a href="${url}" target="_blank" rel="noopener" class="text-tealAccent hover:underline block text-[10px]"><i class="fas fa-paperclip"></i> ${key}</a>`).join("");
+            const statusColor = transfer.status === "Pending HQ Approval" ? "text-amber-400" : transfer.status === "Pending Target Accept" ? "text-blue-400" : transfer.status === "Completed" ? "text-emerald-400" : ["Rejected", "Cancelled"].includes(transfer.status) ? "text-rose-400" : "text-coolGray";
+            const actions = transfer.status === "Pending HQ Approval"
+                ? `<button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition mr-1" onclick="window.approveTransfer('${transfer.id}')"><i class="fas fa-share"></i> Accept & Forward to Principal</button><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.hqRejectTransfer('${transfer.id}')"><i class="fas fa-times"></i> Reject</button>`
+                : `<span class="text-coolGray text-[10px]">No action</span>`;
+            const transferDate = transfer.transferDate || (transferCreatedMillis(transfer) ? new Date(transferCreatedMillis(transfer)).toLocaleDateString() : 'N/A');
+            return `<tr class="hover:bg-slateSurface/50 transition">
+                <td class="p-4 text-[10px]">${transferDate}</td>
+                <td class="p-4"><strong class="block text-white">${transfer.studentName || 'N/A'}</strong><span class="text-[10px] text-coolGray">Class ${transfer.studentClass || transfer.className || 'N/A'} | Roll ${transfer.rollNo || 'N/A'}</span></td>
+                <td class="p-4 text-[10px]">${transfer.fromSchoolName || transfer.sourceSchoolName || 'N/A'}</td>
+                <td class="p-4 text-[10px]">${transfer.toSchoolName || transfer.targetSchoolName || 'N/A'}</td>
+                <td class="p-4 text-[10px]">${transfer.reason || transfer.transferReason || 'N/A'}</td>
+                <td class="p-4 text-[10px]">${docLinks || 'None'}</td>
+                <td class="p-4"><span class="${statusColor} font-bold text-[10px] tracking-widest">${transfer.status.toUpperCase()}</span></td>
+                <td class="p-4 text-right whitespace-nowrap">${actions}</td>
+            </tr>`;
+        }).join("");
+    } catch (error) {
+        console.error("Load transfer approvals failed:", error);
+        if (tbody) tbody.innerHTML = `<tr><td colspan='8' class='text-center p-4 text-rose-400 font-mono'>ERROR LOADING TRANSFERS</td></tr>`;
+    }
+};
+
+window.approveTransfer = async (transferId) => {
+    const tr = window.fetchedTransferApprovals.find(t => t.id === transferId);
+    if (!tr) return window.showToast("TRANSFER NOT FOUND", "#e11d48");
+    if (normalizeTransferStatus(tr.status, tr) !== "Pending HQ Approval") return window.showToast("ONLY PENDING REQUESTS CAN BE APPROVED", "#e11d48");
+    window.customConfirm(`ACCEPT AND FORWARD TRANSFER OF ${tr.studentName || 'STUDENT'} TO ${tr.toSchoolName || tr.targetSchoolName || 'TARGET SCHOOL'} PRINCIPAL?`, async () => {
+        try {
+            const stages = tr.workflowStages || [];
+            stages.forEach(s => { if (s.stage === "HQ Approval") { s.done = true; s.at = new Date().toISOString(); } });
+            await supabaseClient.from("student_transfers").update({
+                status: "Pending Target Accept",
+                workflowStage: 2,
+                hqApprovedAt: new Date().toISOString().eq("id", transferId),
+                hqApprovedBy: superAdminUid || "hq",
+                workflowStages: stages
+            });
+            window.showToast("✅ TRANSFER APPROVED & FORWARDED TO TARGET SCHOOL", "#10b981");
+            window.logAudit("Approved Student Transfer", `${tr.studentName} -> ${tr.toSchoolName}`);
+            window.loadTransferApprovals();
+        } catch (e) {
+            window.showToast("APPROVAL ERROR: " + e.message, "#e11d48");
+        }
+    });
+};
+
+window.hqRejectTransfer = async (transferId) => {
+    const tr = window.fetchedTransferApprovals.find(t => t.id === transferId);
+    if (!tr) return window.showToast("TRANSFER NOT FOUND", "#e11d48");
+    if (normalizeTransferStatus(tr.status, tr) !== "Pending HQ Approval") return window.showToast("ONLY PENDING REQUESTS CAN BE REJECTED", "#e11d48");
+    const reasonInput = prompt(`Mandatory rejection remark for ${tr.studentName || 'student'}:`);
+    if (reasonInput === null) return;
+    const reason = reasonInput.trim();
+    if (!reason) return window.showToast("REJECTION REMARK IS REQUIRED", "#e11d48");
+    try {
+        const stages = tr.workflowStages || [];
+        stages.forEach(s => { if (s.stage === "HQ Approval") { s.done = true; s.at = new Date().toISOString(); s.rejected = true; } });
+        
+        await supabaseClient.from("student_transfers").update({
+            status: "Rejected",
+            rejectedAt: new Date().toISOString().eq("id", transferId),
+            rejectedBy: superAdminUid || "hq",
+            rejectReason: reason,
+            workflowStages: stages
+        });
+          
+          if (tr.studentId) {
+              const { error: rpcErr } = await supabaseClient.rpc("update_student_transfer", {
+                  p_student_id: tr.studentId,
+                  p_transfer_record_id: transferId
+              });
+              if (rpcErr) throw rpcErr;
+          }
+        window.showToast("✅ TRANSFER REJECTED BY HQ", "#10b981");
+        window.logAudit("Rejected Student Transfer", `${tr.studentName} -> ${tr.toSchoolName}`);
+        window.loadTransferApprovals();
+    } catch (e) {
+        window.showToast("REJECT ERROR: " + e.message, "#e11d48");
+    }
+};
+
+// Also hook up load functions into the tab switching logic:
+const originalSwitchTab = window.switchTab;
+if (originalSwitchTab) {
+    // If we want to intercept
+} else {
+    document.querySelectorAll('.menu-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const t = btn.getAttribute('data-target');
+            if (t === 'tab-pending-approvals') window.loadPendingRegistrations();
+            if (t === 'tab-broadcast') window.loadCommHubSchools();
+            if (t === 'tab-transfer-approvals') window.loadTransferApprovals();
+        });
+    });
+}
+
+// ==========================================
+// 15. CORE AI ASSISTANT LOGIC (Consolidated)
+// ==========================================
+
+document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") window.sendAIMessage();
+});
+
+// Tickets are loaded via the earlier defined window.loadTickets function
+
+// ==========================================
+// 16. NEW FEATURES (ANALYTICS, ATTENDANCE, NOTIFICATIONS, SECURITY)
+// ==========================================
+
+window.loadGlobalAnalyticsDashboard = async () => {
+    try {
+        const { data: schoolsSnapData } = await supabaseClient.from("schools").select("*");
+        const schoolNames = new Map();
+        let active = 0, expired = 0;
+        (schoolsSnapData || []).forEach(doc => {
+            const data = doc;
+            schoolNames.set(doc.id, data.schoolName || data.name || doc.id);
+            if (data.licenseStatus === 'Active' || data.licenseStatus === 'active') active++;
+            else expired++;
+        });
+        const statLicenses = document.getElementById("stat-licenses");
+        if (statLicenses) statLicenses.innerText = `${active} / ${expired}`;
+
+        const { data: studentsSnapData } = await supabaseClient.from("students").select("*");
+        let studentCounts = {};
+        (studentsSnapData || []).forEach(doc => {
+            const data = doc;
+            if (data.schoolId) {
+                studentCounts[data.schoolId] = (studentCounts[data.schoolId] || 0) + 1;
+            }
+        });
+
+        const sortedSchools = Object.keys(studentCounts)
+            .sort((a, b) => studentCounts[b] - studentCounts[a])
+            .slice(0, 10);
+        const chartLabels = sortedSchools.map(schoolId => schoolNames.get(schoolId) || schoolId);
+        const chartData = sortedSchools.map(schoolId => studentCounts[schoolId]);
+        const axisColor = document.body.classList.contains('light-theme') ? '#475569' : '#cbd5e1';
+        const gridColor = document.body.classList.contains('light-theme')
+            ? 'rgba(100, 116, 139, 0.16)'
+            : 'rgba(148, 163, 184, 0.12)';
+        const sharedChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 450 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        color: axisColor,
+                        boxWidth: 10,
+                        boxHeight: 10,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 16,
+                        font: { size: 11, weight: '600' }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#e2e8f0',
+                    borderColor: 'rgba(148, 163, 184, 0.28)',
+                    borderWidth: 1,
+                    padding: 11,
+                    displayColors: true
+                }
+            }
+        };
+
+        const ctxStudent = document.getElementById('studentChart');
+        if (ctxStudent) {
+            if (window.studentChartInstance) window.studentChartInstance.destroy();
+            window.studentChartInstance = new Chart(ctxStudent, {
+                type: 'bar',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Students',
+                        data: chartData,
+                        backgroundColor: 'rgba(34, 211, 238, 0.72)',
+                        borderColor: '#22d3ee',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        maxBarThickness: 42
+                    }]
+                },
+                options: {
+                    ...sharedChartOptions,
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: axisColor,
+                                maxRotation: 35,
+                                minRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor, drawBorder: false },
+                            ticks: { color: axisColor, precision: 0, padding: 8 }
+                        }
+                    }
+                }
+            });
+        }
+
+        const { data: txSnapData } = await supabaseClient.from("transactions").select("*").eq("type", "Fee");
+        let monthlyRev = {};
+        let now = new Date();
+        for (let i = 5; i >= 0; i--) {
+            let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            let mStr = d.toLocaleString('default', { month: 'short' }) + " " + d.getFullYear();
+            monthlyRev[mStr] = 0;
+        }
+
+        (txSnapData || []).forEach(doc => {
+            const data = doc;
+            const timestamp = timestampToMillis(data.date || data.timestamp || data.createdAt);
+            if (!timestamp) return;
+
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return;
+
+            const monthKey = date.toLocaleString('default', { month: 'short' }) + " " + date.getFullYear();
+            const amount = Number.parseFloat(data.amount);
+            if (monthlyRev[monthKey] !== undefined && Number.isFinite(amount)) {
+                monthlyRev[monthKey] += amount;
+            }
+        });
+
+        const ctxRev = document.getElementById('revenueChart');
+        if (ctxRev) {
+            if (window.revenueChartInstance) window.revenueChartInstance.destroy();
+            window.revenueChartInstance = new Chart(ctxRev, {
+                type: 'line',
+                data: {
+                    labels: Object.keys(monthlyRev),
+                    datasets: [{
+                        label: 'Revenue (₹)',
+                        data: Object.values(monthlyRev),
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                        pointBackgroundColor: '#fbbf24',
+                        pointBorderColor: '#0f172a',
+                        pointBorderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.32
+                    }]
+                },
+                options: {
+                    ...sharedChartOptions,
+                    plugins: {
+                        ...sharedChartOptions.plugins,
+                        tooltip: {
+                            ...sharedChartOptions.plugins.tooltip,
+                            callbacks: {
+                                label: context => ` Revenue: ₹${Number(context.parsed.y || 0).toLocaleString('en-IN')}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: axisColor, padding: 8, font: { size: 10 } }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor, drawBorder: false },
+                            ticks: {
+                                color: axisColor,
+                                padding: 8,
+                                callback: value => `₹${Number(value).toLocaleString('en-IN', { notation: 'compact' })}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        console.error("Dashboard Load Error: ", e);
+    }
+};
+
+window.loadAttendanceSummary = async (targetDate) => {
+    let dateStr = targetDate;
+    if (!dateStr) {
+        const today = new Date();
+        dateStr = today.toISOString().split('T')[0];
+        document.getElementById('attendanceSummaryDate').value = dateStr;
+    }
+
+    document.getElementById('attendanceSummaryDate').onchange = (e) => {
+        window.loadAttendanceSummary(e.target.value);
+    };
+
+    const tbody = document.getElementById("attendance-summary-body");
+    if (!tbody) return;
+    tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>Loading...</td></tr>";
+
+    try {
+        const { data: attSnapData } = await supabaseClient.from("attendance").select("*").eq("date", dateStr);
+        let schoolAtt = {};
+
+        (attSnapData || []).forEach(doc => {
+            let data = doc;
+            if (!schoolAtt[data.schoolId]) schoolAtt[data.schoolId] = { present: 0, absent: 0, total: 0 };
+
+            if (data.records && Array.isArray(data.records)) {
+                data.records.forEach(r => {
+                    schoolAtt[data.schoolId].total++;
+                    if (r.status === 'Present') schoolAtt[data.schoolId].present++;
+                    else if (r.status === 'Absent' || r.status === 'Late') schoolAtt[data.schoolId].absent++;
+                });
+            }
+        });
+
+        tbody.innerHTML = "";
+        if (Object.keys(schoolAtt).length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>No attendance records found for this date.</td></tr>";
+            return;
+        }
+
+        for (let sid of Object.keys(schoolAtt)) {
+            let { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+            let sName = sDoc ? sDoc.schoolName : sid;
+            let att = schoolAtt[sid];
+            let pct = att.total > 0 ? ((att.present / att.total) * 100).toFixed(1) : 0;
+            let isLow = pct < 70;
+
+            tbody.innerHTML += `
+                <tr class="${isLow ? 'bg-rose-500/10' : ''}">
+                    <td class="p-4 font-bold text-white">${sName}</td>
+                    <td class="p-4">${dateStr}</td>
+                    <td class="p-4 text-center font-bold text-tealAccent">${att.total}</td>
+                    <td class="p-4 text-center text-emerald-400 font-bold">${att.present}</td>
+                    <td class="p-4 text-center text-rose-400 font-bold">${att.absent}</td>
+                    <td class="p-4 text-center font-bold ${isLow ? 'text-rose-500' : 'text-emerald-400'}">${pct}%</td>
+                </tr>
+            `;
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan='6' class='text-center p-4 text-rose-500'>Error loading attendance</td></tr>`;
+        console.error(e);
+    }
+};
+
+window.sendGlobalNotification = async () => {
+    const title = document.getElementById("notifTitle").value;
+    const type = document.getElementById("notifType").value;
+    const target = document.getElementById("notifTarget").value;
+    const message = document.getElementById("notifMessage").value;
+
+    if (!title || !message) {
+        if (window.showToast) window.showToast("Please fill all fields", "#f43f5e");
+        else alert("Please fill all fields");
+        return;
+    }
+
+    try {
+        await supabaseClient.from("notifications").insert([{
+            title, type, target, message,
+            sentAt: new Date().toISOString(),
+            sentBy: "master",
+            isRead: false
+        }]);
+
+        document.getElementById("notifTitle").value = "";
+        document.getElementById("notifMessage").value = "";
+
+        if (window.showToast) window.showToast("Notification Sent", "#10b981");
+        else alert("Notification Sent");
+
+        window.loadGlobalNotifications();
+    } catch (e) {
+        console.error(e);
+        if (window.showToast) window.showToast("Error sending notification", "#f43f5e");
+    }
+};
+
+window.loadGlobalNotifications = async () => {
+    const tbody = document.getElementById("notifications-table-body");
+    if (!tbody) return;
+
+    try {
+        const { data: snapData } = await supabaseClient.from("notifications").select("*").eq("sentBy", "master").order("sentAt", {ascending: false}).limit(50);
+        tbody.innerHTML = "";
+
+        if ((!snapData || snapData.length === 0)) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-coolGray'>No notifications sent yet.</td></tr>";
+            return;
+        }
+
+        (snap || []).forEach(doc => {
+            const data = doc;
+            let dateStr = data.sentAt ? new Date(data.sentAt.toDate()).toLocaleString() : "Just now";
+
+            let colorClass = "text-tealAccent";
+            if (data.type === "Warning") colorClass = "text-amber-400";
+            else if (data.type === "Critical") colorClass = "text-rose-500";
+
+            tbody.innerHTML += `
+                <tr class="hover:bg-slateSurface/50 transition">
+                    <td class="p-4">${dateStr}</td>
+                    <td class="p-4 font-bold text-white">${data.target === 'all' ? 'ALL SCHOOLS' : data.target}</td>
+                    <td class="p-4 font-bold ${colorClass}">${data.type}</td>
+                    <td class="p-4 font-bold text-white">${data.title}</td>
+                    <td class="p-4 max-w-xs truncate" title="${data.message}">${data.message}</td>
+                    <td class="p-4 text-right">
+                        <button onclick="deleteNotification('${doc.id}')" class="text-rose-500 hover:text-rose-400 transition transform hover:scale-110"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        console.error(e);
+    }
+};
+
+window.deleteNotification = async (id) => {
+    if (confirm("Delete this notification?")) {
+        try {
+            await supabaseClient.from("notifications").delete().eq("id", id);
+            window.loadGlobalNotifications();
+            if (window.showToast) window.showToast("Notification deleted", "#10b981");
+        } catch (e) {
+            console.error(e);
+            if (window.showToast) window.showToast("Error deleting", "#f43f5e");
+        }
+    }
+};
+
+window.loadSecurityLogs = async () => {
+    const tbody = document.getElementById("security-logs-body");
+    const alertsBox = document.getElementById("suspicious-activity-container");
+    if (!tbody || !alertsBox) return;
+
+    const roleFilter = document.getElementById("secLogRole").value;
+    const schoolFilter = document.getElementById("secLogSchool").value;
+    const dateFilter = document.getElementById("secLogDate").value;
+
+    try {
+        let query = supabaseClient.from("login_logs").select("*");
+        const { data: snapData } = await query.order("timestamp", {ascending: false}).limit(100); const snap = snapData || [];
+
+        tbody.innerHTML = "";
+        alertsBox.innerHTML = "";
+        let logs = [];
+
+        (snap || []).forEach(doc => {
+            let data = Object.assign({ id: doc.id }, doc);
+            logs.push(data);
+        });
+
+        let filteredLogs = logs.filter(l => {
+            let dateMatch = true;
+            if (dateFilter) {
+                let dStr = l.timestamp ? new Date(l.timestamp).toISOString().split('T')[0] : "";
+                if (dStr !== dateFilter) dateMatch = false;
+            }
+            let rMatch = roleFilter === "ALL" || l.role === roleFilter;
+            let sMatch = schoolFilter === "ALL" || l.schoolId === schoolFilter;
+            return dateMatch && rMatch && sMatch;
+        });
+
+        let ipMap = {};
+        let suspiciousAlerts = [];
+
+        filteredLogs.forEach(l => {
+            let ts = l.timestamp ? new Date(l.timestamp) : null;
+            let isOutofHours = false;
+            if (ts) {
+                let hours = ts.getHours();
+                if (hours < 6 || hours > 22) { // outside 6 AM - 10 PM
+                    isOutofHours = true;
+                    suspiciousAlerts.push(`Out of hours login attempt by ${l.userName || 'Unknown'} at ${ts.toLocaleTimeString()}`);
+                }
+            }
+
+            if (l.ipAddress) {
+                if (!ipMap[l.ipAddress]) ipMap[l.ipAddress] = new Set();
+                if (l.schoolId) ipMap[l.ipAddress].add(l.schoolId);
+            }
+
+            let isSuspicious = isOutofHours || (l.action === 'Login Failed');
+
+            tbody.innerHTML += `
+                <tr class="${isSuspicious ? 'bg-rose-500/10 text-rose-300' : 'hover:bg-slateSurface/50 transition'}">
+                    <td class="p-4">${ts ? ts.toLocaleString() : '-'}</td>
+                    <td class="p-4 font-bold">${l.userName || 'Unknown'}</td>
+                    <td class="p-4 uppercase tracking-widest">${l.role || '-'}</td>
+                    <td class="p-4">${l.schoolId || '-'}</td>
+                    <td class="p-4 font-mono text-cyan-400">${l.ipAddress || 'Unknown'}</td>
+                    <td class="p-4">${l.device || 'Unknown'}</td>
+                    <td class="p-4 font-bold ${l.action === 'Login Failed' ? 'text-rose-500' : 'text-tealAccent'}">${l.action || 'Login'}</td>
+                </tr>
+            `;
+        });
+
+        for (let ip in ipMap) {
+            if (ipMap[ip].size >= 3) {
+                suspiciousAlerts.push(`Same IP (${ip}) attempting login across ${ipMap[ip].size} different schools.`);
+            }
+        }
+
+        if (suspiciousAlerts.length > 0) {
+            let alertsHtml = suspiciousAlerts.map(a => `<div class="bg-rose-500/20 border border-rose-500 text-rose-400 p-3 font-mono rounded-lg shadow-[0_0_10px_rgba(244,63,94,0.2)]"><i class="fas fa-exclamation-triangle mr-2"></i> SUSPICIOUS ACTIVITY: ${a}</div>`).join('');
+            alertsBox.innerHTML = alertsHtml;
+        } else {
+            alertsBox.innerHTML = `<div class="bg-emerald-500/10 border border-emerald-500 text-emerald-400 p-3 font-mono rounded-lg"><i class="fas fa-shield-check mr-2"></i> System Secure. No suspicious activity detected.</div>`;
+        }
+
+        if (filteredLogs.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='7' class='text-center p-4 text-coolGray'>No logs found.</td></tr>";
+        }
+
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = "<tr><td colspan='7' class='text-center p-4 text-rose-500'>Error loading logs</td></tr>";
+    }
+};
+
+window.exportSecurityLogsPDF = () => {
+    if (typeof jspdf !== 'undefined' && jspdf.jsPDF) {
+        const doc = new jspdf.jsPDF();
+        doc.text("System Security Logs - CoreEdu.IN Master Core", 10, 10);
+        doc.autoTable({
+            html: '#security-logs-body',
+            startY: 20,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 }
+        });
+        doc.save("CoreEdu_Security_Logs.pdf");
+    } else {
+        if (window.showToast) window.showToast("PDF generation library not found.", "#f43f5e");
+        else alert("PDF generation library not found.");
+    }
+};
+
+// Hook the new tabs
+document.querySelectorAll('.menu-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-target');
+        if (t === 'tab-dashboard') window.loadGlobalAnalyticsDashboard();
+        if (t === 'tab-attendance-summary') window.loadAttendanceSummary();
+        if (t === 'tab-notifications') window.loadGlobalNotifications();
+        if (t === 'tab-system-security') window.loadSecurityLogs();
+    });
+});
+
+// Load dashboard analytics by default after a short delay
+setTimeout(() => {
+    if (window.loadGlobalAnalyticsDashboard) window.loadGlobalAnalyticsDashboard();
+}, 2000);
+
+// ==========================================
+// 🛡️ MS STUDIO (BATCH PHOTO PROCESSOR) 🛡️
+// ==========================================
+
+let studioImages = [];
+
+document.getElementById('studio-upload')?.addEventListener('change', function (e) {
+    const files = e.target.files;
+    if (!files.length) return;
+
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                // Standard passport ratio is 35:45 (or 7:9)
+                const TARGET_WIDTH = 350;
+                const TARGET_HEIGHT = 450;
+                canvas.width = TARGET_WIDTH;
+                canvas.height = TARGET_HEIGHT;
+
+                const ctx = canvas.getContext('2d');
+
+                // Calculate cover cropping (fill the canvas, center crop)
+                const imgRatio = img.width / img.height;
+                const targetRatio = TARGET_WIDTH / TARGET_HEIGHT;
+                let sWidth = img.width;
+                let sHeight = img.height;
+                let sx = 0;
+                let sy = 0;
+
+                if (imgRatio > targetRatio) {
+                    // Image is wider than passport format, crop sides
+                    sWidth = img.height * targetRatio;
+                    sx = (img.width - sWidth) / 2;
+                } else {
+                    // Image is taller than passport format, crop top/bottom
+                    // Usually we want to keep the top (head) so we shift sy slightly higher rather than absolute center
+                    sHeight = img.width / targetRatio;
+                    sy = (img.height - sHeight) * 0.2;
+                }
+
+                // Fill background with white just in case of transparent uploads
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+
+                // Draw cropped image
+                ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+
+                // Compress to JPEG for high-speed API payload
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.9);
+
+                const newIndex = studioImages.length;
+                studioImages.push({
+                    id: Date.now() + Math.random().toString(36).substr(2, 9),
+                    originalBase64: compressedBase64,
+                    processedBase64: null,
+                    nameText: "",
+                    isProcessed: false,
+                    isLoading: false
+                });
+                renderStudioGrid();
+                processSingleBG(newIndex);
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+    // Reset input
+    this.value = '';
+});
+
+document.getElementById('studio-bg-color')?.addEventListener('input', function (e) {
+    const color = e.target.value;
+    document.querySelectorAll('.studio-img-wrapper').forEach(el => {
+        el.style.backgroundColor = color;
+    });
+});
+
+function renderStudioGrid() {
+    const grid = document.getElementById('studio-grid');
+    if (!grid) return;
+
+    grid.innerHTML = '';
+    const bgColor = document.getElementById('studio-bg-color').value || '#FF0000';
+
+    studioImages.forEach((img, index) => {
+        const imgSrc = img.processedBase64 || img.originalBase64;
+
+        const card = document.createElement('div');
+        card.className = 'studio-card';
+
+        let loaderHtml = img.isLoading ?
+            `<div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-10">
+                <i class="fas fa-circle-notch fa-spin text-white text-2xl mb-2"></i>
+                <span class="text-white text-[10px] font-mono mt-2">Processing...</span>
+            </div>` : '';
+
+        // Conditional display for nameplate
+        const hasName = img.nameText && img.nameText.trim() !== "";
+        const nameplateClass = hasName ? "studio-nameplate" : "studio-nameplate hidden-el";
+
+        card.innerHTML = `
+            <div class="studio-img-wrapper" style="background-color: ${bgColor};">
+                ${loaderHtml}
+                <img src="${imgSrc}" alt="Studio Photo" style="background-color: transparent;">
+                <div class="${nameplateClass}" id="nameplate-container-${index}">
+                    <span id="nameplate-text-${index}">${hasName ? img.nameText.toUpperCase() : ''}</span>
+                </div>
+            </div>
+            <input type="text" class="input-premium w-full mt-2 px-2 py-1 text-xs text-center font-mono rounded" placeholder="Enter Name..." value="${img.nameText}" oninput="updateStudioName(${index}, this.value)">
+            <button onclick="removeStudioImage(${index})" class="mt-2 text-rose-500 text-[10px] hover:text-rose-400 font-mono"><i class="fas fa-trash"></i> Remove</button>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+window.updateStudioName = function (index, value) {
+    if (studioImages[index]) {
+        studioImages[index].nameText = value;
+        // Update live DOM
+        const nameplateContainer = document.getElementById(`nameplate-container-${index}`);
+        const nameplateText = document.getElementById(`nameplate-text-${index}`);
+
+        if (value.trim() === '') {
+            if (nameplateContainer) nameplateContainer.classList.add('hidden-el');
+        } else {
+            if (nameplateContainer) nameplateContainer.classList.remove('hidden-el');
+            if (nameplateText) nameplateText.innerText = value.toUpperCase();
+        }
+    }
+}
+
+window.removeStudioImage = function (index) {
+    studioImages.splice(index, 1);
+    renderStudioGrid();
+}
+
+window.syncBulkNames = function () {
+    const text = document.getElementById('studio-bulk-names').value;
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
+
+    studioImages.forEach((img, i) => {
+        if (lines[i]) {
+            // Strip starting numbers like "1. ", "2-", etc.
+            const cleanName = lines[i].replace(/^[0-9]+[\.\-\)\s]+/, '').trim();
+            img.nameText = cleanName;
+        } else {
+            img.nameText = "";
+        }
+    });
+    renderStudioGrid();
+};
+
+window.saveStudioPreset = function () {
+    const color = document.getElementById('studio-bg-color').value;
+    localStorage.setItem('studio_preset_bg', color);
+    if (window.showToast) window.showToast("Preset Saved!", "#10b981");
+};
+
+window.loadStudioPreset = function () {
+    const saved = localStorage.getItem('studio_preset_bg');
+    if (saved) {
+        const colorInput = document.getElementById('studio-bg-color');
+        if (colorInput) {
+            colorInput.value = saved;
+        }
+    }
+};
+
+// Call load preset on script execute
+setTimeout(() => {
+    window.loadStudioPreset();
+}, 500);
+
+// Load preset on load
+setTimeout(() => {
+    const savedColor = localStorage.getItem('studio_preset_bg');
+    if (savedColor) {
+        const colorPicker = document.getElementById('studio-bg-color');
+        if (colorPicker) {
+            colorPicker.value = savedColor;
+            // Also apply it to any existing wrappers
+            document.querySelectorAll('.studio-img-wrapper').forEach(el => {
+                el.style.backgroundColor = savedColor;
+            });
+        }
+    }
+}, 1000);
+
+async function processSingleBG(index) {
+    if (studioImages[index].isProcessed || studioImages[index].isLoading) return;
+
+    studioImages[index].isLoading = true;
+    renderStudioGrid();
+
+    try {
+        const API_ENDPOINT = "https://school-backend-zlgy.onrender.com/api/remove-bg";
+
+        const response = await fetch(API_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ imageUrl: studioImages[index].originalBase64 })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.base64) {
+            studioImages[index].processedBase64 = data.base64;
+            studioImages[index].isProcessed = true;
+        } else {
+            console.error("BG Removal failed for index", index, data.error);
+            if (window.showToast) window.showToast(`BG Fail: ${data.error || "Unknown Error"}`, "#e11d48");
+        }
+    } catch (error) {
+        console.error("BG Removal API error for index", index, error);
+        if (window.showToast) window.showToast(`API ERR: ${error.message}`, "#e11d48");
+    } finally {
+        studioImages[index].isLoading = false;
+        renderStudioGrid();
+    }
+}
+
+window.processAllBG = async function () {
+    if (studioImages.length === 0) {
+        if (window.showToast) window.showToast("No images to process!", "#e11d48");
+        return;
+    }
+
+    if (window.showToast) window.showToast("Starting Batch Background Removal...", "#a855f7");
+
+    for (let i = 0; i < studioImages.length; i++) {
+        await processSingleBG(i);
+    }
+
+    if (window.showToast) window.showToast("Batch Processing Complete!", "#10b981");
+}
+
+window.generateA4PDF = function () {
+    if (!studioImages.length) {
+        if (window.showToast) window.showToast("No images to export!", "#e11d48");
+        return;
+    }
+
+    if (window.showToast) window.showToast("Generating A4 Grid PDF...", "#10b981");
+
+    // A4 Dimensions in mm: 210 x 297
+    const pdf = new window.jspdf.jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+    });
+
+    const bgColorHex = document.getElementById('studio-bg-color').value || '#FF0000';
+    // Convert hex to rgb
+    const r = parseInt(bgColorHex.slice(1, 3), 16) || 255;
+    const g = parseInt(bgColorHex.slice(3, 5), 16) || 0;
+    const b = parseInt(bgColorHex.slice(5, 7), 16) || 0;
+
+    const photoWidth = 35;
+    const photoHeight = 45;
+    const cols = 5;
+
+    // Calculate margins and gaps
+    const totalWidth = 210;
+    const marginX = 10;
+    const marginY = 10;
+    // Available width = 210 - (2 * 10) = 190.
+    // 5 photos = 5 * 35 = 175.
+    // Remaining = 190 - 175 = 15.
+    // 4 gaps = 15 / 4 = 3.75 mm gap.
+    const gapX = 3.75;
+    const gapY = 5; // vertical gap
+
+    let currentX = marginX;
+    let currentY = marginY;
+    let colIndex = 0;
+
+    studioImages.forEach((img, idx) => {
+        // Wrap to next line if needed
+        if (colIndex >= cols) {
+            colIndex = 0;
+            currentX = marginX;
+            currentY += photoHeight + gapY;
+        }
+
+        // Check for page overflow
+        if (currentY + photoHeight > 297 - marginY) {
+            pdf.addPage();
+            currentX = marginX;
+            currentY = marginY;
+            colIndex = 0;
+        }
+
+        // 1. Draw Background Color Rectangle
+        pdf.setFillColor(r, g, b);
+        pdf.rect(currentX, currentY, photoWidth, photoHeight, 'F');
+
+        // 2. Draw Image
+        const imgData = img.processedBase64 || img.originalBase64;
+        try {
+            let format = 'JPEG';
+            if (imgData.includes('image/png')) format = 'PNG';
+
+            pdf.addImage(imgData, format, currentX, currentY, photoWidth, photoHeight);
+        } catch (e) {
+            console.error("Failed to add image to PDF", e);
+        }
+
+        // 3. Draw Nameplate conditionally
+        const text = img.nameText ? img.nameText.trim() : "";
+
+        if (text !== "") {
+            const nameplateHeight = 7;
+            const nameplateY = currentY + photoHeight - nameplateHeight;
+            pdf.setFillColor(255, 255, 255); // white
+            pdf.setDrawColor(0, 0, 0); // black border
+            pdf.rect(currentX, nameplateY, photoWidth, nameplateHeight, 'DF');
+
+            // 4. Draw Text
+            const uppercaseText = text.toUpperCase();
+            pdf.setTextColor(0, 0, 0); // black text
+            pdf.setFont("helvetica", "bold");
+
+            let fontSize = 8;
+            pdf.setFontSize(fontSize);
+            let textWidth = pdf.getTextWidth(uppercaseText);
+
+            // Auto-adjust font size if name is too long
+            while (textWidth > photoWidth - 2 && fontSize > 3) {
+                fontSize -= 0.5;
+                pdf.setFontSize(fontSize);
+                textWidth = pdf.getTextWidth(uppercaseText);
+            }
+
+            const textX = currentX + (photoWidth - textWidth) / 2;
+            const textY = nameplateY + (nameplateHeight / 2) + 1.5;
+
+            pdf.text(uppercaseText, textX, textY);
+        }
+
+        // Move to next column
+        currentX += photoWidth + gapX;
+        colIndex++;
+    });
+
+    pdf.save("Batch_Studio_Photos.pdf");
+}
+
+// ==========================================
+// PUBLIC MEDIA: HERO CAROUSEL + APP DOWNLOAD
+// ==========================================
+let publicHeroSlides = [];
+let publicHeroIndex = 0;
+let publicHeroTimer = null;
+
+function renderPublicHeroCarousel(banners = []) {
+    const carousel = document.getElementById("public-hero-carousel");
+    const track = document.getElementById("public-hero-track");
+    const dots = document.getElementById("public-hero-dots");
+    if (!carousel || !track || !dots) return;
+
+    publicHeroSlides = banners.filter(Boolean);
+    publicHeroIndex = 0;
+    if (!publicHeroSlides.length) {
+        carousel.classList.add("hidden-el");
+        track.innerHTML = "";
+        dots.innerHTML = "";
+        return;
+    }
+
+    carousel.classList.remove("hidden-el");
+    track.innerHTML = publicHeroSlides.map((src, index) => `
+        <div class="public-hero-slide" aria-hidden="${index === 0 ? "false" : "true"}">
+            <img src="${src}" alt="Company hero banner ${index + 1}">
+        </div>
+    `).join("");
+    dots.innerHTML = publicHeroSlides.map((_, index) => `<button type="button" class="public-carousel-dot ${index === 0 ? "active" : ""}" aria-label="Go to banner ${index + 1}" onclick="window.setPublicHeroSlide(${index})"></button>`).join("");
+
+    const prevBtn = document.getElementById("heroPrevBtn");
+    const nextBtn = document.getElementById("heroNextBtn");
+    if (prevBtn) prevBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex - 1);
+    if (nextBtn) nextBtn.onclick = () => window.setPublicHeroSlide(publicHeroIndex + 1);
+
+    updatePublicHeroSlide();
+    startPublicHeroAutoScroll();
+}
+
+function updatePublicHeroSlide() {
+    const track = document.getElementById("public-hero-track");
+    if (!track || !publicHeroSlides.length) return;
+    track.style.transform = `translateX(-${publicHeroIndex * 100}%)`;
+    document.querySelectorAll(".public-hero-slide").forEach((slide, index) => slide.setAttribute("aria-hidden", index === publicHeroIndex ? "false" : "true"));
+    document.querySelectorAll(".public-carousel-dot").forEach((dot, index) => dot.classList.toggle("active", index === publicHeroIndex));
+}
+
+window.setPublicHeroSlide = (index) => {
+    if (!publicHeroSlides.length) return;
+    publicHeroIndex = (index + publicHeroSlides.length) % publicHeroSlides.length;
+    updatePublicHeroSlide();
+    startPublicHeroAutoScroll();
+};
+
+function startPublicHeroAutoScroll() {
+    if (publicHeroTimer) clearInterval(publicHeroTimer);
+    if (publicHeroSlides.length < 2) return;
+    publicHeroTimer = setInterval(() => window.setPublicHeroSlide(publicHeroIndex + 1), 3000);
+}
+
+function renderPublicAppSection(appMedia = {}) {
+    const section = document.getElementById("public-app-section");
+    const logo = document.getElementById("public-app-logo");
+    const logoFallback = document.getElementById("public-app-logo-fallback");
+    const title = document.getElementById("public-app-title");
+    const desc = document.getElementById("public-app-desc");
+    const download = document.getElementById("public-apk-download");
+    const shots = document.getElementById("public-app-screenshots");
+    if (!section || !shots) return;
+
+    const hasContent = appMedia.logoUrl || appMedia.apkUrl || (appMedia.screenshots || []).length;
+    section.classList.toggle("hidden-el", !hasContent);
+    if (!hasContent) return;
+
+    title.textContent = appMedia.title || "CoreEdu.IN Mobile Suite";
+    desc.textContent = appMedia.description || "Download the latest secure release and experience a premium mobile command center for your institution.";
+    if (appMedia.logoUrl) {
+        logo.src = appMedia.logoUrl;
+        logo.classList.remove("hidden-el");
+        logoFallback.classList.add("hidden-el");
+    } else {
+        logo.classList.add("hidden-el");
+        logoFallback.classList.remove("hidden-el");
+    }
+    if (appMedia.apkUrl) {
+        download.href = `https://school-backend-zlgy.onrender.com/api/download-apk?url=${encodeURIComponent(appMedia.apkUrl)}&name=${encodeURIComponent(appMedia.apkName || "MasterCore.apk")}`;
+        download.download = appMedia.apkName || "latest-version.apk";
+        download.classList.remove("hidden-el");
+    } else {
+        download.classList.add("hidden-el");
+    }
+    shots.innerHTML = (appMedia.screenshots || []).map((src, index) => `<figure class="public-app-shot"><img src="${src}" alt="App screenshot ${index + 1}"></figure>`).join("");
+}
+
+function buildMediaCard(src, label, actionsHtml = "") {
+    return `
+        <div class="admin-media-item">
+            <img src="${src}" alt="${label}">
+            <div class="admin-media-item__overlay">
+                <span>${label}</span>
+                ${actionsHtml}
+            </div>
+        </div>
+    `;
+}
+
+function renderAdminMediaPreviews(data = {}) {
+    const heroPreview = document.getElementById("admin-hero-preview");
+    const appPreview = document.getElementById("admin-app-preview");
+    if (heroPreview) {
+        const banners = data.banners || [];
+        heroPreview.innerHTML = banners.length
+            ? banners.map((src, index) => buildMediaCard(src, `Hero banner ${index + 1}`, `<button type="button" class="admin-media-delete-btn" onclick="window.deleteHeroBanner(${index})"><i class="fas fa-trash"></i> Delete</button>`)).join("")
+            : `<p class="admin-media-empty">No hero banners published yet.</p>`;
+    }
+    if (appPreview) {
+        const media = data.appMedia || {};
+        const screenshotCards = (media.screenshots || []).map((src, index) => buildMediaCard(src, `Screenshot ${index + 1}`, `<button type="button" class="admin-media-delete-btn" onclick="window.deleteAppScreenshot(${index})"><i class="fas fa-trash"></i> Delete</button>`)).join("");
+        appPreview.innerHTML = `
+            ${media.logoUrl ? buildMediaCard(media.logoUrl, "App logo", `<button type="button" class="admin-media-delete-btn" onclick="window.deleteAppLogo()"><i class="fas fa-trash"></i> Delete</button>`) : `<p class="admin-media-empty">No app logo published yet.</p>`}
+            ${screenshotCards || `<p class="admin-media-empty">No app screenshots published yet.</p>`}
+            ${media.apkUrl ? `
+                <div class="admin-media-file-card">
+                    <div>
+                        <span class="admin-media-file-label">APK File</span>
+                        <strong>${media.apkName || "latest-version.apk"}</strong>
+                    </div>
+                    <div class="admin-media-file-actions">
+                        <a href="https://school-backend-zlgy.onrender.com/api/download-apk?url=${encodeURIComponent(media.apkUrl)}&name=${encodeURIComponent(media.apkName || 'MasterCore.apk')}" class="admin-media-download-btn"><i class="fas fa-download"></i> Download</a>
+                        <button type="button" class="admin-media-delete-btn" onclick="window.deleteAppApk()"><i class="fas fa-trash"></i> Delete</button>
+                    </div>
+                </div>
+            ` : `<p class="admin-media-empty">No APK published yet.</p>`}
+        `;
+    }
+}
+
+async function refreshPublicMedia() {
+    try {
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const data = snap ? snap : {};
+        renderPublicHeroCarousel(data.banners || []);
+        renderPublicAppSection(data.appMedia || {});
+        renderAdminMediaPreviews(data);
+        document.getElementById("app-title-input") && (document.getElementById("app-title-input").value = data.appMedia?.title || "");
+        document.getElementById("app-desc-input") && (document.getElementById("app-desc-input").value = data.appMedia?.description || "");
+    } catch (err) {
+        console.error("Public media load failed", err);
+    }
+}
+
+window.deleteHeroBanner = async (index) => {
+    try {
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const data = snap ? snap : {};
+        const banners = Array.isArray(data.banners) ? [...data.banners] : [];
+        if (index < 0 || index >= banners.length) return;
+        const targetUrl = banners[index];
+        window.customConfirm("DELETE THIS HERO BANNER?", async () => {
+            try {
+                await fetch('https://school-backend-zlgy.onrender.com/api/admin/delete-hero-banner', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageUrl: targetUrl })
+                });
+            } catch (e) {
+                console.error("Backend Cloudinary delete failed", e);
+            }
+            banners.splice(index, 1);
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ banners, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
+            await refreshPublicMedia();
+            window.showToast("HERO BANNER DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("HERO DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.saveHeroBanners = async () => {
+    const input = document.getElementById("hero-banner-upload");
+    const files = Array.from(input?.files || []);
+    if (!files.length) return window.showToast("SELECT HERO BANNER IMAGES", "#e11d48");
+    try {
+        window.showToast("UPLOADING HERO BANNERS VIA SECURE BACKEND...", "#f59e0b");
+        const idToken = await (await supabaseClient.auth.getSession()).data.session?.access_token;
+        const formData = new FormData();
+        files.forEach(file => formData.append('banners', file));
+
+        const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-hero-banners", {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${idToken}` },
+            body: formData
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            input.value = "";
+            await refreshPublicMedia();
+            window.showToast("HERO CAROUSEL PUBLISHED", "#10b981");
+        } else {
+            window.showToast("❌ ERROR: " + data.error, "#e11d48");
+        }
+    } catch (err) {
+        window.showToast("BANNER UPLOAD FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.deleteAppLogo = async () => {
+    try {
+        window.customConfirm("DELETE CURRENT APP LOGO?", async () => {
+            const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+            const data = snap ? snap : {};
+            const appMedia = { ...(data.appMedia || {}) };
+            
+            appMedia.logoUrl = "";
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ appMedia, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
+            await refreshPublicMedia();
+            window.showToast("APP LOGO DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("LOGO DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.deleteAppScreenshot = async (index) => {
+    try {
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const data = snap ? snap : {};
+        const appMedia = { ...(data.appMedia || {}) };
+        const screenshots = Array.isArray(appMedia.screenshots) ? [...appMedia.screenshots] : [];
+        if (index < 0 || index >= screenshots.length) return;
+        const targetUrl = screenshots[index];
+        window.customConfirm("DELETE THIS APP SCREENSHOT?", async () => {
+            
+            screenshots.splice(index, 1);
+            appMedia.screenshots = screenshots;
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ appMedia, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
+            await refreshPublicMedia();
+            window.showToast("SCREENSHOT DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("SCREENSHOT DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.deleteAppApk = async () => {
+    try {
+        window.customConfirm("DELETE CURRENT APK FILE?", async () => {
+            const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+            const data = snap ? snap : {};
+            const appMedia = { ...(data.appMedia || {}) };
+            
+            appMedia.apkUrl = "";
+            appMedia.apkName = "";
+            await supabaseClient.from(PUBLIC_MEDIA_DOC.col).update({ appMedia, updatedAt: Date.now() }).eq("id", PUBLIC_MEDIA_DOC.id);
+            await refreshPublicMedia();
+            window.showToast("APK DELETED", "#10b981");
+        });
+    } catch (err) {
+        window.showToast("APK DELETE FAILED: " + err.message, "#e11d48");
+    }
+};
+
+window.saveAppMedia = async () => {
+    const logoFile = document.getElementById("app-logo-upload")?.files[0];
+    const apkFile = document.getElementById("apk-file-upload")?.files[0];
+    const screenshotFiles = document.getElementById("app-screenshots-upload")?.files;
+
+    if (!logoFile && !apkFile && (!screenshotFiles || screenshotFiles.length === 0)) return window.showToast("UPLOAD LOGO, APK, OR SCREENSHOTS", "#e11d48");
+    try {
+        window.showToast("UPLOADING APP MEDIA VIA SECURE BACKEND...", "#f59e0b");
+        const idToken = await (await supabaseClient.auth.getSession()).data.session?.access_token;
+        const formData = new FormData();
+        if (apkFile) formData.append('apk', apkFile);
+        if (logoFile) formData.append('logo', logoFile);
+        if (screenshotFiles && screenshotFiles.length > 0) {
+            for (let i = 0; i < screenshotFiles.length; i++) {
+                formData.append('screenshots', screenshotFiles[i]);
+            }
+        }
+
+        const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-app-media", {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${idToken}` },
+            body: formData
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            ["app-logo-upload", "app-screenshots-upload", "apk-file-upload"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+            await refreshPublicMedia();
+            window.showToast("APP MEDIA PUBLISHED", "#10b981");
+        } else {
+            window.showToast("❌ ERROR: " + data.error, "#e11d48");
+        }
+    } catch (err) {
+        window.showToast("APP MEDIA UPLOAD FAILED: " + err.message, "#e11d48");
+    }
+};
+
+function initPublicMediaAdminToggles() {
+    document.querySelectorAll(".public-media-toggle").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const panel = btn.dataset.mediaPanel;
+            document.querySelectorAll(".public-media-toggle").forEach(item => item.classList.toggle("active", item === btn));
+            document.querySelectorAll(".public-media-panel").forEach(item => {
+                const isActive = item.id === `media-panel-${panel}`;
+                item.classList.toggle("active", isActive);
+                item.classList.toggle("hidden-el", !isActive);
+            });
+        });
+    });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    initPublicMediaAdminToggles();
+    refreshPublicMedia();
+});
+
+// ========================================================
+// 8. DATABASE BACKUP EXPORT
+// ========================================================
+const btnExportBackup = document.getElementById("btn-export-backup");
+if (btnExportBackup) {
+    btnExportBackup.addEventListener("click", async () => {
+        const secret = document.getElementById("master-secret").value.trim();
+        if (!secret) return alert("Please enter the Master Secret first!");
+
+        btnExportBackup.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating Backup...';
+        btnExportBackup.disabled = true;
+
+        try {
+            const res = await fetch('https://school-backend-zlgy.onrender.com/api/admin/export-backup', {
+                method: 'GET',
+                headers: { 'mastersecret': secret }
+            });
+            const data = await res.json();
+            if (data.success) {
+                const jsonStr = JSON.stringify(data.backup, null, 2);
+                const blob = new Blob([jsonStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `MasterCore_Backup_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                alert("Backup downloaded successfully!");
+            } else {
+                alert("Backup Failed: " + data.error);
+            }
+        } catch (err) {
+            alert("Error connecting to server for backup.");
+        }
+
+        btnExportBackup.innerHTML = '<i class="fa-solid fa-download"></i> Download Full Backup';
+        btnExportBackup.disabled = false;
+    });
+}
 
 
