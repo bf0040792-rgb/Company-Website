@@ -17,7 +17,8 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        flowType: 'pkce'
+        flowType: 'pkce',
+        storageKey: 'coreedu-company-auth'
     }
 });
 // ==========================================
