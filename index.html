@@ -93,7 +93,7 @@
                     <h1 class="text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span
                             class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">.IN</span></h1>
                 </div>
-                <div class="hidden md:flex items-center justify-center gap-1 xl:gap-2 flex-1 px-2">
+                <div class="flex items-center justify-start md:justify-center gap-2 flex-1 px-2 overflow-x-auto whitespace-nowrap scrollbar-hide">
                     <button onclick="window.location.href='https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/'"
                         class="px-2 xl:px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.5)] hover:shadow-[0_0_25px_rgba(79,70,229,0.8)] transition-all font-mono text-xs xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-school mr-1"></i> SCHOOL LOGIN
@@ -1042,7 +1042,7 @@
         <div class="absolute inset-0 pointer-events-none z-0" style="background: radial-gradient(ellipse at 8% 0%, rgba(167,139,250,.08), transparent 35%), var(--m-bg);"></div>
 
         <div class="mock-main relative z-10 flex flex-col h-full w-full" style="background: var(--m-bg);">
-            <div class="mock-topbar flex justify-between items-center w-full relative z-30" style="background: color-mix(in srgb, var(--m-bg) 84%, white 16%); border-bottom: 1px solid var(--m-line); padding: 12px 19px; min-height: 60px;">
+            <div class="mock-topbar flex justify-between items-center w-full relative z-30" style="background: color-mix(in srgb, var(--m-bg) 84%, white 16%); border-bottom: 1px solid var(--m-line); padding: 16px 20px; min-height: 70px;">
                 <div class="flex items-center gap-4">
                     <span class="hamb cursor-pointer px-2" id="sidebar-toggle" style="color: var(--m-muted); font-size: 20px;"><i class="fas fa-bars"></i></span>
                     <div class="mock-logo flex items-center gap-2" style="border: none; padding: 0;">
@@ -3436,7 +3436,6 @@
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // History API for Back Button
     document.querySelectorAll('.menu-item').forEach(btn => {
         btn.addEventListener('click', () => {
             const t = btn.getAttribute('data-target');
@@ -3451,29 +3450,41 @@ document.addEventListener('DOMContentLoaded', function() {
             const btn = document.querySelector(.menu-item[data-target="${e.state.tab}"]);
             if (btn) btn.click();
         } else {
-            // Default to dashboard
             const db = document.querySelector(.menu-item[data-target="tab-dashboard"]);
             if (db) db.click();
         }
     });
 
-    // Replace old sidebar toggle logic
     const toggleBtn = document.getElementById('sidebar-toggle');
     const sidebar = document.getElementById('main-sidebar');
     const closeBtn = document.getElementById('close-sidebar-btn');
     const miniBtn = document.getElementById('mini-sidebar-btn');
 
+    function openSidebar() {
+        sidebar.classList.remove('-translate-x-full');
+        sidebar.classList.add('translate-x-0');
+    }
+    
+    function closeSidebar() {
+        sidebar.classList.add('-translate-x-full');
+        sidebar.classList.remove('translate-x-0');
+    }
+
     if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            sidebar.classList.toggle('-translate-x-full');
+            if (sidebar.classList.contains('-translate-x-full')) {
+                openSidebar();
+            } else {
+                closeSidebar();
+            }
         });
     }
 
     if (closeBtn && sidebar) {
         closeBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            sidebar.classList.add('-translate-x-full');
+            closeSidebar();
         });
     }
 
@@ -3484,11 +3495,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Auto-close sidebar on mobile when an item is clicked
     document.querySelectorAll('#main-sidebar .nav-item').forEach(item => {
         item.addEventListener('click', () => {
             if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
-                sidebar.classList.add('-translate-x-full');
+                closeSidebar();
             }
         });
     });
@@ -3535,6 +3545,8 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
+
 
 
 
