@@ -4270,25 +4270,34 @@ window.saveHeroBanners = async () => {
     const files = Array.from(input?.files || []);
     if (!files.length) return window.showToast("SELECT HERO BANNER IMAGES", "#e11d48");
     try {
-        window.showToast("UPLOADING HERO BANNERS VIA SECURE BACKEND...", "#f59e0b");
-        const idToken = await (await supabaseClient.auth.getSession()).data.session?.access_token;
-        const formData = new FormData();
-        files.forEach(file => formData.append('banners', file));
-
-        const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-hero-banners", {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${idToken}` },
-            body: formData
-        });
-
-        const data = await res.json();
-        if (data.success) {
-            input.value = "";
-            await refreshPublicMedia();
-            window.showToast("HERO CAROUSEL PUBLISHED", "#10b981");
-        } else {
-            window.showToast("❌ ERROR: " + data.error, "#e11d48");
+        window.showToast("PROCESSING IMAGES DIRECTLY...", "#f59e0b");
+        
+        const newBanners = [];
+        for (const file of files) {
+            const base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            newBanners.push(base64);
         }
+        
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const data = snap ? snap : {};
+        const existingBanners = Array.isArray(data.banners) ? [...data.banners] : [];
+        const updatedBanners = [...existingBanners, ...newBanners];
+        
+        window.showToast("SAVING TO CLOUD...", "#f59e0b");
+        await supabaseClient.from(PUBLIC_MEDIA_DOC.col).upsert({ 
+            id: PUBLIC_MEDIA_DOC.id, 
+            banners: updatedBanners, 
+            updatedAt: Date.now() 
+        });
+        
+        input.value = "";
+        await refreshPublicMedia();
+        window.showToast("HERO CAROUSEL PUBLISHED", "#10b981");
     } catch (err) {
         window.showToast("BANNER UPLOAD FAILED: " + err.message, "#e11d48");
     }
@@ -4357,31 +4366,41 @@ window.saveAppMedia = async () => {
 
     if (!logoFile && !apkFile && (!screenshotFiles || screenshotFiles.length === 0)) return window.showToast("UPLOAD LOGO, APK, OR SCREENSHOTS", "#e11d48");
     try {
-        window.showToast("UPLOADING APP MEDIA VIA SECURE BACKEND...", "#f59e0b");
-        const idToken = await (await supabaseClient.auth.getSession()).data.session?.access_token;
-        const formData = new FormData();
-        if (apkFile) formData.append('apk', apkFile);
-        if (logoFile) formData.append('logo', logoFile);
-        if (screenshotFiles && screenshotFiles.length > 0) {
-            for (let i = 0; i < screenshotFiles.length; i++) {
-                formData.append('screenshots', screenshotFiles[i]);
-            }
-        }
+        window.showToast("PROCESSING APP MEDIA DIRECTLY...", "#f59e0b");
+        
+        const { data: snap } = await supabaseClient.from(PUBLIC_MEDIA_DOC.col).select("*").eq("id", PUBLIC_MEDIA_DOC.id).maybeSingle();
+        const data = snap ? snap : {};
+        const appMedia = { ...(data.appMedia || {}) };
 
-        const res = await fetch("https://school-backend-zlgy.onrender.com/api/admin/publish-app-media", {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${idToken}` },
-            body: formData
+        const toBase64 = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
         });
 
-        const data = await res.json();
-        if (data.success) {
-            ["app-logo-upload", "app-screenshots-upload", "apk-file-upload"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
-            await refreshPublicMedia();
-            window.showToast("APP MEDIA PUBLISHED", "#10b981");
-        } else {
-            window.showToast("❌ ERROR: " + data.error, "#e11d48");
+        if (logoFile) appMedia.logoUrl = await toBase64(logoFile);
+        if (apkFile) {
+            appMedia.apkUrl = await toBase64(apkFile);
+            appMedia.apkName = apkFile.name;
         }
+        if (screenshotFiles && screenshotFiles.length > 0) {
+            appMedia.screenshots = appMedia.screenshots || [];
+            for (let i = 0; i < screenshotFiles.length; i++) {
+                appMedia.screenshots.push(await toBase64(screenshotFiles[i]));
+            }
+        }
+        
+        window.showToast("SAVING MEDIA TO CLOUD...", "#f59e0b");
+        await supabaseClient.from(PUBLIC_MEDIA_DOC.col).upsert({ 
+            id: PUBLIC_MEDIA_DOC.id, 
+            appMedia: appMedia, 
+            updatedAt: Date.now() 
+        });
+        
+        ["app-logo-upload", "app-screenshots-upload", "apk-file-upload"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+        await refreshPublicMedia();
+        window.showToast("APP MEDIA PUBLISHED", "#10b981");
     } catch (err) {
         window.showToast("APP MEDIA UPLOAD FAILED: " + err.message, "#e11d48");
     }
@@ -4446,5 +4465,6 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
 
 
