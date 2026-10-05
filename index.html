@@ -1037,239 +1037,163 @@
     </div>
 
     <!-- Dashboard Wrapper -->
-    <div id="dashboard-wrapper" class="hidden-el h-screen w-full flex flex-col bg-slateBase overflow-hidden relative">
-        <div class="absolute inset-0 cyber-grid-bg opacity-[0.03] pointer-events-none z-0"></div>
+        <!-- Dashboard Wrapper -->
+    <div id="dashboard-wrapper" class="hidden-el h-screen w-full flex flex-col overflow-hidden relative mock-screen ops-concept top-navigation">
+        <div class="absolute inset-0 pointer-events-none z-0" style="background: radial-gradient(ellipse at 8% 0%, rgba(167,139,250,.08), transparent 35%), var(--m-bg);"></div>
 
-        <header
-            class="h-16 glass-card border-x-0 border-t-0 border-b border-tealAccent/20 rounded-none px-6 flex items-center justify-between z-30 shrink-0 bg-slateBase/90">
-            <div class="flex items-center gap-3">
-                <i data-lucide="hexagon" class="text-tealAccent w-6 h-6 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]"></i>
-                <h1 class="text-lg font-display font-bold tracking-widest uppercase text-white hidden sm:block">Master
-                    Core</h1>
-            </div>
-
-            <div class="flex items-center gap-4">
-                <label
-                    class="flex items-center gap-2 cursor-pointer bg-slateSurface px-3 py-1.5 rounded-lg border border-glassBorder hover:border-tealAccent transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
-                    <input type="checkbox" id="privacyShieldToggle" class="input-checkbox w-4 h-4 rounded">
-                    <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i
-                            class="fas fa-user-secret text-indigo-400"></i> Stealth</span>
-                </label>
-                <label
-                    class="hidden md:flex items-center gap-2 cursor-pointer bg-slateSurface px-3 py-1.5 rounded-lg border border-glassBorder hover:border-blue-500 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
-                    <input type="checkbox" id="deviceModeToggle" class="input-checkbox w-4 h-4 rounded">
-                    <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i
-                            class="fas fa-desktop text-blue-400"></i> Force PC</span>
-                </label>
-                <label
-                    class="flex items-center gap-2 cursor-pointer bg-slateSurface px-3 py-1.5 rounded-lg border border-glassBorder hover:border-amber-400 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
-                    <input type="checkbox" id="themeToggle" class="input-checkbox w-4 h-4 rounded">
-                    <span class="text-[10px] font-mono font-bold text-coolLight uppercase tracking-widest"><i
-                            class="fas fa-sun text-amber-400"></i> Theme</span>
-                </label>
-
-                <div
-                    class="w-8 h-8 rounded-full bg-tealAccent flex items-center justify-center text-slateBase font-bold shadow-[0_0_10px_rgba(0,240,255,0.5)] border border-white/20">
-                    R</div>
-            </div>
-        </header>
-
-        <div class="flex-1 flex flex-col overflow-hidden relative z-10">
-            <!-- Sidebar -->
-            <aside class="w-full glass-card border-x-0 border-t-0 border-b border-tealAccent/20 flex flex-row h-14 z-20 shrink-0 overflow-x-auto bg-[#121a27] whitespace-nowrap scrollbar-hide items-center px-4 gap-2">
-                <nav class="flex-1 flex items-center space-x-2 px-2 py-0 menu-container">
-                    
-                    <button
-                        class="menu-item active px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all bg-tealAccent/10 text-tealAccent border-b-2 border-tealAccent shadow-[inset_0_-2px_10px_rgba(0,240,255,0.1)] font-mono text-xs"
-                        data-target="tab-dashboard"><i class="fas fa-satellite-dish w-5 text-center"></i>
-                        Analytics</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-attendance-summary"><i
-                            class="fas fa-clipboard-check text-emerald-400 w-5 text-center"></i> Attendance
-                        Overview</button>
-
-                    <p
-                        class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">
-                        Entity Control</p>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-notifications"><i class="fas fa-bell text-amber-400 w-5 text-center"></i>
-                        Global Notifications</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-pending-approvals"><i
-                            class="fas fa-user-plus text-emerald-400 w-5 text-center"></i> Pending Approvals</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-transfer-approvals"><i
-                            class="fas fa-right-left text-fuchsia-400 w-5 text-center"></i> Transfer Approvals</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-manage"><i class="fas fa-server text-indigo-400 w-5 text-center"></i> Create Institution</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-institutions"><i class="fas fa-building-columns text-cyan-400 w-5 text-center"></i> Institutions</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-school-id"><i class="fas fa-id-card text-fuchsia-400 w-5 text-center"></i> School &amp;
-                        College IDs</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-modules"><i class="fas fa-user-astronaut text-blue-400 w-5 text-center"></i>
-                        Inspect Subjects</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-aadhaar-search"><i
-                            class="fas fa-fingerprint text-amber-400 w-5 text-center"></i> Identity Search</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-staff"><i class="fas fa-users-cog text-emerald-400 w-5 text-center"></i> Global
-                        Staff</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-feature-toggles"><i class="fas fa-toggle-on text-pink-400 w-5 text-center"></i>
-                        Feature Toggles</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-ms-studio"><i class="fas fa-camera-retro text-purple-400 w-5 text-center"></i>
-                        MS Studio</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-public-media"><i class="fas fa-photo-film text-cyan-400 w-5 text-center"></i>
-                        Public Media</button>
-
-                    <p
-                        class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">
-                        Finance & Auth</p>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-school-payment"><i class="fas fa-coins text-emerald-500 w-5 text-center"></i>
-                        Billing Ledger</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-password-req"><i class="fas fa-key text-amber-500 w-5 text-center"></i> Auth
-                        Requests</button>
-
-                    <p
-                        class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">
-                        Infrastructure</p>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-system-security"><i
-                            class="fas fa-shield-alt text-rose-500 w-5 text-center"></i> System Security</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-backup"><i class="fas fa-cloud-download-alt text-blue-500 w-5 text-center"></i>
-                        Snapshot & Sync</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-security"><i class="fas fa-shield-virus text-rose-500 w-5 text-center"></i>
-                        System Limits</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-device-tracking"><i
-                            class="fas fa-crosshairs text-cyan-400 w-5 text-center"></i> Radar Tracking</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-broadcast"><i
-                            class="fas fa-broadcast-tower text-indigo-500 w-5 text-center"></i> Comm Hub</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-tickets"><i class="fas fa-ticket-alt text-teal-400 w-5 text-center"></i>
-                        Tickets</button>
-
-                    <p
-                        class="text-[10px] font-mono font-bold text-tealAccent/50 uppercase tracking-widest mb-3 mt-6 px-2">
-                        Logs & Policies</p>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-audit-logs"><i class="fas fa-terminal text-coolLight w-5 text-center"></i>
-                        Audit Matrix</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-deletions"><i class="fas fa-hand-paper text-rose-400 w-5 text-center"></i>
-                        Master Veto</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-recycle-bin"><i class="fas fa-trash-restore text-teal-400 w-5 text-center"></i>
-                        Recovery Bin</button>
-                    <button
-                        class="menu-item px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all text-coolLight hover:bg-slateSurface hover:text-white font-mono text-xs"
-                        data-target="tab-role-builder"><i class="fas fa-cogs text-amber-400 w-5 text-center"></i> Policy
-                        Forge</button>
-                </nav>
-                <div class="p-4 border-t border-tealAccent/20 bg-slateSurface/50">
-                    <button id="logoutBtn"
-                        class="w-full py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded-xl text-xs font-mono font-bold transition flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(244,63,94,0.1)] hover:shadow-[0_0_15px_rgba(244,63,94,0.5)]"><i
-                            class="fas fa-power-off"></i> TERMINATE SESSION</button>
-                </div>
-            </aside>
-
-            <!-- Main Content Area -->
-            <main class="flex-1 overflow-y-auto p-6 md:p-10 relative z-0 main-content bg-[#121a27] text-sm">
-
-                <div class="mb-8 border-b border-tealAccent/20 pb-4 flex justify-between items-end">
-                    <div>
-                        <h1 id="tab-title"
-                            class="text-3xl font-display font-extrabold text-white tracking-tight drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
-                            Dashboard</h1>
-                        <p id="adminEmail"
-                            class="text-tealAccent text-xs font-mono mt-1 tracking-widest drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]">
-                        </p>
+        <div class="mock-main relative z-10 flex flex-col h-full w-full" style="background: var(--m-bg);">
+            <div class="mock-topbar flex justify-between items-center w-full relative z-30" style="background: color-mix(in srgb, var(--m-bg) 84%, white 16%); border-bottom: 1px solid var(--m-line); padding: 0 19px;">
+                <div class="flex items-center gap-4">
+                    <span class="hamb cursor-pointer px-2" id="sidebar-toggle" style="color: var(--m-muted); font-size: 20px;"><i class="fas fa-bars"></i></span>
+                    <div class="mock-logo flex items-center gap-2" style="border: none; padding: 0;">
+                        <span class="mock-logo-mark" style="width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; color: #eff9ff; font-size: 14px; background: linear-gradient(145deg, #a78bfa, #8657db);">?</span>
+                        <span class="mock-logo-text font-bold" style="color: var(--m-ink); font-size: 14px;">MasterCore<small style="display: block; color: var(--m-muted); font-size: 8px; font-weight: 600; letter-spacing: .08em; line-height:1;">COMPANY PORTAL</small></span>
                     </div>
                 </div>
 
-                <!-- ALL TABS REMAIN EXACTLY THE SAME STRUCTURALLY, JUST UPDATED CLASSES FOR CYBER THEME -->
+                <div class="nav-scroll hidden xl:flex items-center gap-2 flex-1 px-8" style="overflow:visible;">
+                    <div class="nav-item active menu-item cursor-pointer" data-target="tab-dashboard" style="min-height: 28px; padding: 5px 8px; font-size: 11px;"><span class="nav-glyph" style="font-size:12px;">?</span><span class="nav-label">Dashboard</span></div>
+                    <div class="nav-item menu-item cursor-pointer" data-target="tab-manage" style="min-height: 28px; padding: 5px 8px; font-size: 11px;"><span class="nav-glyph" style="font-size:12px;">+</span><span class="nav-label">Create Institution</span></div>
+                    <div class="nav-item menu-item cursor-pointer" data-target="tab-pending-approvals" style="min-height: 28px; padding: 5px 8px; font-size: 11px;"><span class="nav-glyph" style="font-size:12px;">?</span><span class="nav-label">Approvals</span><span class="nav-badge">06</span></div>
+                    <div class="nav-item menu-item cursor-pointer" data-target="tab-institutions" style="min-height: 28px; padding: 5px 8px; font-size: 11px;"><span class="nav-glyph" style="font-size:12px;">�</span><span class="nav-label">Institutions</span></div>
+                    <div class="nav-item menu-item cursor-pointer" data-target="tab-school-payment" style="min-height: 28px; padding: 5px 8px; font-size: 11px;"><span class="nav-glyph" style="font-size:12px;">?</span><span class="nav-label">Billing Ledger</span></div>
+                </div>
 
-                <!-- Dashboard Tab -->
-                <div id="tab-dashboard" class="tab-content active mock-content scroll ops-concept" style="padding: 0;">
-    <div class="compact-heading">
-        <div><h3 style="font-size: 24px; color: #eef3fa; margin: 0 0 4px; font-weight: 700;">Operations Desk</h3><p style="color: #9aa9bc; font-size: 13px; margin: 0;">Your network metrics, review queues, and daily Company actions.</p></div>
-        <div class="session-chip">System Live</div>
-    </div>
-    
-    <div class="section-line"><h4>Network Core</h4><span>Key Database Telemetry</span></div>
-    <div class="stat-strip">
-        <div class="queue-card"><div class="queue-label">Total Revenue</div><div class="queue-number"><span id="stat-revenue-total">?0</span></div><div class="queue-foot">INR Collected</div></div>
-        <div class="queue-card"><div class="queue-label">Institutions</div><div class="queue-number"><span id="stat-schools">0</span></div><div class="queue-foot">Active Nodes</div></div>
-        <div class="queue-card"><div class="queue-label">Students</div><div class="queue-number"><span id="stat-students">0</span></div><div class="queue-foot">Enrolled Globally</div></div>
-        <div class="queue-card"><div class="queue-label">Active Licenses</div><div class="queue-number"><span id="stat-licenses">0</span></div><div class="queue-foot">Current Plans</div></div>
-        <div class="queue-card"><div class="queue-label">Global Staff</div><div class="queue-number"><span id="stat-staff">0</span></div><div class="queue-foot">Active Users</div></div>
-    </div>
+                <div class="flex items-center gap-4">
+                    <div class="search hidden lg:flex" style="width: 250px; height: 30px; border-radius: 8px; align-items: center; gap: 8px; padding: 0 10px; color: #8291a6; background: color-mix(in srgb, var(--m-bg) 70%, black 30%); border: 1px solid var(--m-line); font-size: 11px;"><span style="font-size:14px;">?</span>Search institutions, tools...</div>
+                    <span class="top-icon">?<b>3</b></span>
+                    <div class="account flex items-center gap-2"><div class="avatar small" style="width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center; color: #163047; background: linear-gradient(145deg, #f1b36f, #a78bfa); font-size: 10px; font-weight: 800;">A</div><span class="hidden sm:inline" style="color:var(--m-ink); font-size:11px;">Admin ?</span></div>
+                </div>
+            </div>
 
-    <div class="section-line"><h4>Infrastructure</h4><span>Storage & Bandwidth</span></div>
-    <div class="stat-strip">
-        <div class="metric-card"><div class="metric-top"><span>DB Reads</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-reads">0</span></div><div class="metric-note">Supabase Rows</div></div>
-        <div class="metric-card"><div class="metric-top"><span>DB Writes</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-writes">0</span></div><div class="metric-note">Supabase Rows</div></div>
-        <div class="metric-card"><div class="metric-top"><span>Storage</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-cloudinary-storage">0</span></div><div class="metric-note">Cloudinary Bytes</div></div>
-        <div class="metric-card"><div class="metric-top"><span>Bandwidth</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-cloudinary-bandwidth">0</span></div><div class="metric-note">Cloudinary Bytes</div></div>
-    </div>
+            <div class="flex-1 flex overflow-hidden w-full relative z-20">
+                <!-- Collapsible Sidebar with Groups of 5 -->
+                <aside id="main-sidebar" class="mock-sidebar transform -translate-x-full lg:translate-x-0 transition-transform duration-300 absolute lg:relative z-30 h-full w-64 flex-col border-r border-[#abbdd624]" style="background: var(--m-sidebar); overflow-y: auto; padding: 16px 12px;">
+                    
+                    <div class="nav-group mt-2">Overview & Analytics</div>
+                    <button class="nav-item menu-item active w-full text-left" data-target="tab-dashboard"><span class="nav-glyph"><i class="fas fa-satellite-dish"></i></span><span class="nav-label">Dashboard</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-attendance-summary"><span class="nav-glyph"><i class="fas fa-clipboard-check"></i></span><span class="nav-label">Attendance Overview</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-notifications"><span class="nav-glyph"><i class="fas fa-bell"></i></span><span class="nav-label">Global Notifications</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-public-media"><span class="nav-glyph"><i class="fas fa-photo-film"></i></span><span class="nav-label">Public Media</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-ms-studio"><span class="nav-glyph"><i class="fas fa-camera-retro"></i></span><span class="nav-label">MS Studio</span></button>
 
-    <div class="section-line"><h4>Quick Tools</h4><span>Frequent Company tasks</span></div>
-    <div class="feature-launch" id="quick-tools-grid">
-        <div class="tool-card menu-item" data-target="tab-manage"><span class="launch-symbol">+</span><strong>Create institution</strong><small>Provision new nodes</small></div>
-        <div class="tool-card menu-item" data-target="tab-institutions"><span class="launch-symbol">�</span><strong>Institution registry</strong><small>Search & configure</small></div>
-        <div class="tool-card menu-item" data-target="tab-school-id"><span class="launch-symbol">?</span><strong>Licenses</strong><small>Manage IDs & Plans</small></div>
-        <div class="tool-card menu-item" data-target="tab-school-payment"><span class="launch-symbol">?</span><strong>Billing Ledger</strong><small>Track revenue</small></div>
-        <div class="tool-card menu-item" data-target="tab-broadcast"><span class="launch-symbol">?</span><strong>Comm Hub</strong><small>Reach institutions</small></div>
-        <div class="tool-card menu-item" data-target="tab-aadhaar-search"><span class="launch-symbol">?</span><strong>Identity Search</strong><small>Find by Aadhaar</small></div>
-        <div class="tool-card menu-item" data-target="tab-system-security"><span class="launch-symbol">?</span><strong>System Security</strong><small>Security & Audit</small></div>
-        <div class="tool-card menu-item" data-target="tab-backup"><span class="launch-symbol">?</span><strong>Snapshot & Sync</strong><small>Backup & Recovery</small></div>
-    </div>
-    
-    <div class="mock-grid-2" style="margin-top: 20px;">
-        <div class="mock-panel"><div class="panel-head"><strong>Student Distribution</strong><span>Real-time</span></div><div style="height:230px; position:relative;"><canvas id="studentChart"></canvas></div></div>
-        <div class="mock-panel"><div class="panel-head"><strong>Revenue Growth</strong><span>Trend</span></div><div style="height:230px; position:relative;"><canvas id="revenueChart"></canvas></div></div>
-    </div>
+                    <div class="nav-group mt-4">Institutions & Network</div>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-institutions"><span class="nav-glyph"><i class="fas fa-building-columns"></i></span><span class="nav-label">Institutions Registry</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-manage"><span class="nav-glyph"><i class="fas fa-server"></i></span><span class="nav-label">Create Institution</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-pending-approvals"><span class="nav-glyph"><i class="fas fa-check-circle"></i></span><span class="nav-label">Registration Approvals</span><span class="nav-badge" style="margin-left:auto;">06</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-transfer-approvals"><span class="nav-glyph"><i class="fas fa-exchange-alt"></i></span><span class="nav-label">Transfer Approvals</span><span class="nav-badge" style="margin-left:auto;">08</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-school-id"><span class="nav-glyph"><i class="fas fa-id-card"></i></span><span class="nav-label">School & College IDs</span></button>
 
-    <div class="insight-banner" style="margin-top:20px; border: 1px solid rgba(171, 189, 214, 0.14); border-radius: 10px; padding: 11px 13px; background: linear-gradient(90deg, rgba(167, 139, 250, 0.13), transparent); display: flex; align-items: center; gap: 11px;">
-        <span class="insight-symbol" style="width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #a78bfa; background: #1b2737; font-size: 14px;">?</span>
-        <span><strong style="display: block; font-size: 13px; color: #eef3fa;">Network status is healthy</strong><span style="display: block; color: #9aa9bc; font-size: 11px; margin-top: 3px;">All institutions operational � Telemetry online.</span></span>
-        <span class="pill" style="margin-left:auto; display: inline-flex; padding: 3px 6px; border-radius: 99px; color: #70d3b3; background: rgba(112, 211, 179, .12); font-size: 11px; white-space: nowrap;">All systems normal</span>
-    </div>
-</div>
-                <!-- Manage Nodes Tab -->
+                    <div class="nav-group mt-4">Operations & Staff</div>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-staff"><span class="nav-glyph"><i class="fas fa-users-cog"></i></span><span class="nav-label">Global Staff</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-aadhaar-search"><span class="nav-glyph"><i class="fas fa-fingerprint"></i></span><span class="nav-label">Identity Search</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-modules"><span class="nav-glyph"><i class="fas fa-user-astronaut"></i></span><span class="nav-label">Inspect Subjects</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-feature-toggles"><span class="nav-glyph"><i class="fas fa-toggle-on"></i></span><span class="nav-label">Feature Toggles</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-broadcast"><span class="nav-glyph"><i class="fas fa-broadcast-tower"></i></span><span class="nav-label">Comm Hub</span></button>
+
+                    <div class="nav-group mt-4">Finance & Security</div>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-school-payment"><span class="nav-glyph"><i class="fas fa-coins"></i></span><span class="nav-label">Billing Ledger</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-password-req"><span class="nav-glyph"><i class="fas fa-key"></i></span><span class="nav-label">Auth Requests</span><span class="nav-badge" style="margin-left:auto;">04</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-system-security"><span class="nav-glyph"><i class="fas fa-shield-alt"></i></span><span class="nav-label">System Security</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-security"><span class="nav-glyph"><i class="fas fa-shield-virus"></i></span><span class="nav-label">System Limits</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-role-builder"><span class="nav-glyph"><i class="fas fa-cogs"></i></span><span class="nav-label">Policy Forge</span></button>
+
+                    <div class="nav-group mt-4">Infrastructure Logs</div>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-backup"><span class="nav-glyph"><i class="fas fa-cloud-download-alt"></i></span><span class="nav-label">Snapshot & Sync</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-device-tracking"><span class="nav-glyph"><i class="fas fa-crosshairs"></i></span><span class="nav-label">Radar Tracking</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-tickets"><span class="nav-glyph"><i class="fas fa-ticket-alt"></i></span><span class="nav-label">Tickets</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-audit-logs"><span class="nav-glyph"><i class="fas fa-terminal"></i></span><span class="nav-label">Audit Matrix</span></button>
+                    <button class="nav-item menu-item w-full text-left" data-target="tab-deletions"><span class="nav-glyph"><i class="fas fa-hand-paper"></i></span><span class="nav-label">Master Veto</span></button>
+                    <button class="nav-item menu-item w-full text-left mb-6" data-target="tab-recycle-bin"><span class="nav-glyph"><i class="fas fa-trash-restore"></i></span><span class="nav-label">Recovery Bin</span></button>
+                </aside>
+
+                <main class="flex-1 overflow-y-auto relative z-0 main-content w-full mock-content" style="background: var(--m-bg); padding: 20px;">
+                    <!-- NEW DASHBOARD TAB -->
+                    <div id="tab-dashboard" class="tab-content active" style="display: block;">
+                        <div class="compact-heading">
+                            <div><h3 style="font-size: 22px; color: #eef3fa; margin: 0 0 4px; font-weight: 700; font-family: 'Poppins', sans-serif;">Operations Desk</h3><p style="color: #9aa9bc; font-size: 13px; margin: 0;">Your review queues and daily Company actions, prioritized.</p></div>
+                            <div class="session-chip" style="font-family: 'JetBrains Mono', monospace;">Wednesday � 09:42 AM</div>
+                        </div>
+                        
+                        <div class="stat-strip">
+                            <div class="queue-card menu-item cursor-pointer" data-target="tab-school-payment"><div class="queue-label">Total Revenue</div><div class="queue-number"><span id="stat-revenue-total">?0</span></div><div class="queue-foot">INR Collected</div></div>
+                            <div class="queue-card menu-item cursor-pointer" data-target="tab-institutions"><div class="queue-label">Institutions</div><div class="queue-number"><span id="stat-schools">0</span></div><div class="queue-foot">Active Nodes</div></div>
+                            <div class="queue-card menu-item cursor-pointer" data-target="tab-staff"><div class="queue-label">Students</div><div class="queue-number"><span id="stat-students">0</span></div><div class="queue-foot">Enrolled Globally</div></div>
+                            <div class="queue-card menu-item cursor-pointer" data-target="tab-school-id"><div class="queue-label">School & College IDs</div><div class="queue-number"><span id="stat-licenses">0</span></div><div class="queue-foot">Current Plans</div></div>
+                            <div class="queue-card menu-item cursor-pointer" data-target="tab-backup"><div class="queue-label">Snapshot & Sync</div><div class="queue-number"><span id="stat-staff">0</span></div><div class="queue-foot">System Backups</div></div>
+                        </div>
+
+                        <div class="section-line"><h4>Work Queues</h4><span>Choose a queue to open its existing review screen</span></div>
+                        <div class="work-lanes">
+                            <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
+                                <h5 style="margin: 0 0 8px; font-size: 10px; color: var(--m-muted); text-transform: uppercase; font-weight: 700;">Registration � 6 open</h5>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-pending-approvals" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 6px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">North Valley Public School</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">School � Submitted 12 min ago</small>
+                                    <span class="pill amber" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-warm); background: rgba(240, 177, 111, .12); font-size: 10px;">Needs review</span>
+                                </div>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-pending-approvals" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 8px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Greenfield Degree College</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">College � Submitted 35 min ago</small>
+                                    <span class="pill amber" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-warm); background: rgba(240, 177, 111, .12); font-size: 10px;">Needs review</span>
+                                </div>
+                            </div>
+                            <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
+                                <h5 style="margin: 0 0 8px; font-size: 10px; color: var(--m-muted); text-transform: uppercase; font-weight: 700;">Transfers � 8 open</h5>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-transfer-approvals" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 6px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Student transfer � North ? Central</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">Documents attached � 48 min ago</small>
+                                    <span class="pill blue" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: #9bb7ff; background: rgba(112, 139, 235, .14); font-size: 10px;">HQ review</span>
+                                </div>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-transfer-approvals" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 8px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Student transfer � South ? North</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">Verify source institution � 1 hr ago</small>
+                                    <span class="pill blue" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: #9bb7ff; background: rgba(112, 139, 235, .14); font-size: 10px;">HQ review</span>
+                                </div>
+                            </div>
+                            <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
+                                <h5 style="margin: 0 0 8px; font-size: 10px; color: var(--m-muted); text-transform: uppercase; font-weight: 700;">Account & License � 7 open</h5>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-password-req" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 6px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Chairman password request</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">Horizon Academy � 1 hr ago</small>
+                                    <span class="pill amber" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-warm); background: rgba(240, 177, 111, .12); font-size: 10px;">Verify identity</span>
+                                </div>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-school-id" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 8px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">License renewal reminder</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">3 institutions � This month</small>
+                                    <span class="pill" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-green); background: rgba(112, 211, 179, .12); font-size: 10px;">Follow up</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-line"><h4>Quick Tools</h4><span>Frequent Company tasks</span></div>
+                        <div class="feature-launch" id="quick-tools-grid">
+                            <div class="tool-card menu-item" data-target="tab-manage"><span class="launch-symbol">+</span><strong>Create institution</strong><small>School or College</small></div>
+                            <div class="tool-card menu-item" data-target="tab-institutions"><span class="launch-symbol">�</span><strong>Institution registry</strong><small>Search & configure</small></div>
+                            <div class="tool-card menu-item" data-target="tab-transfer-approvals"><span class="launch-symbol">?</span><strong>Transfer approvals</strong><small>HQ review queue</small></div>
+                            <div class="tool-card menu-item" data-target="tab-broadcast"><span class="launch-symbol">?</span><strong>Broadcast message</strong><small>Reach institutions</small></div>
+                        </div>
+                        
+                        <div class="section-line"><h4>Infrastructure</h4><span>Storage & Bandwidth</span></div>
+                        <div class="stat-strip">
+                            <div class="metric-card"><div class="metric-top"><span>DB Reads</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-reads">0</span></div><div class="metric-note">Supabase Rows</div></div>
+                            <div class="metric-card"><div class="metric-top"><span>DB Writes</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-writes">0</span></div><div class="metric-note">Supabase Rows</div></div>
+                            <div class="metric-card"><div class="metric-top"><span>Storage</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-cloudinary-storage">0</span></div><div class="metric-note">Cloudinary Bytes</div></div>
+                            <div class="metric-card"><div class="metric-top"><span>Bandwidth</span><span class="metric-symbol">?</span></div><div class="metric-value"><span id="stat-cloudinary-bandwidth">0</span></div><div class="metric-note">Cloudinary Bytes</div></div>
+                        </div>
+
+                        <div class="mock-grid-2" style="margin-top: 20px;">
+                            <div class="mock-panel"><div class="panel-head"><strong>Student Distribution</strong><span>Real-time</span></div><div style="height:230px; position:relative;"><canvas id="studentChart"></canvas></div></div>
+                            <div class="mock-panel"><div class="panel-head"><strong>Revenue Growth</strong><span>Trend</span></div><div style="height:230px; position:relative;"><canvas id="revenueChart"></canvas></div></div>
+                        </div>
+
+                        <div class="insight-banner" style="margin-top:20px; border: 1px solid rgba(171, 189, 214, 0.14); border-radius: 10px; padding: 11px 13px; background: linear-gradient(90deg, rgba(167, 139, 250, 0.13), transparent); display: flex; align-items: center; gap: 11px;">
+                            <span class="insight-symbol" style="width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #a78bfa; background: #1b2737; font-size: 14px;">?</span>
+                            <span><strong style="display: block; font-size: 13px; color: #eef3fa;">Network status is healthy</strong><span style="display: block; color: #9aa9bc; font-size: 11px; margin-top: 3px;">All institutions operational � Telemetry online.</span></span>
+                            <span class="pill" style="margin-left:auto; display: inline-flex; padding: 3px 6px; border-radius: 99px; color: #70d3b3; background: rgba(112, 211, 179, .12); font-size: 11px; white-space: nowrap;">All systems normal</span>
+                        </div>
+                    </div>
+                    <!-- Manage Nodes Tab -->
                 <div id="tab-pending-approvals" class="tab-content hidden-el space-y-8">
                     <div
                         class="glass-card p-6 rounded-2xl border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.1)] relative">
@@ -1387,7 +1311,7 @@
                                         <input type="text" id="institutionId" maxlength="64" autocomplete="off" class="input-premium min-w-0 flex-1 px-3 py-2 rounded-lg text-white font-mono" placeholder="INS-..." required>
                                         <button type="button" onclick="window.generateInstitutionId()" class="shrink-0 px-3 py-2 bg-slateSurface border border-tealAccent/40 hover:bg-tealAccent/10 text-tealAccent rounded-lg text-xs font-mono" aria-label="Generate a new institution ID"><i class="fas fa-wand-magic-sparkles"></i> Generate</button>
                                     </div>
-                                    
+                                    <p class="text-[10px] text-coolGray mt-1">Stable tenant key; cannot be changed after creation.</p>
                                 </div>
                                 <div>
                                     <label for="institutionType" class="text-[10px] font-mono text-tealAccent/80 uppercase block mb-1">Institution type *</label>
@@ -1490,7 +1414,7 @@
                                 <tbody id="institution-table-body" class="divide-y divide-glassBorder text-xs text-gray-200 font-mono"><tr><td colspan="6" class="p-5 text-center text-coolGray">Institution registry loads when opened.</td></tr></tbody>
                             </table>
                         </div>
-                        
+                        <p class="text-[10px] text-coolGray mt-3">Deactivate / activate uses the existing Chairman account status controls. It does not create a second institution ID or alter student data.</p>
                     </div>
                 </div>
 
@@ -1663,7 +1587,8 @@
                                             modules, permissions, and granular feature access for target schools.</p>
                                     </div>
                                     <div class="text-right">
-                                        
+                                        <p class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest">
+                                            Company-only control</p>
                                         <p class="text-xs text-coolLight mt-1">The school portal receives only approved
                                             access.</p>
                                     </div>
@@ -1763,7 +1688,8 @@
                                             school.</p>
                                     </div>
                                     <div class="text-right">
-                                        
+                                        <p class="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">Central
+                                            authority</p>
                                         <p class="text-xs text-coolLight mt-1">Students can access only approved
                                             features.</p>
                                     </div>
@@ -2361,7 +2287,7 @@
                             <div>
                                 <h4 class="font-bold text-white text-sm"><i class="fas fa-wrench text-teal-400"></i>
                                     Global Maintenance Mode</h4>
-                                
+                                <p class="text-[10px] text-coolGray mt-1">Suspend access for all nodes</p>
                             </div>
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" id="globalMaintenanceToggle" class="sr-only peer">
@@ -2701,7 +2627,8 @@
                             <div>
                                 <h3 class="text-xl font-display font-bold text-white"><i
                                         class="fas fa-terminal text-coolLight"></i> Immutable Ledger</h3>
-                                
+                                <p class="text-[10px] font-mono text-coolGray mt-1 tracking-widest">CRYPTOGRAPHIC LOG OF
+                                    MASTER ACTIONS.</p>
                             </div>
                             <button onclick="window.loadAuditLogs()"
                                 class="px-4 py-2 bg-slateSurface border border-glassBorder hover:bg-gray-800 text-white rounded-lg text-[10px] font-mono font-bold transition"><i
@@ -2733,7 +2660,8 @@
                         <h3 class="text-xl font-display font-bold text-white mb-2"><i
                                 class="fas fa-hand-paper text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]"></i>
                             Master Veto Authority</h3>
-                        
+                        <p class="text-[10px] font-mono text-rose-400/70 uppercase tracking-widest mb-6">Review
+                            un-authorized deletion requests from remote nodes.</p>
                         <div class="overflow-x-auto rounded-xl border border-glassBorder">
                             <table class="w-full text-left border-collapse">
                                 <thead
@@ -3456,10 +3384,24 @@
     <!-- Prevent aggressive caching of script.js -->
     <script src="script.js?v=202610021530"></script>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('main-sidebar');
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', function() {
+            if (sidebar.classList.contains('-translate-x-full')) {
+                sidebar.classList.remove('-translate-x-full');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+            }
+        });
+    }
+});
+</script>
 </body>
 
 </html>
-
 
 
 
