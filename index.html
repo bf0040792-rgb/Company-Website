@@ -1042,7 +1042,7 @@
         <div class="absolute inset-0 pointer-events-none z-0" style="background: radial-gradient(ellipse at 8% 0%, rgba(167,139,250,.08), transparent 35%), var(--m-bg);"></div>
 
         <div class="mock-main relative z-10 flex flex-col h-full w-full" style="background: var(--m-bg);">
-            <div class="mock-topbar flex justify-between items-center w-full relative z-30" style="background: color-mix(in srgb, var(--m-bg) 84%, white 16%); border-bottom: 1px solid var(--m-line); padding: 0 19px;">
+            <div class="mock-topbar flex justify-between items-center w-full relative z-30" style="background: color-mix(in srgb, var(--m-bg) 84%, white 16%); border-bottom: 1px solid var(--m-line); padding: 12px 19px; min-height: 60px;">
                 <div class="flex items-center gap-4">
                     <span class="hamb cursor-pointer px-2" id="sidebar-toggle" style="color: var(--m-muted); font-size: 20px;"><i class="fas fa-bars"></i></span>
                     <div class="mock-logo flex items-center gap-2" style="border: none; padding: 0;">
@@ -1106,6 +1106,10 @@
                 <!-- Collapsible Sidebar with Groups of 5 -->
                 <aside id="main-sidebar" class="mock-sidebar transform -translate-x-full transition-transform duration-300 absolute z-30 h-full w-64 flex-col border-r border-[#abbdd624]" style="background: var(--m-sidebar); overflow-y: auto; padding: 16px 12px;">
                     
+                                        <div class="sidebar-header flex justify-between items-center px-3 mb-2 pb-2 border-b border-[#abbdd624]">
+                        <span id="mini-sidebar-btn" class="cursor-pointer text-coolLight hover:text-white" title="Toggle Mini Mode"><i class="fas fa-compress-alt"></i></span>
+                        <span id="close-sidebar-btn" class="cursor-pointer text-rose-400 hover:text-rose-500" title="Close Menu"><i class="fas fa-times"></i></span>
+                    </div>
                     <div class="nav-group mt-2">Overview & Analytics</div>
                     <button class="nav-item menu-item active w-full text-left" data-target="tab-dashboard"><span class="nav-glyph"><i class="fas fa-satellite-dish"></i></span><span class="nav-label">Dashboard</span></button>
                     <button class="nav-item menu-item w-full text-left" data-target="tab-attendance-summary"><span class="nav-glyph"><i class="fas fa-clipboard-check"></i></span><span class="nav-label">Attendance Overview</span></button>
@@ -3423,19 +3427,71 @@
     <!-- Prevent aggressive caching of script.js -->
     <script src="script.js?v=202610021530"></script>
 
+<style>
+.mini-sidebar { width: 64px !important; padding-left: 0 !important; padding-right: 0 !important; overflow-x: hidden; }
+.mini-sidebar .nav-label, .mini-sidebar .nav-group, .mini-sidebar .nav-badge, .mini-sidebar #close-sidebar-btn { display: none !important; }
+.mini-sidebar .sidebar-header { justify-content: center; }
+.mini-sidebar .nav-item { justify-content: center; padding-left: 0 !important; padding-right: 0 !important; }
+.mini-sidebar .nav-glyph { margin-right: 0 !important; font-size: 16px !important; }
+</style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // History API for Back Button
+    document.querySelectorAll('.menu-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const t = btn.getAttribute('data-target');
+            if (t && history.state?.tab !== t) {
+                history.pushState({ tab: t }, "", "#" + t);
+            }
+        });
+    });
+
+    window.addEventListener('popstate', (e) => {
+        if (e.state && e.state.tab) {
+            const btn = document.querySelector(.menu-item[data-target="${e.state.tab}"]);
+            if (btn) btn.click();
+        } else {
+            // Default to dashboard
+            const db = document.querySelector(.menu-item[data-target="tab-dashboard"]);
+            if (db) db.click();
+        }
+    });
+
+    // Replace old sidebar toggle logic
     const toggleBtn = document.getElementById('sidebar-toggle');
     const sidebar = document.getElementById('main-sidebar');
+    const closeBtn = document.getElementById('close-sidebar-btn');
+    const miniBtn = document.getElementById('mini-sidebar-btn');
+
     if (toggleBtn && sidebar) {
-        toggleBtn.addEventListener('click', function() {
-            if (sidebar.classList.contains('-translate-x-full')) {
-                sidebar.classList.remove('-translate-x-full');
-            } else {
+        toggleBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sidebar.classList.toggle('-translate-x-full');
+        });
+    }
+
+    if (closeBtn && sidebar) {
+        closeBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sidebar.classList.add('-translate-x-full');
+        });
+    }
+
+    if (miniBtn && sidebar) {
+        miniBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sidebar.classList.toggle('mini-sidebar');
+        });
+    }
+
+    // Auto-close sidebar on mobile when an item is clicked
+    document.querySelectorAll('#main-sidebar .nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
                 sidebar.classList.add('-translate-x-full');
             }
         });
-    }
+    });
 });
 </script>
 <script>
@@ -3479,6 +3535,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
 
 
 
