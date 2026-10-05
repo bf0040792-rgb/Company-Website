@@ -749,31 +749,31 @@
                     class="text-coolGray hover:text-tealAccent transition p-2 bg-slateSurface rounded-lg border border-glassBorder"><i
                         data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            <div class="space-y-5">
-                <div>
-                    <label
+            <form id="root-login-form" onsubmit="event.preventDefault(); if(window.submitLogin) window.submitLogin();" class="space-y-5">
+                  <div>
+                      <label
                         class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Username</label>
-                    <input type="text" id="loginId" placeholder="Username"
+                      <input type="text" id="loginId" name="username" autocomplete="username" placeholder="Username"
                         class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono">
                 </div>
                 <div>
                     <label
                         class="text-[10px] font-mono font-bold text-tealAccent uppercase tracking-widest mb-2 block">Password</label>
-                    <input type="password" id="loginPassword" placeholder="Password"
+                    <input type="password" id="loginPassword" name="password" autocomplete="current-password" placeholder="Password"
                         class="input-premium w-full px-4 py-3 rounded-xl text-white font-mono tracking-widest">
                 </div>
                 <div class="flex justify-center w-full overflow-hidden mt-2">
                     <!-- <div class="g-recaptcha transform scale-90 sm:scale-100 origin-center" data-sitekey="6LdA-GstAAAAAABAu0pU-ZkearQVooMW0l-hsf__"></div> -->
                 </div>
-                <button id="doLoginBtn"
+                <button type="submit" id="doLoginBtn"
                     class="w-full py-4 bg-tealAccent hover:bg-tealHover text-slateBase rounded-xl font-mono font-bold transition shadow-[0_0_20px_rgba(0,240,255,0.3)] mt-4 flex justify-center items-center gap-2">
                     <i data-lucide="fingerprint" class="w-5 h-5"></i> AUTHENTICATE
                 </button>
                 <div id="loginErrorMsg"
                     class="text-rose-400 text-sm font-mono mt-3 hidden-el bg-rose-500/10 p-3 rounded-lg border border-rose-500/30 text-center shadow-[0_0_10px_rgba(244,63,94,0.2)]">
-                </div>
-            </div>
-        </div>
+                  </div>
+              </form>
+          </div>
     </div>
 
     <!-- PIN Wrapper -->
@@ -1015,29 +1015,29 @@
                 <h2 class="text-2xl font-display font-bold text-white tracking-widest">LOGIN</h2>
                 <p class="text-emerald-400/70 text-xs font-mono mt-1">PRINCIPAL LOGIN</p>
             </div>
-            <div class="space-y-4">
-                <div>
-                    <label
+            <form id="school-login-form" onsubmit="event.preventDefault(); if(window.submitSchoolLogin) window.submitSchoolLogin();" class="space-y-4">
+                  <div>
+                      <label
                         class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Registered
-                        Email</label>
-                    <input type="email" id="schoolLoginId"
+                          Email</label>
+                      <input type="email" id="schoolLoginId" name="email" autocomplete="username"
                         class="input-premium w-full px-4 py-3 rounded-xl text-white text-sm font-mono tracking-wider focus:border-emerald-400 focus:ring-emerald-400/20"
                         placeholder="admin@coreedu.in">
                 </div>
                 <div>
                     <label class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1 block">Security
                         Key</label>
-                    <input type="password" id="schoolLoginPwd"
+                    <input type="password" id="schoolLoginPwd" name="password" autocomplete="current-password"
                         class="input-premium w-full px-4 py-3 rounded-xl text-white text-sm font-mono tracking-wider focus:border-emerald-400 focus:ring-emerald-400/20"
                         placeholder="••••••••">
                 </div>
-                <button id="doSchoolLoginBtn" onclick="window.submitSchoolLogin()"
+                <button type="submit" id="doSchoolLoginBtn"
                     class="w-full py-4 mt-2 bg-emerald-400 hover:bg-emerald-300 text-slateBase rounded-xl font-mono font-bold tracking-widest transition shadow-[0_0_20px_rgba(16,185,129,0.4)] flex justify-center items-center gap-2">
                     <i class="fas fa-sign-in-alt"></i> AUTHENTICATE
-                </button>
-            </div>
-        </div>
-    </div>
+                  </button>
+              </form>
+          </div>
+      </div>
 
     <!-- Dashboard Wrapper -->
         <!-- Dashboard Wrapper -->
@@ -3552,6 +3552,10 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
+
+
+
 
 
 
