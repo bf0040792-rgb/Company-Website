@@ -1623,3 +1623,13 @@ body.light-theme .feature-access-copy span {
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--m-line); padding-bottom: 8px; }
 .panel-head strong { font-size: 13px; color: var(--m-ink); text-transform: uppercase; letter-spacing: 0.05em; }
 .panel-head span { font-size: 11px; color: var(--m-muted); }
+body.light-theme .ops-concept {
+  --m-bg: #f8fafc;
+  --m-panel: #ffffff;
+  --m-panel-2: #f1f5f9;
+  --m-sidebar: #f8fafc;
+  --m-ink: #1e293b;
+  --m-muted: #64748b;
+  --m-line: rgba(0, 0, 0, 0.1);
+  --m-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
