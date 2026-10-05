@@ -68,6 +68,12 @@
 
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.custom-scrollbar::-webkit-scrollbar { height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--m-muted); border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--m-ink); }
+</style>
 </head>
 
 <body class="antialiased h-screen flex flex-col relative text-gray-100 bg-slateBase">
@@ -93,25 +99,25 @@
                     <h1 class="text-2xl font-display font-bold tracking-tight text-white">CoreEdu<span
                             class="text-tealAccent drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">.IN</span></h1>
                 </div>
-                <div class="flex items-center justify-start md:justify-center gap-2 flex-1 px-2 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                <div class="flex items-center justify-start md:justify-center gap-2 flex-1 px-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
                     <button onclick="window.location.href='https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/'"
-                        class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.4)] transition-all font-mono text-[9px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-school mr-1"></i> SCHOOL & COLLEGE LOGIN
                     </button>
                     <button onclick="window.showRegistrationModal()"
-                        class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 text-white shadow-[0_0_15px_rgba(217,70,239,0.4)] border border-fuchsia-400/50 transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 py-1 rounded-md bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 text-white shadow-[0_0_15px_rgba(217,70,239,0.4)] border border-fuchsia-400/50 transition-all font-mono text-[9px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-plus-circle mr-1"></i> NEW REGISTRATION
                     </button>
                     <button onclick="window.openPublicApkDownload()"
-                        class="px-3 py-1.5 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_10px_rgba(8,145,178,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 py-1 rounded-md bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_10px_rgba(8,145,178,0.4)] transition-all font-mono text-[9px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-download mr-1"></i> DOWNLOAD SCHOOL APK
                     </button>
                     <button onclick="window.scrollToPublicSection('features')"
-                        class="px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_10px_rgba(147,51,234,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 py-1 rounded-md bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_10px_rgba(147,51,234,0.4)] transition-all font-mono text-[9px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-circle-info mr-1"></i> DETAILS
                     </button>
                     <button onclick="window.scrollToPublicSection('contact')"
-                        class="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-2 py-1 rounded-md bg-rose-600 text-white hover:bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.4)] transition-all font-mono text-[9px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-headset mr-1"></i> COMPLAINT
                     </button>
                 </div>
@@ -1051,7 +1057,7 @@
                     </div>
                 </div>
 
-                                <div class="nav-scroll flex items-center gap-2 flex-1 px-2 md:px-8 overflow-x-auto whitespace-nowrap scrollbar-hide" style="max-width: 100%;">
+                                <div class="nav-scroll flex items-center gap-2 flex-1 px-2 md:px-8 overflow-x-auto whitespace-nowrap custom-scrollbar" style="max-width: 100%;">
                     <div class="nav-item active menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-dashboard" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-teal-400" style="font-size:12px; margin-right:4px;"><i class="fas fa-satellite-dish"></i></span><span class="nav-label">Dashboard</span></div>
                     <div class="nav-item menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-manage" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-indigo-400" style="font-size:12px; margin-right:4px;"><i class="fas fa-server"></i></span><span class="nav-label">Create Institution</span></div>
                     <div class="nav-item menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-pending-approvals" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-rose-400" style="font-size:12px; margin-right:4px;"><i class="fas fa-check-circle"></i></span><span class="nav-label">Approvals</span><span class="nav-badge" style="background:#e11d48; color:white;">06</span></div>
@@ -1077,6 +1083,8 @@
                     <div class="nav-item menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-tickets" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-teal-400" style="font-size:12px; margin-right:4px;"><i class="fas fa-ticket-alt"></i></span><span class="nav-label">Tickets</span></div>
                     <div class="nav-item menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-audit-logs" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-coolLight" style="font-size:12px; margin-right:4px;"><i class="fas fa-terminal"></i></span><span class="nav-label">Audit Matrix</span></div>
                     <div class="nav-item menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-deletions" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-rose-400" style="font-size:12px; margin-right:4px;"><i class="fas fa-hand-paper"></i></span><span class="nav-label">Master Veto</span></div>
+<div class="nav-item menu-item cursor-pointer text-coolLight hover:text-white" data-target="tab-recycle-bin" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph text-gray-400" style="font-size:12px; margin-right:4px;"><i class="fas fa-trash-restore"></i></span><span class="nav-label">Recovery Bin</span></div>
+<div class="nav-item cursor-pointer text-rose-500 hover:text-rose-400" id="topbar-logout-btn" style="min-height: 28px; padding: 5px 8px; font-size: 11px; transition: color 0.2s;"><span class="nav-glyph" style="font-size:12px; margin-right:4px;"><i class="fas fa-power-off"></i></span><span class="nav-label">Logout</span></div>
                 </div>
 
                                                 <div class="flex items-center gap-4 ml-auto mr-4 hidden md:flex">
@@ -1175,11 +1183,7 @@
                                     <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">School � Submitted 12 min ago</small>
                                     <span class="pill amber" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-warm); background: rgba(240, 177, 111, .12); font-size: 10px;">Needs review</span>
                                 </div>
-                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-pending-approvals" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 8px; background: var(--m-panel-2);">
-                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Greenfield Degree College</strong>
-                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">College � Submitted 35 min ago</small>
-                                    <span class="pill amber" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-warm); background: rgba(240, 177, 111, .12); font-size: 10px;">Needs review</span>
-                                </div>
+                                
                             </div>
                             <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
                                 <h5 style="margin: 0 0 8px; font-size: 10px; color: var(--m-muted); text-transform: uppercase; font-weight: 700;">Transfers � 8 open</h5>
@@ -1194,10 +1198,18 @@
                                     <span class="pill blue" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: #9bb7ff; background: rgba(112, 139, 235, .14); font-size: 10px;">HQ review</span>
                                 </div>
                             </div>
-                            <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
+                                                        <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
+                                <h5 style="margin: 0 0 8px; font-size: 10px; color: var(--m-muted); text-transform: uppercase; font-weight: 700;">Support Tickets ? 3 unread</h5>
+                                <div class="work-ticket menu-item cursor-pointer" data-target="tab-tickets" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 6px; background: var(--m-panel-2);">
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Parent Complaint - Login Issue</strong>
+                                    <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">Ticket #8492 ? Priority: High</small>
+                                    <span class="pill blue" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: #60a5fa; background: rgba(96,165,250,0.14); font-size: 10px;">Investigate</span>
+                                </div>
+                            </div>
+                              <div class="work-lane" style="border: 1px solid var(--m-line); border-radius: 11px; padding: 10px; background: var(--m-panel);">
                                 <h5 style="margin: 0 0 8px; font-size: 10px; color: var(--m-muted); text-transform: uppercase; font-weight: 700;">Account & License � 7 open</h5>
                                 <div class="work-ticket menu-item cursor-pointer" data-target="tab-password-req" style="border: 1px solid var(--m-line); border-radius: 8px; padding: 12px; margin-top: 6px; background: var(--m-panel-2);">
-                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">Chairman password request</strong>
+                                    <strong style="display: block; font-size: 12px; color: var(--m-ink);">SCHOOL/COLLEGE PASSWORD REQUEST</strong>
                                     <small style="display: block; margin-top: 4px; color: var(--m-muted); font-size: 11px;">Horizon Academy � 1 hr ago</small>
                                     <span class="pill amber" style="display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 99px; color: var(--m-warm); background: rgba(240, 177, 111, .12); font-size: 10px;">Verify identity</span>
                                 </div>
@@ -3436,6 +3448,7 @@
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const tLogout = document.getElementById('topbar-logout-btn'); if(tLogout) tLogout.addEventListener('click', () => { if(window.doLogout) window.doLogout(); else location.reload(); });
     document.querySelectorAll('.menu-item').forEach(btn => {
         btn.addEventListener('click', () => {
             const t = btn.getAttribute('data-target');
@@ -3525,6 +3538,7 @@ updateLiveTime();
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const tLogout = document.getElementById('topbar-logout-btn'); if(tLogout) tLogout.addEventListener('click', () => { if(window.doLogout) window.doLogout(); else location.reload(); });
     const searchInput = document.getElementById('top-search');
     if (searchInput) {
         searchInput.addEventListener('input', function(e) {
@@ -3545,6 +3559,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
+
+
 
 
 
