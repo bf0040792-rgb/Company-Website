@@ -1059,6 +1059,20 @@
                     <div class="nav-item menu-item cursor-pointer" data-target="tab-school-payment" style="min-height: 28px; padding: 5px 8px; font-size: 11px;"><span class="nav-glyph" style="font-size:12px;">?</span><span class="nav-label">Billing Ledger</span></div>
                 </div>
 
+                                <div class="flex items-center gap-4 ml-auto mr-4 hidden md:flex">
+                    <label class="flex items-center gap-2 cursor-pointer bg-slateSurface px-2 py-1 rounded-lg border border-glassBorder hover:border-tealAccent transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+                        <input type="checkbox" id="privacyShieldToggle" class="input-checkbox w-3 h-3 rounded">
+                        <span class="text-[9px] font-mono font-bold text-coolLight uppercase tracking-widest">Stealth</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer bg-slateSurface px-2 py-1 rounded-lg border border-glassBorder hover:border-blue-500 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+                        <input type="checkbox" id="deviceModeToggle" class="input-checkbox w-3 h-3 rounded">
+                        <span class="text-[9px] font-mono font-bold text-coolLight uppercase tracking-widest">Device</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer bg-slateSurface px-2 py-1 rounded-lg border border-glassBorder hover:border-amber-400 transition shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+                        <input type="checkbox" id="themeToggle" class="input-checkbox w-3 h-3 rounded">
+                        <span class="text-[9px] font-mono font-bold text-coolLight uppercase tracking-widest">Theme</span>
+                    </label>
+                </div>
                 <div class="flex items-center gap-4">
                     <div class="search hidden lg:flex" style="width: 250px; height: 30px; border-radius: 8px; align-items: center; gap: 8px; padding: 0 10px; color: #8291a6; background: color-mix(in srgb, var(--m-bg) 70%, black 30%); border: 1px solid var(--m-line); font-size: 11px;"><span style="font-size:14px;">?</span>Search institutions, tools...</div>
                     <span class="top-icon">?<b>3</b></span>
@@ -1105,6 +1119,9 @@
                     <button class="nav-item menu-item w-full text-left" data-target="tab-audit-logs"><span class="nav-glyph"><i class="fas fa-terminal"></i></span><span class="nav-label">Audit Matrix</span></button>
                     <button class="nav-item menu-item w-full text-left" data-target="tab-deletions"><span class="nav-glyph"><i class="fas fa-hand-paper"></i></span><span class="nav-label">Master Veto</span></button>
                     <button class="nav-item menu-item w-full text-left mb-6" data-target="tab-recycle-bin"><span class="nav-glyph"><i class="fas fa-trash-restore"></i></span><span class="nav-label">Recovery Bin</span></button>
+<span id="tab-title" style="display:none;"></span>
+<span id="adminEmail" style="display:none;"></span>
+<button id="logoutBtn" class="menu-item nav-item w-full text-left mt-auto text-rose-400" style="padding: 10px; margin-top: 20px;"><i class="fas fa-power-off"></i> Logout</button>
                 </aside>
 
                 <main class="flex-1 overflow-y-auto relative z-0 main-content w-full mock-content" style="background: var(--m-bg); padding: 20px;">
@@ -3402,6 +3419,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
 
 
 
