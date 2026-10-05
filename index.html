@@ -95,23 +95,23 @@
                 </div>
                 <div class="flex items-center justify-start md:justify-center gap-2 flex-1 px-2 overflow-x-auto whitespace-nowrap scrollbar-hide">
                     <button onclick="window.location.href='https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/'"
-                        class="px-2 xl:px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.5)] hover:shadow-[0_0_25px_rgba(79,70,229,0.8)] transition-all font-mono text-xs xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
-                        <i class="fas fa-school mr-1"></i> SCHOOL LOGIN
+                        class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
+                        <i class="fas fa-school mr-1"></i> SCHOOL & COLLEGE LOGIN
                     </button>
                     <button onclick="window.showRegistrationModal()"
-                        class="px-2 xl:px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 hover:from-pink-400 hover:via-fuchsia-500 hover:to-purple-500 text-white shadow-[0_0_20px_rgba(217,70,239,0.5)] hover:shadow-[0_0_30px_rgba(217,70,239,0.8)] border border-fuchsia-400/50 transition-all font-mono text-xs xl:text-[11px] font-bold tracking-widest whitespace-nowrap transform hover:-translate-y-0.5 duration-300">
+                        class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-pink-500 via-fuchsia-600 to-purple-600 text-white shadow-[0_0_15px_rgba(217,70,239,0.4)] border border-fuchsia-400/50 transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-plus-circle mr-1"></i> NEW REGISTRATION
                     </button>
                     <button onclick="window.openPublicApkDownload()"
-                        class="px-2 xl:px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_15px_rgba(8,145,178,0.5)] hover:shadow-[0_0_25px_rgba(8,145,178,0.8)] transition-all font-mono text-xs xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-3 py-1.5 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_10px_rgba(8,145,178,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-download mr-1"></i> DOWNLOAD SCHOOL APK
                     </button>
                     <button onclick="window.scrollToPublicSection('features')"
-                        class="px-2 xl:px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.5)] hover:shadow-[0_0_25px_rgba(147,51,234,0.8)] transition-all font-mono text-xs xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_10px_rgba(147,51,234,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-circle-info mr-1"></i> DETAILS
                     </button>
                     <button onclick="window.scrollToPublicSection('contact')"
-                        class="px-2 xl:px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 shadow-[0_0_15px_rgba(225,29,72,0.5)] hover:shadow-[0_0_25px_rgba(225,29,72,0.8)] transition-all font-mono text-xs xl:text-[11px] font-bold tracking-widest whitespace-nowrap">
+                        class="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.4)] transition-all font-mono text-[10px] font-bold tracking-widest whitespace-nowrap">
                         <i class="fas fa-headset mr-1"></i> COMPLAINT
                     </button>
                 </div>
@@ -825,7 +825,7 @@
             </button>
             <button onclick="window.toggleHamburger(); window.location.href='https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/';"
                 class="w-full py-4 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500 text-indigo-400 rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
-                <i class="fas fa-school"></i> SCHOOL LOGIN
+                <i class="fas fa-school"></i> SCHOOL & COLLEGE LOGIN
             </button>
             <button onclick="window.toggleHamburger(); window.showRegistrationModal();"
                 class="w-full py-4 bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 hover:from-fuchsia-500/30 hover:to-purple-500/30 border border-fuchsia-400 text-fuchsia-300 shadow-[0_0_15px_rgba(217,70,239,0.3)] rounded-xl font-mono font-bold transition flex justify-center items-center gap-3">
@@ -995,7 +995,7 @@
         </div>
     </div>
 
-    <!-- School Login Modal -->
+    <!-- SCHOOL & COLLEGE LOGIN Modal -->
     <div id="school-login-modal"
         class="fixed inset-0 bg-slateBase/95 backdrop-blur-xl z-[160] hidden-el flex justify-center items-center px-4"
         style="margin:0;padding:16px;box-sizing:border-box;">
@@ -3447,10 +3447,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.addEventListener('popstate', (e) => {
         if (e.state && e.state.tab) {
-            const btn = document.querySelector(.menu-item[data-target="${e.state.tab}"]);
+            const btn = document.querySelector(`.menu-item[data-target="${e.state.tab}"]`);
             if (btn) btn.click();
         } else {
-            const db = document.querySelector(.menu-item[data-target="tab-dashboard"]);
+            const db = document.querySelector(`.menu-item[data-target="tab-dashboard"]`);
             if (db) db.click();
         }
     });
@@ -3545,6 +3545,8 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
+
 
 
 
