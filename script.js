@@ -1165,7 +1165,7 @@ window.impersonateUser = async (uid, schoolId, email, pass) => {
     window.logAudit("Impersonated User", uid);
     setTimeout(() => {
         const safeEmail = encodeURIComponent(email); const safePass = encodeURIComponent(pass);
-        const chairmanPortalLink = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/";
+        const chairmanPortalLink = "../SCHOOL'COLLAGE'STAFF'STUDENT.PROTAL/index.html";
         window.open(`${chairmanPortalLink}?impersonate=true&email=${safeEmail}&pass=${safePass}&isGhost=true`, '_blank');
     }, 1500);
 };
@@ -2739,7 +2739,7 @@ window.submitSchoolLogin = async () => {
             setTimeout(() => {
                 const safeEmail = encodeURIComponent(email);
                 const safePass = encodeURIComponent(pwd);
-                const chairmanPortalLink = "https://bf0040792-rgb.github.io/CHAIRMAN-MANAGEMENT/";
+                const chairmanPortalLink = "../SCHOOL'COLLAGE'STAFF'STUDENT.PROTAL/index.html";
                 window.open(`${chairmanPortalLink}?email=${safeEmail}&pass=${safePass}`, '_blank');
                 window.closeCustomModal('school-login-modal');
             }, 1000);
@@ -4465,6 +4465,7 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
 
 
 
