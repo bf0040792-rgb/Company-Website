@@ -1611,7 +1611,13 @@ const companyFeatureRegistry = {
         { key: "inventory", label: "Inventory & Assets", moduleKey: "inventory" },
         { key: "dailyAttendance", label: "Daily Attendance", moduleKey: "attendance" },
         { key: "settings", label: "Account & School Settings" },
-        { key: "studentPortalFeatures", label: "Student Portal Features" }
+        { key: "studentPortalFeatures", label: "Student Portal Features" },
+        { key: "departments", label: "Departments (College)" },
+        { key: "programs", label: "Programs & Courses (College)" },
+        { key: "sessions", label: "Academic Sessions" },
+        { key: "sections", label: "Levels & Sections" },
+        { key: "studentRecord", label: "Student Record" },
+        { key: "changePassword", label: "Change Password" }
     ],
     student: [
         { key: "profile", label: "Profile" },
@@ -1698,7 +1704,7 @@ document.addEventListener("change", (event) => {
     if (event.target && event.target.closest && event.target.closest("#tab-feature-toggles")) applyGranularSubFeatureLocks();
 });
 
-document.addEventListener("DOMContentLoaded", applyGranularSubFeatureLocks);
+document.addEventListener("DOMContentLoaded", () => { applyGranularSubFeatureLocks(); removeStaticFeatureMarkup(); });
 
 const FEATURE_SETTINGS_COLLECTION = "feature_controls";
 
@@ -4465,6 +4471,8 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
+
 
 
 
