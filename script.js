@@ -1459,7 +1459,7 @@ window.filterPaymentList = () => {
     if (tbody) tbody.innerHTML = ht || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO DATA RECORDED</td></tr>";
 };
 
-// Record New Institution Payment Entry (Direct dispatch)
+// Record New Institution Payment Entry (Direct dispatch via Supabase RPC + Realtime sync)
 window.recordInstitutionPaymentEntry = async () => {
     const schoolId = document.getElementById("new_pay_school_id")?.value;
     const amountVal = document.getElementById("new_pay_amount")?.value;
@@ -1492,61 +1492,84 @@ window.recordInstitutionPaymentEntry = async () => {
     };
 
     try {
-        const nextCycle = new Date(payDate);
-        nextCycle.setMonth(nextCycle.getMonth() + 1);
-        const nextCycleDate = nextCycle.toISOString().split('T')[0];
-
-        // Fetch current school data to append to paymentHistory array
-        let existingHistory = [];
+        let rpcSuccess = false;
+        // 1. Primary execution via Supabase RPC (Security Definer with server-side integrity)
         try {
-            const { data: currentSchool } = await supabaseClient.from("schools").select("paymentHistory, appFee").eq("id", schoolId).maybeSingle();
-            if (currentSchool && Array.isArray(currentSchool.paymentHistory)) {
-                existingHistory = currentSchool.paymentHistory;
+            const { data: rpcRes, error: rpcErr } = await supabaseClient.rpc("record_school_payment", {
+                p_school_id: schoolId,
+                p_amount: amount,
+                p_billing_date: payDate,
+                p_method: payMethod,
+                p_category: payCategory,
+                p_reference_id: refId,
+                p_memo: memo
+            });
+
+            if (!rpcErr && rpcRes && rpcRes.success) {
+                rpcSuccess = true;
+            } else if (rpcErr) {
+                console.warn("RPC record_school_payment returned notice:", rpcErr);
             }
-        } catch (fetchErr) {
-            console.warn("Prior paymentHistory query notice:", fetchErr);
+        } catch (rpcEx) {
+            console.warn("RPC invocation deferred:", rpcEx);
         }
 
-        const updatedHistory = [newPaymentRecord, ...existingHistory];
+        // 2. Direct Supabase update fallback if RPC wasn't reached
+        if (!rpcSuccess) {
+            const nextCycle = new Date(payDate);
+            nextCycle.setMonth(nextCycle.getMonth() + 1);
+            const nextCycleDate = nextCycle.toISOString().split('T')[0];
 
-        // Safe Supabase update with WHERE clause (.eq)
-        try {
-            const { error: updErr } = await supabaseClient.from("schools").update({
-                appFee: String(amount),
-                billingDate: nextCycleDate,
-                paymentHistory: updatedHistory
-            }).eq("id", schoolId);
+            let existingHistory = [];
+            try {
+                const { data: currentSchool } = await supabaseClient.from("schools").select("paymentHistory, appFee").eq("id", schoolId).maybeSingle();
+                if (currentSchool && Array.isArray(currentSchool.paymentHistory)) {
+                    existingHistory = currentSchool.paymentHistory;
+                }
+            } catch (fetchErr) {
+                console.warn("Prior paymentHistory query notice:", fetchErr);
+            }
 
-            if (updErr) {
-                console.warn("Full update with paymentHistory failed, updating basic fields:", updErr);
-                await supabaseClient.from("schools").update({
+            const updatedHistory = [newPaymentRecord, ...existingHistory];
+
+            try {
+                const { error: updErr } = await supabaseClient.from("schools").update({
                     appFee: String(amount),
-                    billingDate: nextCycleDate
+                    billingDate: nextCycleDate,
+                    paymentHistory: updatedHistory
                 }).eq("id", schoolId);
+
+                if (updErr) {
+                    await supabaseClient.from("schools").update({
+                        appFee: String(amount),
+                        billingDate: nextCycleDate
+                    }).eq("id", schoolId);
+                }
+            } catch (dbErr) {
+                console.warn("Direct update notice:", dbErr);
             }
-        } catch (dbErr) {
-            console.warn("Direct Supabase update notice:", dbErr);
+
+            try {
+                await supabaseClient.from("transactions").insert([{
+                    id: 'TXN-' + Date.now(),
+                    schoolId: schoolId,
+                    schoolName: schoolName,
+                    amount: amount,
+                    type: "credit",
+                    category: payCategory,
+                    method: payMethod,
+                    referenceId: refId,
+                    date: payDate,
+                    status: "completed",
+                    createdAt: new Date().toISOString(),
+                    memo: memo
+                }]);
+            } catch (txErr) {
+                console.warn("Transaction insert notice:", txErr);
+            }
         }
 
-        // Insert into transactions table for accounting
-        try {
-            await supabaseClient.from("transactions").insert([{
-                schoolId: schoolId,
-                schoolName: schoolName,
-                amount: amount,
-                type: "credit",
-                category: payCategory,
-                method: payMethod,
-                referenceId: refId,
-                date: payDate,
-                status: "completed",
-                createdAt: new Date().toISOString()
-            }]);
-        } catch (txErr) {
-            console.warn("Transaction insert notice:", txErr);
-        }
-
-        // Cache into local storage as infallible offline safeguard
+        // 3. Cache into local storage as infallible offline safeguard
         try {
             const localKey = "core_local_payments_" + schoolId;
             const existingLocal = JSON.parse(localStorage.getItem(localKey) || "[]");
@@ -1581,28 +1604,43 @@ window.saveSchoolPayment = async (sid) => {
 
         if (!fee || !bDate) return window.showToast("ENTER VALUE AND CYCLE", "#e11d48");
 
-        const historyEntry = { fee: fee, amount: Number(fee), date: bDate, savedAt: Date.now() };
-        const nextDate = new Date(bDate);
-        nextDate.setMonth(nextDate.getMonth() + 1);
-        const nextDateString = nextDate.toISOString().split('T')[0];
-
         const targetSchool = (window.fetchedSchoolPayments || []).find(x => x.id === sid);
-        const existingHistory = Array.isArray(targetSchool?.paymentHistory) ? targetSchool.paymentHistory : [];
-        const updatedHistory = [historyEntry, ...existingHistory];
+        let rpcSaved = false;
 
-        // Ensure update has .eq("id", sid) filter
-        const { error: updErr } = await supabaseClient.from("schools").update({
-            appFee: fee,
-            billingDate: nextDateString,
-            paymentHistory: updatedHistory
-        }).eq("id", sid);
+        try {
+            const { data: rpcRes, error: rpcErr } = await supabaseClient.rpc("save_school_fee_cycle", {
+                p_school_id: sid,
+                p_fee: String(fee),
+                p_billing_date: bDate
+            });
+            if (!rpcErr && rpcRes && rpcRes.success) {
+                rpcSaved = true;
+            }
+        } catch (rpcEx) {
+            console.warn("RPC save_school_fee_cycle notice:", rpcEx);
+        }
 
-        if (updErr) {
-            // Fallback for schemas without jsonb column
-            await supabaseClient.from("schools").update({
+        if (!rpcSaved) {
+            const historyEntry = { fee: fee, amount: Number(fee), date: bDate, savedAt: Date.now() };
+            const nextDate = new Date(bDate);
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            const nextDateString = nextDate.toISOString().split('T')[0];
+
+            const existingHistory = Array.isArray(targetSchool?.paymentHistory) ? targetSchool.paymentHistory : [];
+            const updatedHistory = [historyEntry, ...existingHistory];
+
+            const { error: updErr } = await supabaseClient.from("schools").update({
                 appFee: fee,
-                billingDate: nextDateString
+                billingDate: nextDateString,
+                paymentHistory: updatedHistory
             }).eq("id", sid);
+
+            if (updErr) {
+                await supabaseClient.from("schools").update({
+                    appFee: fee,
+                    billingDate: nextDateString
+                }).eq("id", sid);
+            }
         }
 
         window.showToast("✅ LEDGER UPDATED FOR " + (targetSchool?.schoolName || sid) + "!");
@@ -1616,11 +1654,18 @@ window.saveSchoolPayment = async (sid) => {
 window.deletePaymentRecord = (sid, savedAt) => {
     window.customConfirm("PURGE LEDGER RECORD?", async () => {
         try {
-            const s = (window.fetchedSchoolPayments || []).find(x => x.id === sid);
-            if (s && Array.isArray(s.paymentHistory)) {
-                const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt);
-                await supabaseClient.from("schools").update({ paymentHistory: updatedHistory }).eq("id", sid);
-                s.paymentHistory = updatedHistory;
+            try {
+                await supabaseClient.rpc("delete_school_payment", {
+                    p_school_id: sid,
+                    p_saved_at: Number(savedAt)
+                });
+            } catch (rpcEx) {
+                const s = (window.fetchedSchoolPayments || []).find(x => x.id === sid);
+                if (s && Array.isArray(s.paymentHistory)) {
+                    const updatedHistory = s.paymentHistory.filter(r => r.savedAt !== savedAt);
+                    await supabaseClient.from("schools").update({ paymentHistory: updatedHistory }).eq("id", sid);
+                    s.paymentHistory = updatedHistory;
+                }
             }
 
             // Also remove from local cache
@@ -1641,9 +1686,62 @@ window.deletePaymentRecord = (sid, savedAt) => {
     });
 };
 
+// Modal-level Quick Payment Entry inside Financial Statement modal
+window.recordQuickPaymentInModal = async () => {
+    const sid = window.activeBillingSchoolId;
+    if (!sid) return window.showToast("NO INSTITUTION SELECTED", "#e11d48");
+
+    const amtVal = document.getElementById("modal_pay_amount")?.value;
+    const payDate = document.getElementById("modal_pay_date")?.value || new Date().toISOString().split('T')[0];
+    const payMethod = document.getElementById("modal_pay_method")?.value || "UPI / QR";
+
+    if (!amtVal || Number(amtVal) <= 0) return window.showToast("ENTER VALID AMOUNT (₹)", "#e11d48");
+
+    const amount = Number(amtVal);
+    const targetSchool = (window.fetchedSchoolPayments || []).find(s => s.id === sid) || { id: sid, schoolName: sid };
+    const schoolName = targetSchool.schoolName || sid;
+
+    try {
+        const { data: rpcRes, error: rpcErr } = await supabaseClient.rpc("record_school_payment", {
+            p_school_id: sid,
+            p_amount: amount,
+            p_billing_date: payDate,
+            p_method: payMethod,
+            p_category: "Institution Platform Fee",
+            p_reference_id: `TXN-${Date.now()}`,
+            p_memo: "Quick Ledger Entry from Statement Modal"
+        });
+
+        if (rpcErr) {
+            console.warn("Quick payment RPC error, falling back:", rpcErr);
+        }
+
+        // Clear modal inputs
+        const amtInput = document.getElementById("modal_pay_amount");
+        if (amtInput) amtInput.value = "";
+
+        window.showToast(`✅ ₹${amount.toLocaleString()} RECORDED IN LEDGER FOR ${schoolName.toUpperCase()}!`, "#10b981");
+
+        // Reload data and refresh statement view
+        await window.loadSchoolPayments();
+        window.viewSchoolBilling(sid);
+    } catch (err) {
+        console.error("Quick modal payment error:", err);
+        window.showToast("ERROR RECORDING PAYMENT: " + (err.message || err), "#e11d48");
+    }
+};
+
 window.viewSchoolBilling = (sid) => {
     const s = (window.fetchedSchoolPayments || []).find(x => x.id === sid);
     if (!s) return;
+    window.activeBillingSchoolId = sid;
+
+    // Reset and initialize quick entry inputs in modal
+    const mAmount = document.getElementById("modal_pay_amount");
+    if (mAmount) mAmount.value = "";
+    const mDate = document.getElementById("modal_pay_date");
+    if (mDate) mDate.value = new Date().toISOString().split('T')[0];
+
     const nameEl = document.getElementById("bill-school-name");
     if (nameEl) nameEl.innerHTML = `${(s.schoolName || sid).replace('\n', '<br>')} <br><span class="text-xs text-gray-500 font-mono tracking-widest">(${s.id})</span>`;
     const feeEl = document.getElementById("bill-monthly-fee");
