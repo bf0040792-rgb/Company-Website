@@ -3934,34 +3934,6 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
     stopCommMessageListener = supabaseClient.channel("public:communications:" + schoolId).on("postgres_changes", { event: "*", schema: "public", table: "communications", filter: `schoolId=eq.${schoolId}` }, () => {
         renderCommMessages();
     }).subscribe();
-    return;
-
-            messages.forEach(msg => {
-                const isMaster = msg.sender === 'master';
-                const wrap = document.createElement("div");
-                wrap.className = `flex w-full ${isMaster ? 'justify-end' : 'justify-start'}`;
-
-                const tsMillis = timestampToMillis(msg.timestamp);
-                const timeStr = tsMillis ? new Date(tsMillis).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'SENDING';
-
-                let fileHTML = '';
-                if (msg.attachmentUrl) {
-                    fileHTML = `<a href="${msg.attachmentUrl}" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>`;
-                }
-
-                wrap.innerHTML = `
-                  <div class="chat-bubble ${isMaster ? 'sent' : 'received'}">
-                      ${fileHTML}
-                      <span>${msg.text}</span>
-                      <span class="timestamp">${timeStr}</span>
-                  </div>
-              `;
-                historyBox.appendChild(wrap);
-            });
-
-            // Scroll to bottom
-            historyBox.scrollTop = historyBox.scrollHeight;
-        });
 };
 
 window.sendCommMessage = async () => {
