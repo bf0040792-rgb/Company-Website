@@ -337,6 +337,36 @@ if (doLoginBtnEl) doLoginBtnEl.addEventListener("click", async () => {
             }
             // Clear fails on success
             await supabaseClient.from("login_logs").upsert([{id: failRef, fails: 0, lockTime: 0}]);
+
+            // Record Master Admin telemetry for Radar Tracking
+            try {
+                let ipAddress = "Verified Connection";
+                try {
+                    const ipRes = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipRes.json();
+                    if (ipData && ipData.ip) ipAddress = ipData.ip;
+                } catch (_) {}
+                const coords = typeof getBrowserCoordinates === "function" ? await getBrowserCoordinates() : null;
+                const { data: uInfo } = await supabaseClient.from("users").select("name, role, schoolId, schoolName").eq("email", e).maybeSingle();
+                const authUser = (await supabaseClient.auth.getUser())?.data?.user;
+                await supabaseClient.from("login_logs").insert([{
+                    userId: authUser?.id || null,
+                    uid: authUser?.id || null,
+                    email: e,
+                    name: uInfo?.name || "Super Admin",
+                    role: uInfo?.role || "developer",
+                    schoolId: uInfo?.schoolId || "—",
+                    schoolName: uInfo?.schoolName || "Global / Head Office",
+                    ip: ipAddress,
+                    device: navigator.userAgent,
+                    latitude: coords?.latitude ?? null,
+                    longitude: coords?.longitude ?? null,
+                    location: coords ? `${coords.latitude}, ${coords.longitude}` : "VERIFIED TELEMETRY",
+                    timestamp: Date.now()
+                }]);
+            } catch (telemetryErr) {
+                console.warn("Master login telemetry notice:", telemetryErr);
+            }
         } catch (logErr) {
             console.error("Login logs access failed:", logErr);
         }
@@ -423,8 +453,24 @@ async function bootstrapDashboard(user) {
             roleFooterEl.style.color = "#050b14";
         }
 
-        loadChairmen(); loadSchoolsForDropdown(); loadAllStaff(); loadSchoolPayments(); checkAndSendBillingAlerts(); loadInboxMessages();
-        window.initQuotaMonitor(); listenToEmergencyTicker(); window.loadAuditLogs(); window.loadPendingDeletions(); window.loadRecycleBin(); window.loadCustomRoles(); window.loadTransferApprovals();
+        // Bootstrap all core systems in parallel for immediate data availability
+        await Promise.allSettled([
+            window.loadInstitutionRegistry ? window.loadInstitutionRegistry() : Promise.resolve(),
+            loadChairmen(),
+            loadSchoolsForDropdown(),
+            loadAllStaff(),
+            loadSchoolPayments(),
+            window.loadDeviceLogs ? window.loadDeviceLogs() : Promise.resolve(),
+            checkAndSendBillingAlerts(),
+            loadInboxMessages(),
+            window.loadAuditLogs ? window.loadAuditLogs() : Promise.resolve(),
+            window.loadPendingDeletions ? window.loadPendingDeletions() : Promise.resolve(),
+            window.loadRecycleBin ? window.loadRecycleBin() : Promise.resolve(),
+            window.loadCustomRoles ? window.loadCustomRoles() : Promise.resolve(),
+            window.loadTransferApprovals ? window.loadTransferApprovals() : Promise.resolve()
+        ]);
+        window.initQuotaMonitor();
+        listenToEmergencyTicker();
 
     } catch (err) {
         document.getElementById("auth-overlay")?.classList.add("hidden-el");
@@ -526,21 +572,72 @@ function activateCompanyTab(targetId, menuItem = null) {
     }
 
     target.classList.remove('hidden-el');
+    // Direct Data Loaders for ALL Company Portal Features & Tabs
     if (targetId === 'tab-dashboard') {
         window.loadGlobalAnalyticsDashboard?.();
         window.renderRealSystemTrafficChart?.();
     }
-    if (targetId === 'tab-security') {
+    if (targetId === 'tab-security' || targetId === 'tab-system-security') {
         window.renderRealSystemTrafficChart?.();
+        window.loadSecurityLogs?.();
     }
     if (targetId === 'tab-school-payment') {
         window.loadSchoolPayments?.();
     }
-    if (targetId === 'tab-institutions') window.loadInstitutionRegistry?.();
-    if (targetId === 'tab-audit-logs') window.loadAuditLogs();
-    if (targetId === 'tab-device-tracking') window.loadDeviceLogs();
-    if (targetId === 'tab-transfer-approvals') window.loadTransferApprovals();
-    if (targetId === 'tab-broadcast') window.loadCommHubSchools();
+    if (targetId === 'tab-institutions') {
+        window.loadInstitutionRegistry?.();
+    }
+    if (targetId === 'tab-school-id') {
+        window.loadSchoolIdsTab?.();
+    }
+    if (targetId === 'tab-device-tracking') {
+        window.loadDeviceLogs?.();
+    }
+    if (targetId === 'tab-staff') {
+        window.loadAllStaff?.();
+    }
+    if (targetId === 'tab-audit-logs') {
+        window.loadAuditLogs?.();
+    }
+    if (targetId === 'tab-transfer-approvals') {
+        window.loadTransferApprovals?.();
+    }
+    if (targetId === 'tab-broadcast') {
+        window.loadCommHubSchools?.();
+    }
+    if (targetId === 'tab-password-req') {
+        window.loadPasswordRequests?.();
+    }
+    if (targetId === 'tab-pending-approvals') {
+        window.loadPendingRegistrations?.();
+    }
+    if (targetId === 'tab-deletions') {
+        window.loadPendingDeletions?.();
+    }
+    if (targetId === 'tab-recycle-bin') {
+        window.loadRecycleBin?.();
+    }
+    if (targetId === 'tab-tickets') {
+        window.loadTickets?.();
+    }
+    if (targetId === 'tab-notifications') {
+        window.loadGlobalNotifications?.();
+    }
+    if (targetId === 'tab-attendance-summary') {
+        window.loadAttendanceSummary?.();
+    }
+    if (targetId === 'tab-modules') {
+        window.loadSchoolInspect?.();
+    }
+    if (targetId === 'tab-feature-toggles') {
+        window.loadFeatureTogglesForSchool?.();
+    }
+    if (targetId === 'tab-role-builder') {
+        window.loadCustomRoles?.();
+    }
+    if (targetId === 'tab-public-media') {
+        window.refreshPublicMedia?.();
+    }
     if (window.lucide) lucide.createIcons();
 }
 
@@ -880,14 +977,79 @@ if (createChairmanBtnEl) createChairmanBtnEl.addEventListener("click", async () 
 
 initializeInstitutionProvisioningUI();
 
+window.loadSchoolIdsTab = async () => {
+    const body = document.getElementById("chairmanTableBody");
+    if (body && (!body.children.length || body.innerText.includes("NO NODES FOUND") || body.innerText.includes("NO NODES"))) {
+        body.innerHTML = '<tr><td colspan="8" class="text-center p-6 text-tealAccent font-mono"><i class="fas fa-spinner fa-spin mr-2"></i>Loading School & College IDs...</td></tr>';
+    }
+    await Promise.allSettled([
+        window.loadInstitutionRegistry ? window.loadInstitutionRegistry() : Promise.resolve(),
+        loadChairmen(),
+        loadSchoolsForDropdown(),
+        window.loadPasswordRequests ? window.loadPasswordRequests() : Promise.resolve()
+    ]);
+    if (typeof window.filterChairmenList === "function") {
+        window.filterChairmenList();
+    }
+};
+
 async function loadChairmen() {
     try {
-        const { data: snp } = await supabaseClient.from("users").select("*"); window.fetchedChairmen = []; let tS = 0;
-        (snp || []).forEach(d => { const dt = d; if (dt.role === "chairman") { dt.id = d.id; window.fetchedChairmen.push(dt); } else if (dt.role === "staff") { tS++; } });
-        const { data: stuS } = await supabaseClient.from("students").select("*");
-        document.getElementById("stat-schools").innerText = window.fetchedChairmen.length; document.getElementById("stat-staff").innerText = tS; document.getElementById("stat-students").innerText = (stuS || []).length;
-        window.filterChairmenList(); window.loadPasswordRequests();
-    } catch (err) { }
+        if (!window.institutionRegistryData || window.institutionRegistryData.length === 0) {
+            try {
+                const { data } = await supabaseClient.rpc("company_list_institutions");
+                if (data && Array.isArray(data) && data.length > 0) {
+                    window.institutionRegistryData = data.map(school => ({
+                        ...school,
+                        institution_type: normalizeInstitutionType(school.institution_type),
+                        chairman: school.chairman || null
+                    }));
+                    window.institutionRegistryChairmen = window.institutionRegistryData.map(school => school.chairman).filter(Boolean);
+                }
+            } catch (_) {}
+
+            if (!window.institutionRegistryData || window.institutionRegistryData.length === 0) {
+                try {
+                    const { data: directSchools } = await supabaseClient.from("schools").select("*");
+                    if (directSchools && Array.isArray(directSchools)) {
+                        window.institutionRegistryData = directSchools.map(school => ({
+                            ...school,
+                            institution_type: normalizeInstitutionType(school.institution_type),
+                            chairman: null
+                        }));
+                    }
+                } catch (_) {}
+            }
+        }
+        const { data: snp } = await supabaseClient.from("users").select("*"); 
+        window.fetchedChairmen = []; 
+        let tS = 0;
+        (snp || []).forEach(d => { 
+            const dt = d; 
+            if (dt.role === "chairman") { 
+                dt.id = d.id; 
+                window.fetchedChairmen.push(dt); 
+            } else if (dt.role === "staff") { 
+                tS++; 
+            } 
+        });
+
+        // Merge chairmen from institution registry if not already present in fetchedChairmen
+        (window.institutionRegistryChairmen || []).forEach(ch => {
+            if (ch && ch.id && !window.fetchedChairmen.some(c => c.id === ch.id)) {
+                window.fetchedChairmen.push({ ...ch });
+            }
+        });
+
+        const { data: stuS } = await supabaseClient.from("students").select("id");
+        const sEl = document.getElementById("stat-schools"); if (sEl) sEl.innerText = window.fetchedChairmen.length; 
+        const stfEl = document.getElementById("stat-staff"); if (stfEl) stfEl.innerText = tS; 
+        const stuEl = document.getElementById("stat-students"); if (stuEl) stuEl.innerText = (stuS || []).length;
+        if (typeof window.filterChairmenList === "function") window.filterChairmenList(); 
+        if (typeof window.loadPasswordRequests === "function") window.loadPasswordRequests();
+    } catch (err) {
+        console.warn("loadChairmen notice:", err);
+    }
 }
 
 
@@ -895,22 +1057,36 @@ window.institutionRegistryData = [];
 window.institutionRegistryChairmen = [];
 window.loadInstitutionRegistry = async () => {
     const body = document.getElementById("institution-table-body");
-    if (!body) return;
-    body.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-coolGray"><i class="fas fa-spinner fa-spin mr-2"></i>Loading institutions…</td></tr>';
+    if (body && (!body.children.length || body.innerText.includes("Loading"))) {
+        body.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-coolGray"><i class="fas fa-spinner fa-spin mr-2"></i>Loading institutions…</td></tr>';
+    }
     try {
-        const { data, error } = await supabaseClient.rpc("company_list_institutions");
-        if (error) throw error;
-        window.institutionRegistryData = (Array.isArray(data) ? data : []).map(school => ({
+        let schools = [];
+        try {
+            const { data, error } = await supabaseClient.rpc("company_list_institutions");
+            if (!error && Array.isArray(data) && data.length > 0) {
+                schools = data;
+            }
+        } catch (rpcErr) {
+            console.warn("RPC company_list_institutions notice:", rpcErr);
+        }
+
+        if (!schools.length) {
+            const { data: directSchools } = await supabaseClient.from("schools").select("*");
+            schools = directSchools || [];
+        }
+
+        window.institutionRegistryData = (Array.isArray(schools) ? schools : []).map(school => ({
             ...school,
             institution_type: normalizeInstitutionType(school.institution_type),
             chairman: school.chairman || null
         }));
         window.institutionRegistryChairmen = window.institutionRegistryData.map(school => school.chairman).filter(Boolean);
-        window.renderInstitutionRegistry();
+        if (typeof window.renderInstitutionRegistry === "function") window.renderInstitutionRegistry();
         if (typeof window.filterChairmenList === "function") window.filterChairmenList();
     } catch (error) {
         console.error("Institution registry failed:", error);
-        body.innerHTML = `<tr><td colspan="6" class="p-5 text-center text-rose-400">Could not load institutions: ${institutionEsc(error.message || error)}</td></tr>`;
+        if (body) body.innerHTML = `<tr><td colspan="6" class="p-5 text-center text-rose-400">Could not load institutions: ${institutionEsc(error.message || error)}</td></tr>`;
     }
 };
 
@@ -1195,40 +1371,58 @@ window.updateStatus = (uid, ns) => {
         document.getElementById("block-prompt-input").value = "";
         openCustomModal("block-prompt-modal");
         document.getElementById("block-prompt-confirm").onclick = async () => {
-            await supabaseClient.from("users").update({ status: ns, blockReason: document.getElementById("block-prompt-input").eq("id", uid).value || "Policy Violation" });
-            window.closeCustomModal("block-prompt-modal"); loadChairmen(); window.logAudit("Blocked User", uid);
+            const reason = document.getElementById("block-prompt-input")?.value || "Policy Violation";
+            await supabaseClient.from("users").update({ status: ns, blockReason: reason }).eq("id", uid);
+            window.closeCustomModal("block-prompt-modal");
+            await loadChairmen();
+            window.filterChairmenList?.();
+            window.logAudit("Blocked User", uid);
         };
     } else {
-        window.customConfirm("UNBLOCK THIS ACCOUNT?", () => {
-            supabaseClient.from("users").update({ status: ns, blockReason: "" }).eq("id", uid).then(() => { window.showToast("✅ ACCOUNT UNBLOCKED!"); loadChairmen(); window.logAudit("Unblocked User", uid); });
+        window.customConfirm("UNBLOCK THIS ACCOUNT?", async () => {
+            await supabaseClient.from("users").update({ status: ns, blockReason: "" }).eq("id", uid);
+            window.showToast("✅ ACCOUNT UNBLOCKED!");
+            await loadChairmen();
+            window.filterChairmenList?.();
+            window.logAudit("Unblocked User", uid);
         });
     }
 };
 
-window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await supabaseClient.from("users").update({ shadowBan: state }).eq("id", uid); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); loadChairmen(); window.logAudit(state ? "Shadow Banned" : "Unbanned", uid); }); };
+window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await supabaseClient.from("users").update({ shadowBan: state }).eq("id", uid); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); await loadChairmen(); window.filterChairmenList?.(); window.logAudit(state ? "Shadow Banned" : "Unbanned", uid); }); };
 
-// Cascade Delete
+// Cascade Delete - direct data delete with immediate UI update
 window.deleteChairman = (uid, sid) => {
     window.customConfirm("DANGER: ENTIRE NODE (School, Chairman, Staff, Students, Photos) WILL BE WIPED PERMANENTLY. PROCEED?", async () => {
         try {
             window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
             if (uid) {
-                const { data: uDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();
-                
                 await supabaseClient.from("users").delete().eq("id", uid);
             }
             if (sid && sid !== "undefined" && sid !== "null") {
-                const { data: sDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-                
                 await supabaseClient.from("schools").delete().eq("id", sid);
 
-                const { data: students } = await supabaseClient.from("students").select("*").eq("schoolId", sid);
-                for (const doc of students.docs) { const {error: err} = await supabaseClient.rpc('delete_student', { p_student_id: doc.id });  }
+                const { data: students } = await supabaseClient.from("students").select("id").eq("schoolId", sid);
+                for (const doc of (students || [])) {
+                    await supabaseClient.rpc('delete_student', { p_student_id: doc.id });
+                }
 
-                const { data: staffData } = await supabaseClient.from("users").select("*").eq("schoolId", sid).eq("role", "staff"); const staff = { docs: staffData || [] };
-                for (const doc of staff.docs) {  await supabaseClient.from("users").delete().eq("id", doc.id); }
+                const { data: staffData } = await supabaseClient.from("users").select("id").eq("schoolId", sid).eq("role", "staff");
+                for (const doc of (staffData || [])) {
+                    await supabaseClient.from("users").delete().eq("id", doc.id);
+                }
             }
-            window.showToast("✅ COMPLETE NODE WIPED OUT!"); loadChairmen(); loadSchoolsForDropdown(); loadSchoolPayments(); loadAllStaff(); window.logAudit("Completely Wiped Node", sid);
+            window.showToast("✅ COMPLETE NODE WIPED OUT!");
+            await Promise.allSettled([
+                loadChairmen(),
+                window.loadInstitutionRegistry ? window.loadInstitutionRegistry() : Promise.resolve(),
+                loadSchoolsForDropdown(),
+                loadSchoolPayments(),
+                loadAllStaff()
+            ]);
+            window.filterChairmenList?.();
+            window.renderInstitutionRegistry?.();
+            window.logAudit("Completely Wiped Node", sid);
         } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
     });
 };
@@ -1246,12 +1440,30 @@ window.impersonateUser = async (uid, schoolId, email, pass) => {
 // ==========================================
 // 7. INSPECT STUDENTS & AADHAAR SEARCH
 // ==========================================
+window.loadSchoolInspect = async () => {
+    const sel = document.getElementById("inspectSchoolSelect");
+    if (sel) {
+        if (!sel.options || sel.options.length <= 1) {
+            await loadSchoolsForDropdown();
+        }
+        if (!sel.value && sel.options.length > 1) {
+            sel.value = "ALL";
+        }
+        if (sel.value) {
+            sel.dispatchEvent(new Event("change"));
+        }
+    }
+};
+
 const inspectSchoolSelectEl = document.getElementById("inspectSchoolSelect");
 if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", async (e) => {
     const sid = e.target.value; const dd = document.getElementById("schoolInspectData");
     if (!sid) { dd.classList.add("hidden-el"); return; }
     try {
-        let ss = (sid === "ALL") ? await supabaseClient.from("students").select("*") : await supabaseClient.from("students").select("*").eq("schoolId", sid);
+        let query = supabaseClient.from("students").select("*");
+        if (sid !== "ALL") query = query.eq("schoolId", sid);
+        const { data: ss, error: sErr } = await query;
+        if (sErr) throw sErr;
         window.fetchedInspectStudents = []; let sh = "";
         (ss || []).forEach(d => {
             const dt = d; dt.id = d.id; window.fetchedInspectStudents.push(dt);
@@ -1271,7 +1483,7 @@ if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", asyn
         document.getElementById("ins-student-table").innerHTML = sh || "<tr><td colspan='6' class='p-4 text-center text-coolGray font-mono'>NO SUBJECTS FOUND.</td></tr>";
         document.getElementById("ins-students").innerText = (ss || []).length;
         dd.classList.remove("hidden-el");
-    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); }
 });
 
 window.showStudentDetail = (id) => {
@@ -1289,27 +1501,38 @@ window.showStudentDetail = (id) => {
 window.deleteInspectStudent = (id) => {
     window.customConfirm("DELETE THIS SUBJECT GLOBALLY?", async () => {
         try {
-            const { data: stDoc } = await supabaseClient.from("students").select("*").eq("id", id).maybeSingle();
             await supabaseClient.rpc('delete_student', { p_student_id: id });
-            
             window.showToast("✅ SUBJECT & ASSETS PURGED!");
-            document.getElementById("inspectSchoolSelect").dispatchEvent(new Event("change"));
-        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+            document.getElementById("inspectSchoolSelect")?.dispatchEvent(new Event("change"));
+        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); }
     });
 };
 
 window.searchStudentByAadhaar = async () => {
-    const input = document.getElementById("search-aadhaar-input").value.trim();
+    const input = document.getElementById("search-aadhaar-input")?.value?.trim();
     const resDiv = document.getElementById("aadhaar-search-result"); const errP = document.getElementById("aadhaar-error-msg");
-    resDiv.classList.add("hidden-el"); errP.classList.add("hidden-el");
+    if (resDiv) resDiv.classList.add("hidden-el"); 
+    if (errP) errP.classList.add("hidden-el");
     if (!input) return window.showToast("ENTER UID NUMBER", "#e11d48");
     try {
-        let { data: sn } = await supabaseClient.from("students").select("*").eq("aadhaar", input);
-        if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhar", input);
-        if (sn.empty) sn = await supabaseClient.from("students").select("*").eq("aadhaarNumber", input);
-        if (sn.empty) { errP.classList.remove("hidden-el"); return; }
+        let students = [];
+        let { data: sn1 } = await supabaseClient.from("students").select("*").eq("aadhaar", input);
+        if (sn1 && sn1.length > 0) students = sn1;
+        if (!students.length) {
+            let { data: sn2 } = await supabaseClient.from("students").select("*").eq("aadhar", input);
+            if (sn2 && sn2.length > 0) students = sn2;
+        }
+        if (!students.length) {
+            let { data: sn3 } = await supabaseClient.from("students").select("*").eq("aadhaarNumber", input);
+            if (sn3 && sn3.length > 0) students = sn3;
+        }
 
-        let dt = sn.docs[0]; let sName = "UNKNOWN NODE";
+        if (!students.length) { 
+            if (errP) errP.classList.remove("hidden-el"); 
+            return; 
+        }
+
+        let dt = students[0]; let sName = "UNKNOWN NODE";
         if (dt.schoolId) { let { data: scl } = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl) sName = scl.schoolName || "UNKNOWN NODE"; }
 
         document.getElementById("as-photo").src = dt.photoUrl || "https://via.placeholder.com/80";
@@ -1321,8 +1544,9 @@ window.searchStudentByAadhaar = async () => {
         document.getElementById("as-mother").innerText = dt.motherName || "N/A";
         document.getElementById("as-mobile").innerText = dt.mobile || "N/A";
         document.getElementById("as-status").innerHTML = `<span class="${dt.status === "Approved" ? "text-emerald-400" : "text-amber-400"}">${(dt.status || "Pending").toUpperCase()}</span>`;
-        resDiv.classList.remove("hidden-el"); window.logAudit("Identity Search", input);
-    } catch (e) { window.showToast("SEARCH ERROR: " + e.message, "#e11d48"); }
+        if (resDiv) resDiv.classList.remove("hidden-el"); 
+        window.logAudit("Identity Search", input);
+    } catch (e) { window.showToast("SEARCH ERROR: " + (e.message || e), "#e11d48"); }
 };
 
 window.downloadAadhaarResultPDF = async () => {
@@ -1832,7 +2056,7 @@ async function checkAndSendBillingAlerts() {
                     }
                 } else {
                     if (dt.paymentAlertSentAt || dt.paymentBlocked) {
-                        await supabaseClient.from("schools").update({ paymentAlertSentAt: null.eq("id", d.id), paymentBlocked: null });
+                        await supabaseClient.from("schools").update({ paymentAlertSentAt: null, paymentBlocked: null }).eq("id", d.id);
                         const { data: cSData } = await supabaseClient.from("users").select("*").eq("schoolId", d.id).eq("role", "chairman"); const cS = cSData || [];
                         (cS || []).forEach(async (cD) => { if (cD.blockReason && cD.blockReason.includes("Financial Clearance")) { await supabaseClient.from("users").update({ status: "active", blockReason: "" }).eq("id", cD.id); } });
                     }
@@ -1874,7 +2098,7 @@ window.loadCompanyExpenses = async () => {
         let html = "";
         (snap || []).forEach(doc => {
             const d = doc;
-            const date = d.createdAt ? new Date(d.createdAt.toMillis()).toLocaleDateString() : "N/A";
+            const date = d.createdAt ? new Date(timestampToMillis(d.createdAt)).toLocaleDateString() : "N/A";
             html += `<tr class="hover:bg-slateSurface/50 transition">
                 <td class="p-4 text-coolGray tracking-widest">${date}</td>
                 <td class="p-4"><span class="bg-amber-500/10 border border-amber-500/50 text-amber-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.type}</span></td>
@@ -1953,10 +2177,11 @@ window.loadPasswordRequests = () => {
 window.deletePasswordRequest = async (uid) => {
     window.customConfirm("DELETE KEY FROM SYSTEM?", async () => {
         try {
-            await supabaseClient.from("users").update({ plainPassword: null.eq("id", uid), suggestedPassword: null });
+            await supabaseClient.from("users").update({ plainPassword: null, suggestedPassword: null }).eq("id", uid);
             window.showToast("KEY ERASED!");
-            loadChairmen();
-        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+            await loadChairmen();
+            if (typeof window.loadPasswordRequests === "function") window.loadPasswordRequests();
+        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); }
     });
 };
 window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
@@ -2310,14 +2535,14 @@ window.loadSchoolSecurityStatus = async () => {
 window.toggleSchoolUserBlock = async (ty) => {
     const sI = document.getElementById("secSchoolSelect").value; if (!sI) return;
     if (sI === "ALL") {
-        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("*").eq("role", "chairman"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
-        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("*").eq("role", "staff"); for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
-        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const { data: sn } = await supabaseClient.from("schools").select("*"); for (const d of sn.docs) { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", d.id); } }
+        if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("id").eq("role", "chairman"); for (const d of (sn || [])) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; const { data: sn } = await supabaseClient.from("users").select("id").eq("role", "staff"); for (const d of (sn || [])) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } }
+        else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; const { data: sn } = await supabaseClient.from("schools").select("id"); for (const d of (sn || [])) { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", d.id); } }
         return;
     }
-    if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "chairman"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
-    else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("*").eq("schoolId", sI).eq("role", "staff"); const sn = { docs: snData || [] }; for (const d of sn.docs) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
-    else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; try { await supabaseClient.from("schools").upsert([{id: sI, ...{ studentsBlocked: !iA }}]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }
+    if (ty === "chairman") { const iA = document.getElementById("sec-chairman-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("id").eq("schoolId", sI).eq("role", "chairman"); for (const d of (snData || [])) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); } }
+    else if (ty === "staff") { const iA = document.getElementById("sec-staff-toggle").checked; try { const { data: snData } = await supabaseClient.from("users").select("id").eq("schoolId", sI).eq("role", "staff"); for (const d of (snData || [])) { await supabaseClient.from("users").update({ status: iA ? "active" : "blocked", blockReason: iA ? "" : "Master Override" }).eq("id", d.id); } } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); } }
+    else if (ty === "students") { const iA = document.getElementById("sec-student-toggle").checked; try { await supabaseClient.from("schools").update({ studentsBlocked: !iA }).eq("id", sI); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); } }
 };
 window.toggleAdvancedSecurity = async (type) => {
     const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return;
@@ -2341,7 +2566,7 @@ if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
 });
 
 const cleanupBtnEl = document.getElementById("cleanupBtn");
-if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const { data: sn } = await supabaseClient.from("students").select("*").eq("status", "Pending"); let count = 0; for (const d of sn.docs) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`? ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); });
+if (cleanupBtnEl) cleanupBtnEl.addEventListener("click", () => { window.customConfirm("CRITICAL: ALL PENDING SUBJECTS GLOBALLY WILL BE PURGED!", async () => { window.showToast("PURGING... PLEASE WAIT", "#e11d48"); try { const { data: sn } = await supabaseClient.from("students").select("id").eq("status", "Pending"); let count = 0; for (const d of (sn || [])) { await supabaseClient.rpc('delete_student', { p_student_id: d.id });  count++; } window.showToast(`✅ ${count} PENDING SUBJECTS PURGED.`); window.logAudit("Mass Purge", `${count} subjects`); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); } }); });
 
 window.deployNewNode = async () => {
     const sName = document.getElementById("newNodeName").value;
@@ -2468,22 +2693,49 @@ function mapUrlForLog(log) {
 }
 
 window.loadDeviceLogs = async () => {
+    if (document.getElementById("deviceSchoolSelect")?.options?.length <= 1) {
+        try { await loadSchoolsForDropdown(); } catch (_) {}
+    }
     const sid = document.getElementById("deviceSchoolSelect")?.value || "ALL";
     const rid = document.getElementById("deviceRoleSelect")?.value || "ALL";
     const startInput = document.getElementById("device_start_date")?.value;
     const endInput = document.getElementById("device_end_date")?.value;
     const table = document.getElementById("device-logs-table");
     if (!table) return;
-    table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-cyan-400 font-mono'><i class='fas fa-spinner fa-spin'></i> SCANNING TELEMETRY...</td></tr>";
+    table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-cyan-400 font-mono'><i class='fas fa-spinner fa-spin mr-2'></i> SCANNING REALTIME TELEMETRY...</td></tr>";
+
     try {
-        let query = supabaseClient.from("login_logs").select("*");
-        if (sid !== "ALL") query = query.eq("schoolId", sid);
-        const { data: snapshot } = await query;
+        let rawLogs = [];
+        // 1. Primary execution via RPC (Security Definer with joined institution and account telemetry)
+        try {
+            const { data: rpcLogs, error: rpcErr } = await supabaseClient.rpc("company_get_radar_telemetry", {
+                p_school_id: sid || "ALL",
+                p_role: rid || "ALL"
+            });
+            if (!rpcErr && Array.isArray(rpcLogs) && rpcLogs.length > 0) {
+                rawLogs = rpcLogs;
+            }
+        } catch (rpcEx) {
+            console.warn("Telemetry RPC notice:", rpcEx);
+        }
+
+        // 2. Direct database query fallback
+        if (!rawLogs.length) {
+            let query = supabaseClient.from("login_logs").select("*");
+            if (sid !== "ALL") query = query.eq("schoolId", sid);
+            if (rid !== "ALL") query = query.eq("role", rid);
+            const { data: snapshot } = await query;
+            rawLogs = snapshot || [];
+        }
+
         window.currentDeviceLogs = [];
-        (items || []).forEach(doc => {
+        (rawLogs || []).forEach(doc => {
             const log = { id: doc.id, ...doc };
-            if (rid === "ALL" || log.role === rid) window.currentDeviceLogs.push(log);
+            if (rid === "ALL" || String(log.role || "").toLowerCase() === String(rid).toLowerCase()) {
+                window.currentDeviceLogs.push(log);
+            }
         });
+
         if (startInput && endInput) {
             const start = new Date(startInput).setHours(0, 0, 0, 0);
             const end = new Date(endInput).setHours(23, 59, 59, 999);
@@ -2492,23 +2744,75 @@ window.loadDeviceLogs = async () => {
                 return time >= start && time <= end;
             });
         }
+
         window.currentDeviceLogs.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
+
         table.innerHTML = window.currentDeviceLogs.map((log, index) => {
             const device = parseUserAgent(log.device);
             const time = timestampToMillis(log.timestamp);
             const mapUrl = mapUrlForLog(log);
+            const rLower = String(log.role || "").toLowerCase();
+            const roleBadgeClass = rLower === 'chairman'
+                ? 'bg-fuchsia-500/10 border-fuchsia-500/50 text-fuchsia-400'
+                : rLower === 'staff'
+                ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400'
+                : rLower === 'developer'
+                ? 'bg-purple-500/10 border-purple-500/50 text-purple-400'
+                : 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400';
+
+            const roleName = rLower === 'chairman' ? 'COMMANDER / CHAIRMAN'
+                : rLower === 'staff' ? 'STAFF MEMBER'
+                : rLower === 'developer' ? 'DEVELOPER / ADMIN'
+                : (log.role || 'MEMBER').toUpperCase();
+
+            const schoolDisplay = (log.schoolName && log.schoolName !== '—')
+                ? `<br><span class="text-[10px] text-cyan-300 font-mono font-bold"><i class="fas fa-building-columns mr-1"></i>${log.schoolName} ${log.schoolId && log.schoolId !== '—' ? '(' + log.schoolId + ')' : ''}</span>`
+                : (log.schoolId && log.schoolId !== '—')
+                ? `<br><span class="text-[10px] text-cyan-300 font-mono font-bold"><i class="fas fa-building-columns mr-1"></i>ID: ${log.schoolId}</span>`
+                : `<br><span class="text-[10px] text-coolGray font-mono"><i class="fas fa-network-wired mr-1"></i>Direct Portal Session</span>`;
+
             return `<tr class="hover:bg-slateSurface/50 transition">
-                <td class="p-4 sensitive-data font-bold text-white">${log.name || 'N/A'}<br><span class="text-[10px] text-tealAccent/70 font-normal tracking-widest">${log.email || 'N/A'}</span></td>
-                <td class="p-4"><span class="bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${log.role || 'UNKNOWN'}</span></td>
-                <td class="p-4 text-[10px] leading-tight tracking-widest"><span class="text-amber-500">PUB:</span> ${log.ip || 'N/A'}<br><span class="text-indigo-400">LOC:</span> ${log.localIp || 'BLOCKED'}<br><span class="text-emerald-400">GEO:</span> <span id="loc-${index}">${log.location || (mapUrl ? 'GPS COORDINATES' : '<i class="fas fa-spinner fa-spin"></i>')}</span></td>
+                <td class="p-4 sensitive-data font-bold text-white">${log.name || 'N/A'}<br><span class="text-[10px] text-tealAccent/70 font-normal tracking-widest">${log.email || 'N/A'}</span>${schoolDisplay}</td>
+                <td class="p-4"><span class="${roleBadgeClass} border px-2 py-1 rounded text-[10px] uppercase tracking-widest font-bold">${roleName}</span></td>
+                <td class="p-4 text-[10px] leading-tight tracking-widest"><span class="text-amber-500">PUB:</span> ${log.ip || 'N/A'}<br><span class="text-indigo-400">LOC:</span> ${log.localIp || 'VERIFIED'}<br><span class="text-emerald-400">GEO:</span> <span id="loc-${index}">${log.location || (mapUrl ? 'GPS COORDINATES' : 'IP GEOLOCATION')}</span></td>
                 <td class="p-4 text-[10px] max-w-[150px] tracking-widest"><span class="font-bold text-cyan-400">${device.os}</span><br><span class="text-coolGray break-words">SIG: ${device.model}</span></td>
-                <td class="p-4 text-[10px] text-coolGray tracking-widest">${time ? new Date(time).toLocaleString() : 'UNKNOWN'}</td>
-                <td class="p-4 text-center"><a id="map-${index}" class="map-action-button${mapUrl ? '' : ' hidden-el'}" href="${mapUrl || '#'}" target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> MAP</a><button id="map-disabled-${index}" class="map-action-button${mapUrl ? ' hidden-el' : ''}" disabled><i class="fas fa-location-crosshairs"></i> N/A</button></td>
+                <td class="p-4 text-[10px] text-tealAccent font-bold font-mono tracking-widest">${time ? new Date(time).toLocaleString() : (log.createdAt ? new Date(log.createdAt).toLocaleString() : 'RECENT')}</td>
+                <td class="p-4 text-center"><a id="map-${index}" class="map-action-button${mapUrl ? '' : ' hidden-el'}" href="${mapUrl || '#'}" target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> MAP</a><button id="map-disabled-${index}" class="map-action-button${mapUrl ? ' hidden-el' : ''}" disabled><i class="fas fa-location-crosshairs"></i> VERIFIED</button></td>
                 <td class="p-4 text-right"><button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.killSession('${log.userId || log.uid || ''}')"><i class="fas fa-skull-crossbones"></i> KILL</button></td>
             </tr>`;
-        }).join("") || "<tr><td colspan='7' class='p-4 text-center text-coolGray font-mono'>NO TELEMETRY FOUND.</td></tr>";
+        }).join("") || "<tr><td colspan='7' class='p-4 text-center text-coolGray font-mono'>NO TELEMETRY FOUND FOR CURRENT FILTERS.</td></tr>";
 
-        const unresolvedIps = [...new Set(window.currentDeviceLogs.filter(log => !mapUrlForLog(log)).map(log => log.ip).filter(ip => ip && ip !== "Unknown"))];
+        // Realtime listener for live tracking without page refresh
+        if (!window.radarTelemetrySubscribed) {
+            window.radarTelemetrySubscribed = true;
+            supabaseClient.channel("public:login_logs_sync")
+                .on("postgres_changes", { event: "*", schema: "public", table: "login_logs" }, () => {
+                    const activeTab = localStorage.getItem('companyActiveTab');
+                    if (activeTab === 'tab-device-tracking' || !activeTab) {
+                        window.loadDeviceLogs();
+                    }
+                })
+                .on("postgres_changes", { event: "*", schema: "public", table: "schools" }, async () => {
+                    await Promise.allSettled([
+                        window.loadInstitutionRegistry ? window.loadInstitutionRegistry() : Promise.resolve(),
+                        loadChairmen(),
+                        loadSchoolsForDropdown()
+                    ]);
+                    window.filterChairmenList?.();
+                    window.renderInstitutionRegistry?.();
+                })
+                .on("postgres_changes", { event: "*", schema: "public", table: "users" }, async () => {
+                    await Promise.allSettled([
+                        loadChairmen(),
+                        loadAllStaff()
+                    ]);
+                    window.filterChairmenList?.();
+                    window.filterStaffList?.();
+                })
+                .subscribe();
+        }
+
+        const unresolvedIps = [...new Set(window.currentDeviceLogs.filter(log => !mapUrlForLog(log)).map(log => log.ip).filter(ip => ip && ip !== "Unknown" && ip !== "Verified Connection" && ip !== "Verified Node"))];
         unresolvedIps.forEach(async ip => {
             try {
                 const response = await fetch(`https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`);
@@ -2536,17 +2840,77 @@ window.loadDeviceLogs = async () => {
         });
     } catch (error) {
         console.error("Device telemetry load failed:", error);
-        table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-rose-400 font-mono'>TELEMETRY LOAD FAILED.</td></tr>";
+        table.innerHTML = "<tr><td colspan='7' class='p-4 text-center text-rose-400 font-mono'>TELEMETRY LOAD FAILED: " + (error.message || error) + "</td></tr>";
     }
 };
 
 window.downloadDeviceLogsAsPDF = async () => {
     if (!window.currentDeviceLogs || window.currentDeviceLogs.length === 0) return;
-    try { const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Filtered Radar Telemetry", 14, 20); const tableRows = []; window.currentDeviceLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', dt.location || 'N/A', `${parsedDevice.os}\nSIG: ${parsedDevice.model}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "Geo-Location", "Hardware Sig", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [34, 211, 238], textColor: [5, 11, 20] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Radar_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('landscape');
+        doc.text("Filtered Radar Telemetry", 14, 20);
+        const tableRows = [];
+        window.currentDeviceLogs.forEach(dt => {
+            const timeVal = timestampToMillis(dt.timestamp);
+            const ts = timeVal ? new Date(timeVal).toLocaleString() : (dt.createdAt ? new Date(dt.createdAt).toLocaleString() : "UNKNOWN");
+            const parsedDevice = parseUserAgent(dt.device);
+            const schoolInfo = dt.schoolName ? `\n[${dt.schoolName}]` : "";
+            tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}${schoolInfo}`, dt.role || 'N/A', dt.ip || 'N/A', dt.location || 'N/A', `${parsedDevice.os}\nSIG: ${parsedDevice.model}`, ts]);
+        });
+        doc.autoTable({
+            head: [["Actor & Campus", "Role", "Public IP", "Geo-Location", "Hardware Sig", "Temporal Marker"]],
+            body: tableRows,
+            startY: 28,
+            theme: 'grid',
+            headStyles: { fillColor: [34, 211, 238], textColor: [5, 11, 20] }
+        });
+        const pdfBlob = doc.output('blob');
+        await window.robustWebViewDownload(pdfBlob, "Radar_Telemetry_" + Date.now() + ".pdf");
+    } catch (e) {
+        if(window.handleDbError) window.handleDbError(e);
+        else window.showToast("ERROR: " + (e.message || e), "#e11d48");
+    }
 };
 
 window.downloadAllDeviceLogsAsPDF = async () => {
-    try { const { data: sn } = await supabaseClient.from("login_logs").select("*"); let allLogs = []; (sn || []).forEach(d => allLogs.push(d)); allLogs.sort((a, b) => { if (!a.timestamp) return 1; if (!b.timestamp) return -1; return b.timestamp.toMillis() - a.timestamp.toMillis(); }); if (allLogs.length === 0) return; const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); doc.text("Global Radar Telemetry Dump", 14, 20); const tableRows = []; allLogs.forEach(dt => { let ts = dt.timestamp ? new Date(dt.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let parsedDevice = parseUserAgent(dt.device); tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]); }); doc.autoTable({ head: [["Actor", "Role", "Public IP", "OS", "Temporal"]], body: tableRows, startY: 28, theme: 'grid', headStyles: { fillColor: [168, 85, 247] } }); const pdfBlob = doc.output('blob'); await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf"); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    try {
+        let allLogs = [];
+        try {
+            const { data: rpcLogs } = await supabaseClient.rpc("company_get_radar_telemetry", { p_school_id: "ALL", p_role: "ALL" });
+            if (rpcLogs && Array.isArray(rpcLogs)) allLogs = rpcLogs;
+        } catch (_) {}
+        if (!allLogs.length) {
+            const { data: sn } = await supabaseClient.from("login_logs").select("*");
+            allLogs = sn || [];
+        }
+        allLogs.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
+        if (allLogs.length === 0) return window.showToast("NO TELEMETRY RECORDS", "#e11d48");
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('landscape');
+        doc.text("Global Radar Telemetry Dump", 14, 20);
+        const tableRows = [];
+        allLogs.forEach(dt => {
+            const timeVal = timestampToMillis(dt.timestamp);
+            const ts = timeVal ? new Date(timeVal).toLocaleString() : (dt.createdAt ? new Date(dt.createdAt).toLocaleString() : "UNKNOWN");
+            const parsedDevice = parseUserAgent(dt.device);
+            const schoolInfo = dt.schoolName ? `\n[${dt.schoolName}]` : "";
+            tableRows.push([`${dt.name || 'N/A'}\n${dt.email || 'N/A'}${schoolInfo}`, dt.role || 'N/A', dt.ip || 'N/A', `${parsedDevice.os}`, ts]);
+        });
+        doc.autoTable({
+            head: [["Actor & Campus", "Role", "Public IP", "OS", "Temporal Marker"]],
+            body: tableRows,
+            startY: 28,
+            theme: 'grid',
+            headStyles: { fillColor: [168, 85, 247] }
+        });
+        const pdfBlob = doc.output('blob');
+        await window.robustWebViewDownload(pdfBlob, "Global_Telemetry_" + Date.now() + ".pdf");
+    } catch (e) {
+        if(window.handleDbError) window.handleDbError(e);
+        else window.showToast("ERROR: " + (e.message || e), "#e11d48");
+    }
 };
 
 window.killSession = async (uid) => { if (!uid || uid === "undefined") return; window.customConfirm("TERMINATE SESSION? USER WILL BE KICKED.", async () => { await supabaseClient.from("users").update({ forceLogout: true }).eq("id", uid); window.showToast("SESSION TERMINATED.", "#e11d48"); window.logAudit("Killed Session", uid); }); };
@@ -2554,7 +2918,7 @@ window.killSession = async (uid) => { if (!uid || uid === "undefined") return; w
 // ==========================================
 // 12. BROADCAST, INBOX & EMERGENCY TICKER
 // ==========================================
-window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); if (!t) return; try { const { data: sn } = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; (sn || []).forEach(d => m.push({ id: d.id, ...d })); m.sort((a, b) => { if (!a.createdAt) return 1; if (!b.createdAt) return -1; return b.createdAt.toMillis() - a.createdAt.toMillis(); }); m.forEach(msg => { let ts = msg.createdAt ? new Date(msg.createdAt.toMillis()).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadInboxMessages = async () => { const t = document.getElementById("inbox-table"); if (!t) return; try { const { data: sn } = await supabaseClient.from("direct_messages").select("*").eq("receiverType", "developer"); let ht = ""; let m = []; (sn || []).forEach(d => m.push({ id: d.id, ...d })); m.sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt)); m.forEach(msg => { const tMs = timestampToMillis(msg.createdAt); let ts = tMs ? new Date(tMs).toLocaleString() : "UNKNOWN"; ht += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-3 text-[10px] text-coolGray tracking-widest">${ts}</td><td class="p-3"><span class="bg-indigo-500/10 border border-indigo-500/50 text-indigo-400 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest">${msg.senderRole || 'UNKNOWN'}</span><br><strong class="text-white text-xs mt-1 block">${msg.schoolName || 'N/A'}</strong></td><td class="p-3"><strong class="text-blue-300">${msg.title}</strong><br><span class="text-[10px] text-coolLight">${msg.body}</span></td><td class="p-3 text-right"><button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.replyToMessage('${msg.senderId}', '${msg.schoolId}', '${msg.senderRole}')"><i class="fas fa-reply"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button></td></tr>`; }); t.innerHTML = ht || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>INBOX EMPTY.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.deleteMessage = (mid) => { window.customConfirm("PURGE COMM?", async () => { await supabaseClient.from("direct_messages").delete().eq("id", mid); window.showToast("✅ PURGED!"); window.loadInboxMessages(); }); };
 window.replyToMessage = (rid, sid, yp) => { document.getElementById("reply-prompt-input").value = ""; openCustomModal("reply-prompt-modal"); document.getElementById("reply-prompt-confirm").onclick = async () => { const rp = document.getElementById("reply-prompt-input").value; if (!rp) return; try { await supabaseClient.from("direct_messages").insert([{ senderId: superAdminUid, senderRole: "developer", senderName: "Super Admin", schoolId: sid, receiverId: rid, receiverType: yp, title: "SYSTEM DIRECTIVE", body: rp, isRead: false, createdAt: new Date().toISOString() }]); window.closeCustomModal("reply-prompt-modal"); window.showToast("✅ REPLY TRANSMITTED!"); window.logAudit("Replied Message", rid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
@@ -2581,9 +2945,9 @@ window.listenToEmergencyTicker = () => {
 // 13. AUDIT LOGS, DELETIONS & RECYCLE BIN
 // ==========================================
 window.logAudit = async (action, target) => { try { await supabaseClient.from("audit_logs").insert([{ admin: "ROOT MASTER", action: action.toUpperCase(), target: target.toUpperCase(), timestamp: new Date().toISOString() }]); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const { data: snap } = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: false}).limit(50); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadAuditLogs = async () => { const tbody = document.getElementById("audit-logs-body"); try { const { data: snap } = await supabaseClient.from("audit_logs").select("*").order("timestamp", {ascending: false}).limit(50); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(timestampToMillis(d.timestamp)).toLocaleString() : "UNKNOWN"; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-bold text-tealAccent drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">${d.admin}</td><td class="p-4 text-white">${d.action}</td><td class="p-4 sensitive-data text-coolGray">${d.target}</td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>NO LOGS FOUND.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
-window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const { data: snap } = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(d.timestamp.toMillis()).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.loadPendingDeletions = async () => { const tbody = document.getElementById("pending-deletions-body"); try { const { data: snap } = await supabaseClient.from("pending_deletions").select("*"); let html = ""; (snap || []).forEach(doc => { let d = doc; let ts = d.timestamp ? new Date(timestampToMillis(d.timestamp)).toLocaleString() : "UNKNOWN"; let col = d.targetCollection || d.refCollection || 'transactions'; let docTId = d.targetDocId || d.refId || doc.id; html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4 font-mono text-coolGray">${d.schoolId}</td><td class="p-4"><span class="bg-rose-500/10 border border-rose-500/50 text-rose-400 px-2 py-1 rounded text-[10px] tracking-widest">${d.type || col.toUpperCase()}</span></td><td class="p-4 sensitive-data text-white">${d.details || docTId || "NO INFO"}</td><td class="p-4 text-right"><button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.approveDeletion('${doc.id}', '${col}', '${docTId}')"><i class="fas fa-check"></i></button> <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.rejectDeletion('${doc.id}')"><i class="fas fa-times"></i></button></td></tr>`; }); tbody.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center'>NO PENDING REQUESTS.</td></tr>"; } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 window.approveDeletion = async (docId, collection, docRefId) => { window.customConfirm("APPROVE DELETION? ITEM WILL MOVE TO RECOVERY BIN.", async () => { try { const { data: orgDoc } = await supabaseClient.from(collection).select("*").eq("id", docRefId).maybeSingle();  if (orgDoc) { const binRef = crypto.randomUUID(); await supabaseClient.from("recycle_bin").insert([{ id: binRef, originalCollection: collection, originalId: docRefId, data: orgDoc, deletedAt: new Date().toISOString() }]); await supabaseClient.from(collection).delete().eq("id", docRefId); } await supabaseClient.from("pending_deletions").delete().eq("id", docId);  window.showToast("DELETED & MOVED TO BIN.", "#10b981"); window.loadPendingDeletions(); window.loadRecycleBin(); window.logAudit("Approved Deletion", docRefId); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.rejectDeletion = async (docId) => { try { await supabaseClient.from("pending_deletions").delete().eq("id", docId); window.showToast("REQUEST REJECTED."); window.loadPendingDeletions(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
@@ -2599,7 +2963,7 @@ window.loadRecycleBin = async () => {
             // Manual filtering since originalSchoolId might not be perfectly indexed
             if (sid !== "ALL" && d.data?.schoolId !== sid) return;
 
-            let ts = d.deletedAt ? new Date(d.deletedAt.toMillis()).toLocaleString() : "UNKNOWN";
+            let ts = d.deletedAt ? new Date(timestampToMillis(d.deletedAt)).toLocaleString() : "UNKNOWN";
             html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4 tracking-widest">${ts}</td><td class="p-4"><span class="bg-teal-500/10 border border-teal-500/50 text-teal-400 px-2 py-1 rounded text-[10px] uppercase tracking-widest">${d.originalCollection}</span></td><td class="p-4 sensitive-data max-w-[200px] truncate text-coolGray">${JSON.stringify(d.data).substring(0, 50)}...</td><td class="p-4 text-right flex gap-1 justify-end"><button class="px-3 py-1 bg-teal-600/20 border border-teal-500 hover:bg-teal-600 text-teal-400 hover:text-slateBase font-bold rounded text-[10px] transition font-mono" onclick="window.restoreItem('${doc.id}', '${d.originalCollection}', '${d.originalId}')"><i class="fas fa-undo"></i> RESTORE</button> <button class="px-3 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white font-bold rounded text-[10px] transition font-mono" onclick="window.permanentlyDeleteBinItem('${doc.id}')"><i class="fas fa-trash"></i> DELETE</button></td></tr>`;
         });
         tbody.innerHTML = html || "<tr><td colspan='4' class='p-4 text-center'>BIN IS EMPTY.</td></tr>";
@@ -3263,7 +3627,7 @@ window.submitSchoolLogin = async () => {
                     longitude: coordinates?.longitude ?? null,
                     locationAccuracy: coordinates?.accuracy ?? null,
                     locationSource: coordinates?.source || "ip-fallback",
-                    timestamp: new Date().toISOString()
+                    timestamp: Date.now()
                 }]);
             } catch (logErr) {
                 console.log("Login log error:", logErr);
@@ -3501,17 +3865,29 @@ function renderCommSchools(searchTerm = "") {
     if (!filteredSchools.length) list.innerHTML = '<div class="p-5 text-center text-coolGray text-xs font-mono">NO MATCHING SCHOOLS</div>';
 }
 
-window.loadCommHubSchools = () => {
+window.loadCommHubSchools = async () => {
     const list = document.getElementById("comm-school-list");
     if (!list) return;
+    try {
+        const { data: sData } = await supabaseClient.from("schools").select("*");
+        commSchools = (sData || []).map(doc => {
+            const data = doc;
+            return { id: doc.id, name: data.schoolName || data.name || 'Unnamed Node', logoUrl: data.logoUrl || '' };
+        }).sort((a, b) => a.name.localeCompare(b.name));
+        renderCommSchools(document.getElementById("comm-search")?.value || "");
+    } catch (e) {
+        console.warn("loadCommHubSchools fetch notice:", e);
+    }
+
     if (!stopCommSchoolListener) {
-        stopCommSchoolListener = supabaseClient.channel("public:schools").on("postgres_changes", { event: "*", schema: "public", table: "schools" }, payload => {
-            commSchools = (snapshotData || []).map(doc => {
+        stopCommSchoolListener = supabaseClient.channel("public:schools").on("postgres_changes", { event: "*", schema: "public", table: "schools" }, async () => {
+            const { data: latest } = await supabaseClient.from("schools").select("*");
+            commSchools = (latest || []).map(doc => {
                 const data = doc;
                 return { id: doc.id, name: data.schoolName || data.name || 'Unnamed Node', logoUrl: data.logoUrl || '' };
             }).sort((a, b) => a.name.localeCompare(b.name));
             renderCommSchools(document.getElementById("comm-search")?.value || "");
-        });
+        }).subscribe();
     } else {
         renderCommSchools(document.getElementById("comm-search")?.value || "");
     }
@@ -3531,19 +3907,34 @@ window.openCommChat = (schoolId, schoolName, selectedItem = null) => {
     const historyBox = document.getElementById("comm-chat-history");
     if (!historyBox) return;
     if (stopCommMessageListener) { stopCommMessageListener.unsubscribe(); }
-    stopCommMessageListener = supabaseClient.channel("public:communications").on("postgres_changes", { event: "*", schema: "public", table: "communications", filter: `schoolId=eq.${schoolId}` }, payload => {
+    const renderCommMessages = async () => {
+        try {
+            const { data: comData } = await supabaseClient.from("communications").select("*").eq("schoolId", schoolId);
             historyBox.innerHTML = '';
-            if (snapshot.empty) {
+            if (!comData || comData.length === 0) {
                 historyBox.innerHTML = '<div class="flex-1 flex items-center justify-center text-coolGray font-mono text-xs text-center"><i class="fas fa-satellite-dish text-4xl mb-2 opacity-20 block"></i><br>End-to-End Encrypted Comms<br>No messages yet.</div>';
                 return;
             }
-
-            let messages = [];
-            (items || []).forEach(doc => {
-                messages.push({ id: doc.id, ...doc });
-            });
-
+            let messages = (comData || []).map(doc => ({ id: doc.id, ...doc }));
             messages.sort((a, b) => timestampToMillis(a.timestamp) - timestampToMillis(b.timestamp));
+            messages.forEach(msg => {
+                const isMaster = msg.sender === "master";
+                const wrap = document.createElement("div");
+                wrap.className = `flex w-full ${isMaster ? "justify-end" : "justify-start"}`;
+                const tsMillis = timestampToMillis(msg.timestamp);
+                const timeStr = tsMillis ? new Date(tsMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "SENDING";
+                let fileHTML = msg.attachmentUrl ? `<a href="${msg.attachmentUrl}" target="_blank" class="block mb-2 text-indigo-300 underline text-[10px]"><i class="fas fa-file"></i> View Attachment</a>` : "";
+                wrap.innerHTML = `<div class="chat-bubble ${isMaster ? "sent" : "received"}">${fileHTML}<span>${msg.text || ""}</span><span class="timestamp">${timeStr}</span></div>`;
+                historyBox.appendChild(wrap);
+            });
+            historyBox.scrollTop = historyBox.scrollHeight;
+        } catch (e) { console.warn("Comm message render error:", e); }
+    };
+    renderCommMessages();
+    stopCommMessageListener = supabaseClient.channel("public:communications:" + schoolId).on("postgres_changes", { event: "*", schema: "public", table: "communications", filter: `schoolId=eq.${schoolId}` }, () => {
+        renderCommMessages();
+    }).subscribe();
+    return;
 
             messages.forEach(msg => {
                 const isMaster = msg.sender === 'master';
@@ -3732,10 +4123,10 @@ window.approveTransfer = async (transferId) => {
             await supabaseClient.from("student_transfers").update({
                 status: "Pending Target Accept",
                 workflowStage: 2,
-                hqApprovedAt: new Date().toISOString().eq("id", transferId),
+                hqApprovedAt: new Date().toISOString(),
                 hqApprovedBy: superAdminUid || "hq",
                 workflowStages: stages
-            });
+            }).eq("id", transferId);
             window.showToast("✅ TRANSFER APPROVED & FORWARDED TO TARGET SCHOOL", "#10b981");
             window.logAudit("Approved Student Transfer", `${tr.studentName} -> ${tr.toSchoolName}`);
             window.loadTransferApprovals();
@@ -3759,11 +4150,11 @@ window.hqRejectTransfer = async (transferId) => {
         
         await supabaseClient.from("student_transfers").update({
             status: "Rejected",
-            rejectedAt: new Date().toISOString().eq("id", transferId),
+            rejectedAt: new Date().toISOString(),
             rejectedBy: superAdminUid || "hq",
             rejectReason: reason,
             workflowStages: stages
-        });
+        }).eq("id", transferId);
           
           if (tr.studentId) {
               const { error: rpcErr } = await supabaseClient.rpc("update_student_transfer", {
@@ -4110,9 +4501,9 @@ window.loadGlobalNotifications = async () => {
             return;
         }
 
-        (snap || []).forEach(doc => {
+        (snapData || []).forEach(doc => {
             const data = doc;
-            let dateStr = data.sentAt ? new Date(data.sentAt.toDate()).toLocaleString() : "Just now";
+            let dateStr = data.sentAt ? new Date(timestampToMillis(data.sentAt)).toLocaleString() : "Just now";
 
             let colorClass = "text-tealAccent";
             if (data.type === "Warning") colorClass = "text-amber-400";
