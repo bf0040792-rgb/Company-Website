@@ -1,0 +1,8 @@
+{
+  "name": "CoreEdu.IN | Global Master Core",
+  "description": "Educational excellence management command center for institutions, student data, staff operations, and administration.",
+  "prompt": "Company website for CoreEdu.IN educational excellence platform",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
