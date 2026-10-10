@@ -3792,7 +3792,7 @@ function updateLiveTime() {
         hours = hours % 12;
         hours = hours ? hours : 12; // the hour '0' should be '12'
         const timeString = hours.toString().padStart(2, '0') + ':' + minutes + ' ' + ampm;
-        chip.innerHTML = "<i class="far fa-clock text-cyan-400 mr-1.5"></i>" + day + " • " + timeString;
+        chip.innerHTML = '<i class="far fa-clock text-cyan-400 mr-1.5"></i>' + day + ' • ' + timeString;
     }
 }
 setInterval(updateLiveTime, 1000);
@@ -3819,7 +3819,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 </body>
-
 </html>
 
 
