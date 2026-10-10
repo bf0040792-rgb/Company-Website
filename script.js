@@ -1831,7 +1831,7 @@ window.saveFeatureToggles = async (group, key, enabled) => {
             restrictedModules,
             updatedAt: new Date().toISOString(),
             updatedBy: superAdminUid || "hq"
-        }, { merge: true });
+        }).eq('id', sid);
         window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
         window.logAudit(`Updated ${group} Feature Toggle`, `${sid}:${key}:${enabled ? "ON" : "OFF"}`);
     } catch (e) {
@@ -1908,7 +1908,7 @@ window.toggleAdvancedSecurity = async (type) => {
     if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
     try { await supabaseClient.from("schools").update(updateObj).eq("id", sid); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
-window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await supabaseClient.from("schools").update({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await supabaseClient.from("schools").update({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }).eq('id', sid); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
 
 const csvExportBtnEl = document.getElementById("csvExportBtn");
 if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
@@ -4471,6 +4471,10 @@ if (btnExportBackup) {
         btnExportBackup.disabled = false;
     });
 }
+
+
+
+
 
 
 
