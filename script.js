@@ -471,6 +471,7 @@ async function bootstrapDashboard(user) {
         ]);
         window.initQuotaMonitor();
         listenToEmergencyTicker();
+        if (typeof window.initDirectoryRealtimeSync === "function") window.initDirectoryRealtimeSync();
 
     } catch (err) {
         document.getElementById("auth-overlay")?.classList.add("hidden-el");
@@ -594,7 +595,8 @@ function activateCompanyTab(targetId, menuItem = null) {
         window.loadDeviceLogs?.();
     }
     if (targetId === 'tab-staff') {
-        window.loadAllStaff?.();
+        window.switchDirectorySubtab?.(window.currentDirectorySubtab || 'students');
+        window.loadAllDirectoryData?.();
     }
     if (targetId === 'tab-audit-logs') {
         window.loadAuditLogs?.();
@@ -1467,16 +1469,19 @@ if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", asyn
         window.fetchedInspectStudents = []; let sh = "";
         (ss || []).forEach(d => {
             const dt = d; dt.id = d.id; window.fetchedInspectStudents.push(dt);
-            const sc = dt.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400';
+            const isBlocked = window.isStudentBlocked ? window.isStudentBlocked(dt) : Boolean(dt.lockedOut || dt.data?.lockedOut);
+            const sc = isBlocked ? 'text-rose-400 font-bold border border-rose-500/50 bg-rose-500/10 px-2 py-0.5 rounded shadow-[0_0_8px_rgba(244,63,94,0.3)]' : (dt.status === 'Approved' ? 'text-emerald-400 font-bold border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 rounded' : 'text-amber-400 font-bold border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 rounded');
+            const statusLabel = isBlocked ? 'BLOCKED / LOCKED' : (dt.status || 'Active').toUpperCase();
             sh += `<tr class="hover:bg-slateSurface/50 transition">
                 <td class="p-4"><img src="${dt.photoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
-                <td class="p-4 sensitive-data"><strong class="block text-white">${dt.name || 'N/A'}</strong><span class="text-[10px] text-coolGray font-mono tracking-widest">📞 ${dt.mobile || 'NO COMM'}</span><br><span class="text-[10px] text-amber-400 font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">UID: ${dt.aadhaar || dt.aadhar || dt.aadhaarNumber || 'N/A'}</span></td>
+                <td class="p-4 sensitive-data"><strong class="block text-white">${dt.name || 'N/A'} ${isBlocked ? '<i class="fas fa-lock text-rose-400 text-xs ml-1" title="Account Locked Out"></i>' : ''}</strong><span class="text-[10px] text-coolGray font-mono tracking-widest">📞 ${dt.mobile || 'NO COMM'}</span><br><span class="text-[10px] text-amber-400 font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">UID: ${dt.aadhaar || dt.aadhar || dt.aadhaarNumber || 'N/A'}</span></td>
                 <td class="p-4"><span class="bg-blue-500/10 border border-blue-500/50 text-blue-400 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-widest shadow-[0_0_5px_rgba(59,130,246,0.3)]">SEC: ${dt.class || 'N/A'}</span></td>
-                <td class="p-4 sensitive-data text-[10px] font-mono text-gray-300"><b>O1:</b> ${dt.fatherName || 'N/A'}<br><b>O2:</b> ${dt.motherName || 'N/A'}</td>
-                <td class="p-4"><span class="${sc} font-bold font-mono text-[10px] tracking-widest drop-shadow-[0_0_5px_currentColor]">${(dt.status || 'N/A').toUpperCase()}</span></td>
+                <td class="p-4 sensitive-data text-[10px] font-mono text-gray-300"><b>O1:</b> ${dt.fatherName || dt.parentage || 'N/A'}<br><b>O2:</b> ${dt.motherName || 'N/A'}</td>
+                <td class="p-4"><span class="${sc} font-mono text-[10px] tracking-widest">${statusLabel}</span></td>
                 <td class="p-4 text-right">
-                    <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.showStudentDetail('${dt.id}')"><i class="fas fa-eye"></i></button> 
-                    <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteInspectStudent('${dt.id}')"><i class="fas fa-trash"></i></button>
+                    <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition mr-1" onclick="window.showStudentDetail('${dt.id}')" title="Inspect Full Dossier"><i class="fas fa-eye"></i></button>
+                    <button class="px-2 py-1 ${isBlocked ? 'bg-emerald-600/20 border-emerald-500 hover:bg-emerald-600 text-emerald-400' : 'bg-amber-600/20 border-amber-500 hover:bg-amber-600 text-amber-400'} border hover:text-white rounded text-[10px] font-mono font-bold transition mr-1" onclick="window.toggleStudentBlock('${dt.id}', ${!isBlocked})" title="${isBlocked ? 'Unlock / Unblock Student' : 'Lock / Block Student'}"><i class="fas ${isBlocked ? 'fa-unlock' : 'fa-lock'}"></i> ${isBlocked ? 'UNBLOCK' : 'BLOCK'}</button>
+                    <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteInspectStudent('${dt.id}')" title="Delete Student Record"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         });
@@ -1487,14 +1492,24 @@ if (inspectSchoolSelectEl) inspectSchoolSelectEl.addEventListener("change", asyn
 });
 
 window.showStudentDetail = (id) => {
-    const st = window.fetchedInspectStudents.find(s => s.id === id); if (!st) return;
+    const st = (window.fetchedGlobalStudentsList || []).find(s => s.id === id) || (window.fetchedInspectStudents || []).find(s => s.id === id); if (!st) return;
+    const isBlocked = window.isStudentBlocked ? window.isStudentBlocked(st) : Boolean(st.lockedOut || st.data?.lockedOut);
     document.getElementById("stu-photo").src = st.photoUrl || "https://via.placeholder.com/80";
     document.getElementById("stu-name").innerText = st.name || "N/A";
-    document.getElementById("stu-class").innerText = `${st.class || 'N/A'} (ID: ${st.roll || 'N/A'})`;
-    document.getElementById("stu-father").innerText = st.fatherName || "N/A";
+    document.getElementById("stu-class").innerText = `${st.class || 'N/A'} (ID: ${st.roll || st.rollNo || 'N/A'})`;
+    document.getElementById("stu-father").innerText = st.fatherName || st.parentage || "N/A";
     document.getElementById("stu-mobile").innerText = st.mobile || "N/A";
     document.getElementById("stu-password").innerText = st.appPassword || "••••••";
-    document.getElementById("stu-status").innerHTML = `<span class="${st.status === "Approved" ? "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]" : "text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]"}">${(st.status || "Pending").toUpperCase()}</span>`;
+    
+    let statusBadge = "";
+    if (isBlocked) {
+        statusBadge = `<span class="text-rose-400 font-bold drop-shadow-[0_0_5px_rgba(244,63,94,0.8)] flex items-center gap-1.5"><i class="fas fa-lock"></i> BLOCKED / LOCKED OUT</span>`;
+    } else if ((st.status || '').toLowerCase() === 'approved' || (st.status || '').toLowerCase() === 'active') {
+        statusBadge = `<span class="text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)] flex items-center gap-1.5"><i class="fas fa-check-circle"></i> APPROVED / ACTIVE</span>`;
+    } else {
+        statusBadge = `<span class="text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">${(st.status || "Pending").toUpperCase()}</span>`;
+    }
+    document.getElementById("stu-status").innerHTML = statusBadge;
     openCustomModal("student-modal");
 };
 
@@ -1535,15 +1550,25 @@ window.searchStudentByAadhaar = async () => {
         let dt = students[0]; let sName = "UNKNOWN NODE";
         if (dt.schoolId) { let { data: scl } = await supabaseClient.from("schools").select("*").eq("id", dt.schoolId).maybeSingle(); if (scl) sName = scl.schoolName || "UNKNOWN NODE"; }
 
+        const isBlocked = window.isStudentBlocked ? window.isStudentBlocked(dt) : Boolean(dt.lockedOut || dt.data?.lockedOut);
         document.getElementById("as-photo").src = dt.photoUrl || "https://via.placeholder.com/80";
         document.getElementById("as-name").innerText = dt.name || "N/A";
-        document.getElementById("as-class").innerText = `SEC: ${dt.class || 'N/A'} (ID: ${dt.roll || '-'})`;
+        document.getElementById("as-class").innerText = `SEC: ${dt.class || 'N/A'} (ID: ${dt.roll || dt.rollNo || '-'})`;
         document.getElementById("as-school").innerText = sName.toUpperCase();
         document.getElementById("as-aadhaar").innerText = dt.aadhaar || dt.aadhar || dt.aadhaarNumber || input;
-        document.getElementById("as-father").innerText = dt.fatherName || "N/A";
+        document.getElementById("as-father").innerText = dt.fatherName || dt.parentage || "N/A";
         document.getElementById("as-mother").innerText = dt.motherName || "N/A";
         document.getElementById("as-mobile").innerText = dt.mobile || "N/A";
-        document.getElementById("as-status").innerHTML = `<span class="${dt.status === "Approved" ? "text-emerald-400" : "text-amber-400"}">${(dt.status || "Pending").toUpperCase()}</span>`;
+        
+        let aadhaarStatusBadge = "";
+        if (isBlocked) {
+            aadhaarStatusBadge = `<span class="text-rose-400 font-bold drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]"><i class="fas fa-lock mr-1"></i>BLOCKED</span>`;
+        } else if ((dt.status || '').toLowerCase() === 'approved' || (dt.status || '').toLowerCase() === 'active') {
+            aadhaarStatusBadge = `<span class="text-emerald-400"><i class="fas fa-check mr-1"></i>APPROVED</span>`;
+        } else {
+            aadhaarStatusBadge = `<span class="text-amber-400">${(dt.status || "Pending").toUpperCase()}</span>`;
+        }
+        document.getElementById("as-status").innerHTML = aadhaarStatusBadge;
         if (resDiv) resDiv.classList.remove("hidden-el"); 
         window.logAudit("Identity Search", input);
     } catch (e) { window.showToast("SEARCH ERROR: " + (e.message || e), "#e11d48"); }
@@ -1564,34 +1589,1019 @@ window.downloadAadhaarResultPDF = async () => {
 };
 
 // ==========================================
-// 8. GLOBAL STAFF DIRECTORY
+// 8. GLOBAL CAMPUS DIRECTORY (STUDENTS & STAFF) & REALTIME SYNC
 // ==========================================
-window.loadAllStaff = async () => { try { const { data: sp } = await supabaseClient.from("users").select("*").eq("role", "staff"); window.fetchedGlobalStaffList = []; (sp || []).forEach(d => { const dt = d; dt.id = d.id; window.fetchedGlobalStaffList.push(dt); }); window.filterStaffList(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
-window.filterStaffList = () => {
-    const sid = document.getElementById("staffSchoolSelect").value; let ht = ""; let ls = window.fetchedGlobalStaffList;
-    if (sid !== "ALL") { ls = ls.filter(s => s.schoolId === sid); }
-    (ls || []).forEach(dt => {
-        ht += `<tr class="hover:bg-slateSurface/50 transition">
-            <td class="p-4 sensitive-data font-bold text-white">${dt.name}</td><td class="p-4 sensitive-data text-[10px] text-tealAccent/70 tracking-widest">${dt.email}</td><td class="p-4 text-[10px] text-gray-300">${dt.schoolName || 'UNKNOWN'}</td>
-            <td class="p-4 text-right flex justify-end gap-1">
-                <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.showStaffDetail('${dt.id}')"><i class="fas fa-eye"></i></button>
-                <button class="px-2 py-1 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded text-[10px] transition" onclick="window.sendDirectMessage('${dt.id}', '${dt.schoolId}', 'staff')"><i class="fas fa-comment"></i></button>
-                <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteGlobalStaff('${dt.id}')"><i class="fas fa-trash"></i></button>
+window.currentDirectorySubtab = 'students';
+window.fetchedGlobalStudentsList = [];
+window.fetchedGlobalStaffList = [];
+window.filteredDirectoryStudents = [];
+window.filteredDirectoryStaff = [];
+
+// Normalizer for School / College names to prevent duplicates
+window.normalizeSchoolNameKey = function(name) {
+    if (!name) return "";
+    return String(name)
+        .trim()
+        .toUpperCase()
+        .replace(/\bGOVERNMENT\b/g, "GOVT")
+        .replace(/\bCOLLAGE\b/g, "COLLEGE")
+        .replace(/[^A-Z0-9]/g, "");
+};
+
+// Universal check for whether a student account is blocked or locked out
+window.isStudentBlocked = function(s) {
+    if (!s) return false;
+    if (s.lockedOut === true || s.lockedOut === 'true' || s.lockedOut === 1) return true;
+    if (s.data && (s.data.lockedOut === true || s.data.lockedOut === 'true' || s.data.lockedOut === 1)) return true;
+    if (s.isBlocked === true || s.isBlocked === 'true' || s.blocked === true || s.is_blocked === true) return true;
+    if (s.data && (s.data.isBlocked === true || s.data.blocked === true)) return true;
+    const st = String(s.status || s.data?.status || '').trim().toLowerCase();
+    if (st === 'blocked' || st === 'suspended' || st === 'inactive' || st === 'locked') return true;
+    return false;
+};
+
+// Universal check for whether a staff account is blocked
+window.isStaffBlocked = function(st) {
+    if (!st) return false;
+    if (st.lockedOut === true || st.lockedOut === 'true' || st.isBlocked === true || st.blocked === true) return true;
+    const s = String(st.status || '').trim().toLowerCase();
+    if (s === 'blocked' || s === 'suspended' || s === 'inactive' || s === 'locked') return true;
+    return false;
+};
+
+window.getInstitutionName = function(schoolId) {
+    if (!schoolId) return "Global / Unassigned";
+    const matchReg = (window.institutionRegistryData || []).find(s => s && (s.id === schoolId || s.schoolId === schoolId || s.institution_code === schoolId));
+    if (matchReg && (matchReg.schoolName || matchReg.name)) return matchReg.schoolName || matchReg.name;
+    const matchCh = (window.fetchedChairmen || []).find(c => c && (c.schoolId === schoolId || c.id === schoolId));
+    if (matchCh && (matchCh.schoolName || matchCh.name)) return matchCh.schoolName || matchCh.name;
+    const matchPay = (window.fetchedSchoolPayments || []).find(p => p && p.id === schoolId);
+    if (matchPay && matchPay.schoolName) return matchPay.schoolName;
+    return schoolId;
+};
+
+window.switchDirectorySubtab = function(subtab = 'students') {
+    window.currentDirectorySubtab = subtab;
+    const btnStudents = document.getElementById("dir-tab-btn-students");
+    const btnStaff = document.getElementById("dir-tab-btn-staff");
+    const viewStudents = document.getElementById("dir-students-view");
+    const viewStaff = document.getElementById("dir-staff-view");
+    const categoryLabel = document.getElementById("dirCategoryLabel");
+
+    if (subtab === 'students') {
+        if (btnStudents) {
+            btnStudents.className = "px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider transition-all flex items-center gap-2 bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)] border border-indigo-400/50";
+        }
+        if (btnStaff) {
+            btnStaff.className = "px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider transition-all flex items-center gap-2 text-coolLight hover:text-white hover:bg-slateSurface";
+        }
+        if (viewStudents) viewStudents.classList.remove("hidden-el");
+        if (viewStaff) viewStaff.classList.add("hidden-el");
+        if (categoryLabel) categoryLabel.innerHTML = '<i class="fas fa-layer-group mr-1"></i> Class / Sector';
+    } else {
+        if (btnStaff) {
+            btnStaff.className = "px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider transition-all flex items-center gap-2 bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] border border-emerald-400/50";
+        }
+        if (btnStudents) {
+            btnStudents.className = "px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider transition-all flex items-center gap-2 text-coolLight hover:text-white hover:bg-slateSurface";
+        }
+        if (viewStaff) viewStaff.classList.remove("hidden-el");
+        if (viewStudents) viewStudents.classList.add("hidden-el");
+        if (categoryLabel) categoryLabel.innerHTML = '<i class="fas fa-user-tag mr-1"></i> Role / Designation';
+    }
+
+    window.populateDirectoryCategoryOptions();
+    window.filterDirectoryData();
+};
+
+window.populateDirectoryCategoryOptions = function() {
+    const sel = document.getElementById("dirCategoryFilter");
+    if (!sel) return;
+    const currentVal = sel.value;
+    const isStudents = (window.currentDirectorySubtab || 'students') === 'students';
+
+    if (isStudents) {
+        const classes = Array.from(new Set((window.fetchedGlobalStudentsList || [])
+            .map(s => s.class)
+            .filter(Boolean)
+        )).sort();
+        let html = '<option value="ALL">All Classes</option>';
+        classes.forEach(c => {
+            html += `<option value="${c}">${c}</option>`;
+        });
+        sel.innerHTML = html;
+    } else {
+        const roles = Array.from(new Set((window.fetchedGlobalStaffList || [])
+            .map(s => (s.staffRole || s.role || 'Staff').toUpperCase())
+            .filter(Boolean)
+        )).sort();
+        let html = '<option value="ALL">All Roles</option>';
+        roles.forEach(r => {
+            html += `<option value="${r}">${r}</option>`;
+        });
+        sel.innerHTML = html;
+    }
+    if (currentVal && sel.querySelector(`option[value="${currentVal}"]`)) {
+        sel.value = currentVal;
+    }
+};
+
+window.loadAllDirectoryData = async function() {
+    try {
+        const [stuRes, staffRes] = await Promise.allSettled([
+            supabaseClient.from("students").select("*"),
+            supabaseClient.from("users").select("*").eq("role", "staff")
+        ]);
+
+        if (stuRes.status === 'fulfilled' && !stuRes.value.error) {
+            window.fetchedGlobalStudentsList = (stuRes.value.data || []).map(d => ({
+                ...d,
+                id: d.id,
+                lockedOut: Boolean(d.lockedOut ?? d.data?.lockedOut ?? false),
+                isBlocked: Boolean(d.isBlocked ?? d.blocked ?? d.is_blocked ?? d.data?.isBlocked ?? d.data?.blocked ?? false),
+                status: d.status || d.data?.status || 'Approved',
+                schoolName: d.schoolName || window.getInstitutionName(d.schoolId)
+            }));
+        } else if (stuRes.status === 'rejected') {
+            console.warn("Directory students fetch warning:", stuRes.reason);
+        }
+
+        if (staffRes.status === 'fulfilled' && !staffRes.value.error) {
+            window.fetchedGlobalStaffList = (staffRes.value.data || []).map(d => ({
+                ...d,
+                id: d.id,
+                status: d.status || 'active',
+                schoolName: d.schoolName || window.getInstitutionName(d.schoolId)
+            }));
+        } else if (staffRes.status === 'rejected') {
+            console.warn("Directory staff fetch warning:", staffRes.reason);
+        }
+
+        const totalStu = (window.fetchedGlobalStudentsList || []).length;
+        const totalStaff = (window.fetchedGlobalStaffList || []).length;
+
+        const dirStuCount = document.getElementById("dir-total-students-count");
+        if (dirStuCount) dirStuCount.innerText = totalStu;
+        const dirStaffCount = document.getElementById("dir-total-staff-count");
+        if (dirStaffCount) dirStaffCount.innerText = totalStaff;
+        const dirBadgeStu = document.getElementById("dir-badge-students");
+        if (dirBadgeStu) dirBadgeStu.innerText = totalStu;
+        const dirBadgeStaff = document.getElementById("dir-badge-staff");
+        if (dirBadgeStaff) dirBadgeStaff.innerText = totalStaff;
+
+        const statStu = document.getElementById("stat-students");
+        if (statStu) statStu.innerText = totalStu;
+        const statStaff = document.getElementById("stat-staff");
+        if (statStaff) statStaff.innerText = totalStaff;
+
+        window.populateDirectoryCategoryOptions();
+        window.filterDirectoryData();
+    } catch (err) {
+        console.error("loadAllDirectoryData error:", err);
+        if (window.handleDbError) window.handleDbError(err);
+        else window.showToast("DIRECTORY LOAD ERROR: " + (err.message || err), "#e11d48");
+    }
+};
+
+// Silent loader for background polling and realtime fallback without disrupting UI
+window.loadAllDirectoryDataSilent = async function() {
+    try {
+        const [stuRes, staffRes] = await Promise.allSettled([
+            supabaseClient.from("students").select("*"),
+            supabaseClient.from("users").select("*").eq("role", "staff")
+        ]);
+
+        let changed = false;
+        if (stuRes.status === 'fulfilled' && !stuRes.value.error && Array.isArray(stuRes.value.data)) {
+            const mapped = stuRes.value.data.map(d => ({
+                ...d,
+                id: d.id,
+                lockedOut: Boolean(d.lockedOut ?? d.data?.lockedOut ?? false),
+                isBlocked: Boolean(d.isBlocked ?? d.blocked ?? d.is_blocked ?? d.data?.isBlocked ?? d.data?.blocked ?? false),
+                status: d.status || d.data?.status || 'Approved',
+                schoolName: d.schoolName || window.getInstitutionName(d.schoolId)
+            }));
+            const oldJson = JSON.stringify((window.fetchedGlobalStudentsList || []).map(s => ({ id: s.id, lo: s.lockedOut, st: s.status })));
+            const newJson = JSON.stringify(mapped.map(s => ({ id: s.id, lo: s.lockedOut, st: s.status })));
+            if (oldJson !== newJson) {
+                window.fetchedGlobalStudentsList = mapped;
+                changed = true;
+            }
+        }
+
+        if (staffRes.status === 'fulfilled' && !staffRes.value.error && Array.isArray(staffRes.value.data)) {
+            const mappedStaff = staffRes.value.data.map(d => ({
+                ...d,
+                id: d.id,
+                status: d.status || 'active',
+                schoolName: d.schoolName || window.getInstitutionName(d.schoolId)
+            }));
+            const oldStaffJson = JSON.stringify((window.fetchedGlobalStaffList || []).map(s => ({ id: s.id, st: s.status })));
+            const newStaffJson = JSON.stringify(mappedStaff.map(s => ({ id: s.id, st: s.status })));
+            if (oldStaffJson !== newStaffJson) {
+                window.fetchedGlobalStaffList = mappedStaff;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            const totalStu = (window.fetchedGlobalStudentsList || []).length;
+            const totalStaff = (window.fetchedGlobalStaffList || []).length;
+            const dirStuCount = document.getElementById("dir-total-students-count");
+            if (dirStuCount) dirStuCount.innerText = totalStu;
+            const dirStaffCount = document.getElementById("dir-total-staff-count");
+            if (dirStaffCount) dirStaffCount.innerText = totalStaff;
+            const dirBadgeStu = document.getElementById("dir-badge-students");
+            if (dirBadgeStu) dirBadgeStu.innerText = totalStu;
+            const dirBadgeStaff = document.getElementById("dir-badge-staff");
+            if (dirBadgeStaff) dirBadgeStaff.innerText = totalStaff;
+            const statStu = document.getElementById("stat-students");
+            if (statStu) statStu.innerText = totalStu;
+            const statStaff = document.getElementById("stat-staff");
+            if (statStaff) statStaff.innerText = totalStaff;
+
+            window.filterDirectoryData();
+        }
+    } catch (_) {}
+};
+
+window.loadAllStaff = window.loadAllDirectoryData;
+
+window.filterDirectoryData = function() {
+    const selectedSchool = document.getElementById("staffSchoolSelect")?.value || "ALL";
+    const searchTerm = (document.getElementById("dirSearchInput")?.value || "").trim().toLowerCase();
+    const selectedStatus = document.getElementById("dirStatusFilter")?.value || "ALL";
+    const selectedCategory = document.getElementById("dirCategoryFilter")?.value || "ALL";
+
+    const isStudents = (window.currentDirectorySubtab || 'students') === 'students';
+
+    if (isStudents) {
+        let list = window.fetchedGlobalStudentsList || [];
+
+        if (selectedSchool !== "ALL") {
+            const schObj = (window.uniqueInstitutionsList || []).find(u => u.id === selectedSchool || u.matchingIds?.includes(selectedSchool) || u.normKey === selectedSchool);
+            list = list.filter(s => {
+                if (s.schoolId === selectedSchool) return true;
+                if (schObj && schObj.matchingIds?.includes(s.schoolId)) return true;
+                const sNameNorm = window.normalizeSchoolNameKey(s.schoolName || window.getInstitutionName(s.schoolId));
+                if (schObj && sNameNorm === schObj.normKey) return true;
+                return false;
+            });
+        }
+
+        if (selectedStatus !== "ALL") {
+            list = list.filter(s => {
+                const isBlocked = window.isStudentBlocked(s);
+                const st = String(s.status || "Approved").toLowerCase();
+                if (selectedStatus === "approved") {
+                    return !isBlocked && (st === "approved" || st === "active");
+                }
+                if (selectedStatus === "pending") {
+                    return !isBlocked && st === "pending";
+                }
+                if (selectedStatus === "blocked") {
+                    return isBlocked;
+                }
+                return true;
+            });
+        }
+
+        if (selectedCategory !== "ALL") {
+            list = list.filter(s => (s.class || "").toLowerCase() === selectedCategory.toLowerCase());
+        }
+
+        if (searchTerm) {
+            list = list.filter(s => {
+                const hay = [
+                    s.name,
+                    s.roll,
+                    s.rollNo,
+                    s.class,
+                    s.mobile,
+                    s.fatherName,
+                    s.motherName,
+                    s.parentage,
+                    s.aadhaar,
+                    s.aadhar,
+                    s.aadhaarNumber,
+                    s.schoolId,
+                    window.getInstitutionName(s.schoolId)
+                ].filter(Boolean).join(" ").toLowerCase();
+                return hay.includes(searchTerm);
+            });
+        }
+
+        window.filteredDirectoryStudents = list;
+        window.renderDirectoryStudents(list);
+    } else {
+        let list = window.fetchedGlobalStaffList || [];
+
+        if (selectedSchool !== "ALL") {
+            const schObj = (window.uniqueInstitutionsList || []).find(u => u.id === selectedSchool || u.matchingIds?.includes(selectedSchool) || u.normKey === selectedSchool);
+            list = list.filter(s => {
+                if (s.schoolId === selectedSchool) return true;
+                if (schObj && schObj.matchingIds?.includes(s.schoolId)) return true;
+                const sNameNorm = window.normalizeSchoolNameKey(s.schoolName || window.getInstitutionName(s.schoolId));
+                if (schObj && sNameNorm === schObj.normKey) return true;
+                return false;
+            });
+        }
+
+        if (selectedStatus !== "ALL") {
+            list = list.filter(s => {
+                const isBlocked = window.isStaffBlocked(s);
+                if (selectedStatus === "approved") return !isBlocked;
+                if (selectedStatus === "pending") return !isBlocked && (s.status || '').toLowerCase() === "pending";
+                if (selectedStatus === "blocked") return isBlocked;
+                return true;
+            });
+        }
+
+        if (selectedCategory !== "ALL") {
+            list = list.filter(s => (s.staffRole || s.role || "Staff").toUpperCase() === selectedCategory.toUpperCase());
+        }
+
+        if (searchTerm) {
+            list = list.filter(s => {
+                const hay = [
+                    s.name,
+                    s.email,
+                    s.role,
+                    s.staffRole,
+                    s.mobile,
+                    s.phone,
+                    s.schoolId,
+                    window.getInstitutionName(s.schoolId)
+                ].filter(Boolean).join(" ").toLowerCase();
+                return hay.includes(searchTerm);
+            });
+        }
+
+        window.filteredDirectoryStaff = list;
+        window.renderDirectoryStaff(list);
+    }
+};
+
+window.filterStaffList = window.filterDirectoryData;
+
+window.renderDirectoryStudents = function(list = []) {
+    const tbody = document.getElementById("dirStudentsTableBody");
+    const countBadge = document.getElementById("dir-students-showing-count");
+    if (countBadge) countBadge.innerText = list.length;
+    if (!tbody) return;
+
+    if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-coolGray font-mono">
+            <i class="fas fa-user-slash text-2xl mb-2 block opacity-40"></i>
+            NO STUDENTS FOUND MATCHING CURRENT FILTER CRITERIA.
+        </td></tr>`;
+        return;
+    }
+
+    let html = "";
+    list.forEach(dt => {
+        const isBlocked = window.isStudentBlocked(dt);
+        const stLower = String(dt.status || 'approved').toLowerCase();
+        const isPending = !isBlocked && (stLower === 'pending');
+        
+        let statusBadgeClass = "";
+        let statusText = "";
+        if (isBlocked) {
+            statusBadgeClass = "text-rose-400 bg-rose-500/15 border-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.3)]";
+            statusText = "BLOCKED / LOCKED";
+        } else if (isPending) {
+            statusBadgeClass = "text-amber-400 bg-amber-500/10 border-amber-500/30";
+            statusText = "PENDING";
+        } else {
+            statusBadgeClass = "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
+            statusText = "ACTIVE";
+        }
+        
+        const photo = dt.photoUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80";
+        const campusName = window.getInstitutionName(dt.schoolId) || dt.schoolName || dt.schoolId || 'Global';
+        const uid = dt.aadhaar || dt.aadhar || dt.aadhaarNumber || dt.id?.slice(0, 8) || 'N/A';
+        const rollDisplay = dt.rollNo || dt.roll || 'N/A';
+
+        html += `<tr class="hover:bg-slateSurface/70 transition ${isBlocked ? 'bg-rose-950/10' : ''}">
+            <td class="p-3.5">
+                <div class="flex items-center gap-3">
+                    <div class="relative shrink-0">
+                        <img src="${photo}" alt="Student" class="w-10 h-10 rounded-xl border ${isBlocked ? 'border-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.35)]' : 'border-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,0.25)]'} object-cover" onerror="this.src='https://via.placeholder.com/40'">
+                        ${isBlocked ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-rose-600 rounded-full flex items-center justify-center text-[9px] text-white shadow"><i class="fas fa-lock text-[8px]"></i></span>' : ''}
+                    </div>
+                    <div>
+                        <strong class="block text-white font-medium text-xs sensitive-data flex items-center gap-1.5">
+                            ${dt.name || 'Unknown Student'}
+                            ${isBlocked ? '<span class="text-[10px] text-rose-400 font-mono font-bold">[LOCKED]</span>' : ''}
+                        </strong>
+                        <span class="text-[10px] text-amber-400 font-mono tracking-wider drop-shadow-[0_0_4px_rgba(245,158,11,0.4)]">UID: ${uid}</span>
+                    </div>
+                </div>
+            </td>
+            <td class="p-3.5">
+                <div class="space-y-1">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 border border-indigo-500/40 text-indigo-300">
+                        ${dt.class || 'N/A'}
+                    </span>
+                    <div class="text-[10px] text-coolLight font-mono">Roll: ${rollDisplay}</div>
+                </div>
+            </td>
+            <td class="p-3.5">
+                <div>
+                    <span class="text-xs text-gray-200 font-semibold block">${campusName}</span>
+                    <span class="text-[10px] font-mono text-tealAccent/70">${dt.schoolId || 'N/A'}</span>
+                </div>
+            </td>
+            <td class="p-3.5 sensitive-data">
+                <div class="space-y-0.5 text-[11px] font-mono">
+                    <div class="text-coolLight"><i class="fas fa-user-group text-[9px] text-indigo-400 mr-1"></i>${dt.fatherName || dt.parentage || dt.motherName || 'N/A'}</div>
+                    <div class="text-tealAccent/80"><i class="fas fa-phone text-[9px] text-tealAccent mr-1"></i>${dt.mobile || 'No contact'}</div>
+                </div>
+            </td>
+            <td class="p-3.5">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${statusBadgeClass}">
+                    ${isBlocked ? '<i class="fas fa-lock text-[9px] text-rose-400"></i>' : (isPending ? '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>' : '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>')}
+                    ${statusText}
+                </span>
+            </td>
+            <td class="p-3.5 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                    <button type="button" class="px-2.5 py-1.5 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 shadow-[0_0_10px_rgba(59,130,246,0.2)]" onclick="window.showStudentDetail('${dt.id}')" title="Inspect Full Dossier">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    <button type="button" class="px-2.5 py-1.5 ${isBlocked ? 'bg-emerald-600/20 border-emerald-500 hover:bg-emerald-600 text-emerald-400' : 'bg-rose-600/20 border-rose-500 hover:bg-rose-600 text-rose-400'} hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 shadow-[0_0_8px_rgba(0,0,0,0.3)]" onclick="window.toggleStudentBlock('${dt.id}', ${!isBlocked})" title="${isBlocked ? 'Unlock / Restore Student Access' : 'Lock Out / Block Student Access'}">
+                        <i class="fas ${isBlocked ? 'fa-unlock' : 'fa-lock'}"></i> ${isBlocked ? 'Unblock' : 'Block'}
+                    </button>
+                    <button type="button" class="px-2.5 py-1.5 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 shadow-[0_0_10px_rgba(168,85,247,0.2)]" onclick="window.sendDirectMessage('${dt.id}', '${dt.schoolId}', 'student')" title="Transmit Directive">
+                        <i class="fas fa-comment"></i>
+                    </button>
+                    <button type="button" class="px-2.5 py-1.5 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1" onclick="window.deleteDirectoryStudent('${dt.id}')" title="Delete Student Record">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </td>
         </tr>`;
     });
-    document.getElementById("staffTableBody").innerHTML = ht || "<tr><td colspan='4' class='p-4 text-center text-coolGray font-mono'>NO STAFF FOUND.</td></tr>";
+    tbody.innerHTML = html;
 };
 
-window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const { data: stDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();  await supabaseClient.from("users").delete().eq("id", uid); window.showToast("✅ STAFF PURGED!"); loadAllStaff(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
+window.renderDirectoryStaff = function(list = []) {
+    const tbody = document.getElementById("staffTableBody");
+    const countBadge = document.getElementById("dir-staff-showing-count");
+    if (countBadge) countBadge.innerText = list.length;
+    if (!tbody) return;
+
+    if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-coolGray font-mono">
+            <i class="fas fa-users-slash text-2xl mb-2 block opacity-40"></i>
+            NO STAFF MEMBERS FOUND MATCHING CURRENT FILTER CRITERIA.
+        </td></tr>`;
+        return;
+    }
+
+    let html = "";
+    list.forEach(dt => {
+        const isBlocked = window.isStaffBlocked(dt);
+        const photo = dt.photoUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&q=80";
+        const campusName = window.getInstitutionName(dt.schoolId) || dt.schoolName || dt.schoolId || 'Global';
+        const roleName = (dt.staffRole || dt.role || 'Staff').toUpperCase();
+
+        html += `<tr class="hover:bg-slateSurface/70 transition ${isBlocked ? 'bg-rose-950/10' : ''}">
+            <td class="p-3.5">
+                <div class="flex items-center gap-3">
+                    <div class="relative shrink-0">
+                        <img src="${photo}" alt="Staff" class="w-10 h-10 rounded-xl border ${isBlocked ? 'border-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.35)]' : 'border-emerald-400/40 shadow-[0_0_10px_rgba(16,185,129,0.25)]'} object-cover" onerror="this.src='https://via.placeholder.com/40'">
+                        ${isBlocked ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-rose-600 rounded-full flex items-center justify-center text-[9px] text-white shadow"><i class="fas fa-lock text-[8px]"></i></span>' : ''}
+                    </div>
+                    <div>
+                        <strong class="block text-white font-medium text-xs sensitive-data flex items-center gap-1.5">
+                            ${dt.name || 'Staff Personnel'}
+                            ${isBlocked ? '<span class="text-[10px] text-rose-400 font-mono font-bold">[BLOCKED]</span>' : ''}
+                        </strong>
+                        <span class="text-[10px] text-emerald-400 font-mono tracking-wider">ID: ${dt.id?.slice(0, 8) || 'N/A'}</span>
+                    </div>
+                </div>
+            </td>
+            <td class="p-3.5">
+                <span class="inline-block px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-emerald-500/15 border border-emerald-500/40 text-emerald-300">
+                    <i class="fas fa-id-badge mr-1"></i>${roleName}
+                </span>
+            </td>
+            <td class="p-3.5">
+                <div>
+                    <span class="text-xs text-gray-200 font-semibold block">${campusName}</span>
+                    <span class="text-[10px] font-mono text-tealAccent/70">${dt.schoolId || 'N/A'}</span>
+                </div>
+            </td>
+            <td class="p-3.5 sensitive-data">
+                <div class="space-y-0.5 text-[11px] font-mono">
+                    <div class="text-tealAccent/90"><i class="fas fa-envelope text-[9px] mr-1"></i>${dt.email || 'No email'}</div>
+                    <div class="text-coolLight"><i class="fas fa-phone text-[9px] mr-1"></i>${dt.mobile || dt.phone || 'No phone'}</div>
+                </div>
+            </td>
+            <td class="p-3.5">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${isBlocked ? 'text-rose-400 bg-rose-500/15 border-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.25)]' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'}">
+                    ${isBlocked ? '<i class="fas fa-lock text-[9px] text-rose-400"></i>' : '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>'}
+                    ${isBlocked ? 'BLOCKED' : 'ACTIVE'}
+                </span>
+            </td>
+            <td class="p-3.5 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                    <button type="button" class="px-2.5 py-1.5 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 shadow-[0_0_10px_rgba(59,130,246,0.2)]" onclick="window.showStaffDetail('${dt.id}')" title="Inspect Staff Profile">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    <button type="button" class="px-2.5 py-1.5 ${isBlocked ? 'bg-emerald-600/20 border-emerald-500 hover:bg-emerald-600 text-emerald-400' : 'bg-rose-600/20 border-rose-500 hover:bg-rose-600 text-rose-400'} hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 shadow-[0_0_8px_rgba(0,0,0,0.3)]" onclick="window.toggleStaffBlock('${dt.id}', ${!isBlocked})" title="${isBlocked ? 'Unblock Staff Personnel' : 'Block Staff Personnel'}">
+                        <i class="fas ${isBlocked ? 'fa-unlock' : 'fa-lock'}"></i> ${isBlocked ? 'Unblock' : 'Block'}
+                    </button>
+                    <button type="button" class="px-2.5 py-1.5 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 shadow-[0_0_10px_rgba(168,85,247,0.2)]" onclick="window.sendDirectMessage('${dt.id}', '${dt.schoolId}', 'staff')" title="Transmit Directive">
+                        <i class="fas fa-comment"></i>
+                    </button>
+                    <button type="button" class="px-2.5 py-1.5 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1" onclick="window.deleteGlobalStaff('${dt.id}')" title="Purge Staff Personnel">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+};
+
+// Toggle student block/lock status with instant optimistic UI update and Supabase sync
+window.toggleStudentBlock = async (id, willBlock) => {
+    const student = (window.fetchedGlobalStudentsList || []).find(s => s.id === id) || (window.fetchedInspectStudents || []).find(s => s.id === id);
+    const sName = student ? (student.name || 'Student') : 'Student';
+    const confirmMsg = willBlock
+        ? `BLOCK / LOCK ACCOUNT FOR ${sName.toUpperCase()}?\nThis student will be locked out and denied portal login.`
+        : `UNBLOCK / RESTORE ACCESS FOR ${sName.toUpperCase()}?\nStudent will regain active portal access.`;
+
+    window.customConfirm(confirmMsg, async () => {
+        try {
+            window.showToast(willBlock ? "BLOCKING STUDENT..." : "UNBLOCKING STUDENT...", "#f59e0b");
+            // 1. Instant local update for 0ms latency UI response
+            if (student) {
+                student.lockedOut = willBlock;
+                student.status = willBlock ? 'blocked' : 'Approved';
+                if (student.data) {
+                    student.data.lockedOut = willBlock;
+                    student.data.status = willBlock ? 'blocked' : 'Approved';
+                }
+            }
+            window.filterDirectoryData?.();
+            const inspectSel = document.getElementById("inspectSchoolSelect");
+            if (inspectSel && inspectSel.value) inspectSel.dispatchEvent(new Event("change"));
+
+            // 2. Persist to Supabase database (RPC first, direct update fallback)
+            let rpcSucceeded = false;
+            try {
+                const { error: rpcErr } = await supabaseClient.rpc('update_student', {
+                    p_student_id: id,
+                    p_payload: { lockedOut: willBlock, status: willBlock ? 'blocked' : 'Approved' }
+                });
+                if (!rpcErr) rpcSucceeded = true;
+            } catch (_) {}
+
+            try {
+                await supabaseClient.from('students').update({
+                    lockedOut: willBlock,
+                    status: willBlock ? 'blocked' : 'Approved'
+                }).eq('id', id);
+            } catch (dirErr) {
+                if (!rpcSucceeded) throw dirErr;
+            }
+
+            window.showToast(willBlock ? `🔒 ${sName.toUpperCase()} IS NOW BLOCKED!` : `✅ ${sName.toUpperCase()} ACCESS RESTORED!`, willBlock ? "#e11d48" : "#10b981");
+            window.logAudit(willBlock ? "Blocked Student" : "Unblocked Student", id);
+        } catch (err) {
+            console.error("toggleStudentBlock error:", err);
+            window.showToast("ERROR: " + (err.message || err), "#e11d48");
+            window.loadAllDirectoryData();
+        }
+    });
+};
+
+// Toggle staff block/active status
+window.toggleStaffBlock = async (id, willBlock) => {
+    const staff = (window.fetchedGlobalStaffList || []).find(s => s.id === id);
+    const sName = staff ? (staff.name || 'Staff') : 'Staff';
+    const confirmMsg = willBlock
+        ? `BLOCK & DEACTIVATE STAFF PERSONNEL ${sName.toUpperCase()}?`
+        : `UNBLOCK & ACTIVATE STAFF PERSONNEL ${sName.toUpperCase()}?`;
+
+    window.customConfirm(confirmMsg, async () => {
+        try {
+            window.showToast(willBlock ? "BLOCKING STAFF..." : "UNBLOCKING STAFF...", "#f59e0b");
+            if (staff) {
+                staff.status = willBlock ? 'blocked' : 'active';
+            }
+            window.filterDirectoryData?.();
+
+            await supabaseClient.from('users').update({
+                status: willBlock ? 'blocked' : 'active'
+            }).eq('id', id);
+
+            window.showToast(willBlock ? `🔒 STAFF ${sName.toUpperCase()} BLOCKED!` : `✅ STAFF ${sName.toUpperCase()} ACTIVATED!`, willBlock ? "#e11d48" : "#10b981");
+            window.logAudit(willBlock ? "Blocked Staff" : "Unblocked Staff", id);
+        } catch (err) {
+            window.showToast("ERROR: " + (err.message || err), "#e11d48");
+            window.loadAllDirectoryData();
+        }
+    });
+};
+
+// REALTIME SUPABASE SYNC (Without page refresh)
+window.initDirectoryRealtimeSync = function() {
+    if (window._directoryRealtimeChannel) {
+        try { supabaseClient.removeChannel(window._directoryRealtimeChannel); } catch (_) {}
+    }
+
+    try {
+        const channel = supabaseClient.channel('realtime_core_sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
+                console.log('Realtime student update received:', payload);
+                window.handleRealtimeStudentChange(payload);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+                console.log('Realtime user update received:', payload);
+                window.handleRealtimeUserChange(payload);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'schools' }, () => {
+                console.log('Realtime schools update received');
+                window.loadSchoolsForDropdown();
+                window.loadInstitutionRegistry?.();
+            })
+            .subscribe((status) => {
+                console.log('CoreEdu Realtime Channel Status:', status);
+            });
+
+        window._directoryRealtimeChannel = channel;
+    } catch (e) {
+        console.warn('Realtime subscription notification:', e);
+    }
+
+    // Fail-safe auto-sync polling every 8 seconds for background synchronization
+    if (!window._directoryPollingInterval) {
+        window._directoryPollingInterval = setInterval(() => {
+            if (!document.hidden && window.currentAppPin) {
+                window.loadAllDirectoryDataSilent();
+            }
+        }, 8000);
+    }
+
+    // Immediate sync when returning to tab
+    window.addEventListener('visibilitychange', () => {
+        if (!document.hidden && window.currentAppPin) {
+            window.loadAllDirectoryDataSilent();
+        }
+    });
+};
+
+// Start listening immediately
+try { window.initDirectoryRealtimeSync(); } catch (_) {}
+
+window.handleRealtimeStudentChange = function(payload) {
+    const { eventType, new: newRec, old: oldRec } = payload || {};
+    const sName = newRec?.name || oldRec?.name || 'Student';
+
+    if (eventType === 'UPDATE' && newRec) {
+        const idx = (window.fetchedGlobalStudentsList || []).findIndex(s => s.id === newRec.id);
+        const mapped = {
+            ...newRec,
+            id: newRec.id,
+            lockedOut: Boolean(newRec.lockedOut ?? newRec.data?.lockedOut ?? false),
+            isBlocked: Boolean(newRec.isBlocked ?? newRec.blocked ?? newRec.is_blocked ?? newRec.data?.isBlocked ?? false),
+            status: newRec.status || newRec.data?.status || 'Approved',
+            schoolName: newRec.schoolName || window.getInstitutionName(newRec.schoolId)
+        };
+        if (idx !== -1) {
+            window.fetchedGlobalStudentsList[idx] = mapped;
+        } else {
+            window.fetchedGlobalStudentsList.unshift(mapped);
+        }
+        const isBlocked = window.isStudentBlocked(mapped);
+        window.showToast(`🔔 LIVE UPDATE: ${sName.toUpperCase()} is now ${isBlocked ? 'BLOCKED 🔒' : 'ACTIVE ✅'}`, isBlocked ? "#e11d48" : "#10b981");
+    } else if (eventType === 'INSERT' && newRec) {
+        const mapped = {
+            ...newRec,
+            id: newRec.id,
+            lockedOut: Boolean(newRec.lockedOut ?? newRec.data?.lockedOut ?? false),
+            isBlocked: Boolean(newRec.isBlocked ?? newRec.blocked ?? newRec.is_blocked ?? newRec.data?.isBlocked ?? false),
+            status: newRec.status || newRec.data?.status || 'Approved',
+            schoolName: newRec.schoolName || window.getInstitutionName(newRec.schoolId)
+        };
+        window.fetchedGlobalStudentsList.unshift(mapped);
+        window.showToast(`🔔 NEW STUDENT: ${sName.toUpperCase()} enrolled!`, "#00F0FF");
+    } else if (eventType === 'DELETE' && oldRec) {
+        window.fetchedGlobalStudentsList = (window.fetchedGlobalStudentsList || []).filter(s => s.id !== oldRec.id);
+        window.showToast(`🔔 STUDENT DELETED: ${sName.toUpperCase()}`, "#e11d48");
+    }
+
+    const totalStu = (window.fetchedGlobalStudentsList || []).length;
+    const dirStuCount = document.getElementById("dir-total-students-count");
+    if (dirStuCount) dirStuCount.innerText = totalStu;
+    const dirBadgeStu = document.getElementById("dir-badge-students");
+    if (dirBadgeStu) dirBadgeStu.innerText = totalStu;
+    const statStu = document.getElementById("stat-students");
+    if (statStu) statStu.innerText = totalStu;
+
+    window.filterDirectoryData();
+    const inspectSel = document.getElementById("inspectSchoolSelect");
+    if (inspectSel && inspectSel.value) inspectSel.dispatchEvent(new Event("change"));
+};
+
+window.handleRealtimeUserChange = function(payload) {
+    const { eventType, new: newRec, old: oldRec } = payload || {};
+    if ((newRec && newRec.role === 'staff') || (oldRec && oldRec.role === 'staff')) {
+        const sName = newRec?.name || oldRec?.name || 'Staff';
+        if (eventType === 'UPDATE' && newRec) {
+            const idx = (window.fetchedGlobalStaffList || []).findIndex(s => s.id === newRec.id);
+            const mapped = {
+                ...newRec,
+                id: newRec.id,
+                status: newRec.status || 'active',
+                schoolName: newRec.schoolName || window.getInstitutionName(newRec.schoolId)
+            };
+            if (idx !== -1) {
+                window.fetchedGlobalStaffList[idx] = mapped;
+            } else {
+                window.fetchedGlobalStaffList.unshift(mapped);
+            }
+            const isBlocked = window.isStaffBlocked(mapped);
+            window.showToast(`🔔 LIVE UPDATE: ${sName.toUpperCase()} is now ${isBlocked ? 'BLOCKED 🔒' : 'ACTIVE ✅'}`, isBlocked ? "#e11d48" : "#10b981");
+        } else if (eventType === 'INSERT' && newRec) {
+            window.fetchedGlobalStaffList.unshift(newRec);
+        } else if (eventType === 'DELETE' && oldRec) {
+            window.fetchedGlobalStaffList = (window.fetchedGlobalStaffList || []).filter(s => s.id !== oldRec.id);
+        }
+
+        const totalStaff = (window.fetchedGlobalStaffList || []).length;
+        const dirStaffCount = document.getElementById("dir-total-staff-count");
+        if (dirStaffCount) dirStaffCount.innerText = totalStaff;
+        const dirBadgeStaff = document.getElementById("dir-badge-staff");
+        if (dirBadgeStaff) dirBadgeStaff.innerText = totalStaff;
+        const statStaff = document.getElementById("stat-staff");
+        if (statStaff) statStaff.innerText = totalStaff;
+
+        window.filterDirectoryData();
+    }
+};
+
+window.deleteDirectoryStudent = (id) => {
+    window.customConfirm("DELETE THIS STUDENT RECORD GLOBALLY?", async () => {
+        try {
+            await supabaseClient.rpc('delete_student', { p_student_id: id });
+            window.showToast("✅ STUDENT PURGED GLOBALLY!");
+            window.loadAllDirectoryData();
+            window.logAudit("Deleted Student", id);
+        } catch (e) {
+            try {
+                await supabaseClient.from("students").delete().eq("id", id);
+                window.showToast("✅ STUDENT PURGED!");
+                window.loadAllDirectoryData();
+            } catch (err2) {
+                if (window.handleDbError) window.handleDbError(err2);
+                else window.showToast("ERROR: " + (err2.message || err2), "#e11d48");
+            }
+        }
+    });
+};
+
+window.downloadDirectoryPDF = function() {
+    const isStudents = (window.currentDirectorySubtab || 'students') === 'students';
+    const { jsPDF } = window.jspdf || {};
+    if (!jsPDF) {
+        window.showToast("PDF GENERATOR INITIALIZING, PLEASE RETRY IN A MOMENT", "#f59e0b");
+        return;
+    }
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const schoolSelect = document.getElementById("staffSchoolSelect");
+    const selectedSchoolId = schoolSelect ? schoolSelect.value : "ALL";
+    const schoolName = selectedSchoolId === "ALL" ? "GLOBAL NETWORK (ALL INSTITUTIONS)" : (window.getInstitutionName(selectedSchoolId) || selectedSchoolId);
+    const now = new Date().toLocaleString();
+
+    if (isStudents) {
+        const list = window.filteredDirectoryStudents || window.fetchedGlobalStudentsList || [];
+        if (!list.length) {
+            window.showToast("NO STUDENT RECORDS TO EXPORT", "#e11d48");
+            return;
+        }
+
+        doc.setFillColor(10, 18, 32);
+        doc.rect(0, 0, doc.internal.pageSize.width, 60, 'F');
+        doc.setFontSize(15);
+        doc.setTextColor(0, 240, 255);
+        doc.text("COREEDU.IN | GLOBAL ENROLLED STUDENTS DIRECTORY", 40, 30);
+        doc.setFontSize(8.5);
+        doc.setTextColor(200, 215, 230);
+        doc.text(`Campus Scope: ${schoolName}  |  Total Enrolled: ${list.length}  |  Extracted: ${now}`, 40, 48);
+
+        const tableData = list.map((s, idx) => [
+            idx + 1,
+            s.name || 'N/A',
+            s.aadhaar || s.aadhar || s.aadhaarNumber || 'N/A',
+            s.class || 'N/A',
+            s.roll || s.rollNo || 'N/A',
+            window.getInstitutionName(s.schoolId) || s.schoolName || s.schoolId || 'N/A',
+            s.fatherName || s.parentage || s.motherName || 'N/A',
+            s.mobile || 'N/A',
+            window.isStudentBlocked(s) ? 'BLOCKED / LOCKED' : (s.status || 'Active').toUpperCase()
+        ]);
+
+        doc.autoTable({
+            startY: 70,
+            head: [['#', 'Student Name', 'UID / Aadhaar', 'Class / Sector', 'Roll', 'Campus / Node', 'Guardian Name', 'Contact No.', 'Status']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [15, 23, 42], textColor: [0, 240, 255], fontStyle: 'bold', fontSize: 8 },
+            styles: { fontSize: 8, cellPadding: 5, textColor: [30, 41, 59] },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 40, right: 40 }
+        });
+
+        doc.save(`CoreEdu_Enrolled_Students_${new Date().toISOString().slice(0, 10)}.pdf`);
+        window.showToast("✅ ENROLLED STUDENTS PDF DOWNLOADED!", "#00F0FF");
+    } else {
+        const list = window.filteredDirectoryStaff || window.fetchedGlobalStaffList || [];
+        if (!list.length) {
+            window.showToast("NO STAFF RECORDS TO EXPORT", "#e11d48");
+            return;
+        }
+
+        doc.setFillColor(10, 18, 32);
+        doc.rect(0, 0, doc.internal.pageSize.width, 60, 'F');
+        doc.setFontSize(15);
+        doc.setTextColor(52, 211, 153);
+        doc.text("COREEDU.IN | GLOBAL REGISTERED STAFF DIRECTORY", 40, 30);
+        doc.setFontSize(8.5);
+        doc.setTextColor(200, 215, 230);
+        doc.text(`Campus Scope: ${schoolName}  |  Total Staff: ${list.length}  |  Extracted: ${now}`, 40, 48);
+
+        const tableData = list.map((st, idx) => [
+            idx + 1,
+            st.name || 'N/A',
+            (st.staffRole || st.role || 'Staff').toUpperCase(),
+            window.getInstitutionName(st.schoolId) || st.schoolName || st.schoolId || 'N/A',
+            st.email || 'N/A',
+            st.mobile || st.phone || 'N/A',
+            window.isStaffBlocked(st) ? 'BLOCKED' : (st.status || 'Active').toUpperCase()
+        ]);
+
+        doc.autoTable({
+            startY: 70,
+            head: [['#', 'Staff Name', 'Designation / Role', 'Campus / Node', 'Email / Comm ID', 'Mobile / Phone', 'Account State']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [6, 78, 59], textColor: [52, 211, 153], fontStyle: 'bold', fontSize: 8 },
+            styles: { fontSize: 8, cellPadding: 5, textColor: [30, 41, 59] },
+            alternateRowStyles: { fillColor: [240, 253, 250] },
+            margin: { left: 40, right: 40 }
+        });
+
+        doc.save(`CoreEdu_Global_Staff_${new Date().toISOString().slice(0, 10)}.pdf`);
+        window.showToast("✅ STAFF MEMBERS PDF DOWNLOADED!", "#10b981");
+    }
+};
+
+window.downloadGlobalStaffPDF = window.downloadDirectoryPDF;
+
+function exportObjectsToExcelOrCSV(dataArray, sheetName, filename) {
+    if (window.XLSX && typeof window.XLSX.utils?.json_to_sheet === 'function') {
+        try {
+            const worksheet = window.XLSX.utils.json_to_sheet(dataArray);
+            const workbook = window.XLSX.utils.book_new();
+            window.XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || "Directory");
+            window.XLSX.writeFile(workbook, filename);
+            return;
+        } catch (e) {
+            console.warn("SheetJS export fallback:", e);
+        }
+    }
+    const headers = Object.keys(dataArray[0] || {});
+    let csvContent = "\uFEFF" + headers.join(",") + "\n";
+    dataArray.forEach(row => {
+        const rowValues = headers.map(h => {
+            let val = row[h] == null ? "" : String(row[h]);
+            if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+                val = `"${val.replace(/"/g, '""')}"`;
+            }
+            return val;
+        });
+        csvContent += rowValues.join(",") + "\n";
+    });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename.replace(/\.xlsx$/i, ".csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+window.downloadDirectoryExcel = function() {
+    const isStudents = (window.currentDirectorySubtab || 'students') === 'students';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (isStudents) {
+        const list = window.filteredDirectoryStudents || window.fetchedGlobalStudentsList || [];
+        if (!list.length) {
+            window.showToast("NO STUDENT RECORDS TO EXPORT", "#e11d48");
+            return;
+        }
+
+        const rows = list.map((s, idx) => ({
+            "S.No": idx + 1,
+            "Student Name": s.name || '',
+            "UID / Aadhaar": s.aadhaar || s.aadhar || s.aadhaarNumber || '',
+            "Class / Sector": s.class || '',
+            "Roll No": s.roll || s.rollNo || '',
+            "Institution": window.getInstitutionName(s.schoolId) || s.schoolName || s.schoolId || '',
+            "Institution ID": s.schoolId || '',
+            "Guardian Name": s.fatherName || s.parentage || s.motherName || '',
+            "Mobile / Contact": s.mobile || '',
+            "Status": window.isStudentBlocked(s) ? 'BLOCKED / LOCKED' : (s.status || 'Active').toUpperCase()
+        }));
+
+        const filename = `CoreEdu_Enrolled_Students_${dateStr}.xlsx`;
+        exportObjectsToExcelOrCSV(rows, "Students_Directory", filename);
+        window.showToast("✅ STUDENTS EXCEL FILE DOWNLOADED!", "#10b981");
+    } else {
+        const list = window.filteredDirectoryStaff || window.fetchedGlobalStaffList || [];
+        if (!list.length) {
+            window.showToast("NO STAFF RECORDS TO EXPORT", "#e11d48");
+            return;
+        }
+
+        const rows = list.map((st, idx) => ({
+            "S.No": idx + 1,
+            "Staff Name": st.name || '',
+            "Designation / Role": (st.staffRole || st.role || 'Staff').toUpperCase(),
+            "Institution": window.getInstitutionName(st.schoolId) || st.schoolName || st.schoolId || '',
+            "Institution ID": st.schoolId || '',
+            "Email Address": st.email || '',
+            "Mobile / Phone": st.mobile || st.phone || '',
+            "Account Status": window.isStaffBlocked(st) ? 'BLOCKED' : (st.status || 'Active').toUpperCase()
+        }));
+
+        const filename = `CoreEdu_Global_Staff_${dateStr}.xlsx`;
+        exportObjectsToExcelOrCSV(rows, "Staff_Directory", filename);
+        window.showToast("✅ STAFF EXCEL FILE DOWNLOADED!", "#10b981");
+    }
+};
+
+window.downloadDirectoryCSV = function() {
+    const isStudents = (window.currentDirectorySubtab || 'students') === 'students';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (isStudents) {
+        const list = window.filteredDirectoryStudents || window.fetchedGlobalStudentsList || [];
+        if (!list.length) {
+            window.showToast("NO STUDENT RECORDS TO EXPORT", "#e11d48");
+            return;
+        }
+        const rows = list.map((s, idx) => ({
+            "S.No": idx + 1,
+            "Student Name": s.name || '',
+            "UID / Aadhaar": s.aadhaar || s.aadhar || s.aadhaarNumber || '',
+            "Class / Sector": s.class || '',
+            "Roll No": s.roll || s.rollNo || '',
+            "Institution": window.getInstitutionName(s.schoolId) || s.schoolName || s.schoolId || '',
+            "Institution ID": s.schoolId || '',
+            "Guardian Name": s.fatherName || s.parentage || s.motherName || '',
+            "Mobile / Contact": s.mobile || '',
+            "Status": window.isStudentBlocked(s) ? 'BLOCKED / LOCKED' : (s.status || 'Active').toUpperCase()
+        }));
+        exportObjectsToExcelOrCSV(rows, "Students_Directory", `CoreEdu_Enrolled_Students_${dateStr}.csv`);
+        window.showToast("✅ STUDENTS CSV DOWNLOADED!", "#00F0FF");
+    } else {
+        const list = window.filteredDirectoryStaff || window.fetchedGlobalStaffList || [];
+        if (!list.length) {
+            window.showToast("NO STAFF RECORDS TO EXPORT", "#e11d48");
+            return;
+        }
+        const rows = list.map((st, idx) => ({
+            "S.No": idx + 1,
+            "Staff Name": st.name || '',
+            "Designation / Role": (st.staffRole || st.role || 'Staff').toUpperCase(),
+            "Institution": window.getInstitutionName(st.schoolId) || st.schoolName || st.schoolId || '',
+            "Institution ID": st.schoolId || '',
+            "Email Address": st.email || '',
+            "Mobile / Phone": st.mobile || st.phone || '',
+            "Account Status": window.isStaffBlocked(st) ? 'BLOCKED' : (st.status || 'Active').toUpperCase()
+        }));
+        exportObjectsToExcelOrCSV(rows, "Staff_Directory", `CoreEdu_Global_Staff_${dateStr}.csv`);
+        window.showToast("✅ STAFF CSV DOWNLOADED!", "#10b981");
+    }
+};
+
+window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER & ASSETS?", async () => { try { const { data: stDoc } = await supabaseClient.from("users").select("*").eq("id", uid).maybeSingle();  await supabaseClient.from("users").delete().eq("id", uid); window.showToast("✅ STAFF PURGED!"); window.loadAllDirectoryData(); window.logAudit("Deleted Staff", uid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.showStaffDetail = (sId) => {
-    const st = window.fetchedGlobalStaffList.find(s => s.id === sId); if (!st) return;
+    const st = (window.fetchedGlobalStaffList || []).find(s => s.id === sId); if (!st) return;
+    const isBlocked = window.isStaffBlocked ? window.isStaffBlocked(st) : (st.status === 'blocked');
     document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
     document.getElementById("sd-name").innerText = st.name || "N/A";
     document.getElementById("sd-role").innerText = (st.staffRole || st.role || "N/A").toUpperCase();
     document.getElementById("sd-email").innerText = st.email || "N/A";
     document.getElementById("sd-password").innerText = st.plainPassword || "••••••";
-    document.getElementById("sd-status").innerHTML = `<span class="${st.status === "blocked" ? "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" : "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"}">${st.status === "blocked" ? "BLOCKED" : "ACTIVE"}</span>`;
+    document.getElementById("sd-status").innerHTML = `<span class="${isBlocked ? "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" : "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"}">${isBlocked ? "BLOCKED" : "ACTIVE"}</span>`;
     openCustomModal("staff-modal");
 };
 window.sendDirectMessage = (rid, sid, typ) => {
@@ -2188,39 +3198,147 @@ window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySe
 window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
 window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
 
+let loadSchoolsInFlightPromise = null;
+window.uniqueInstitutionsList = [];
+
 async function loadSchoolsForDropdown() {
-    const h = '<option value="ALL">-- GLOBAL NETWORK --</option>';
-    const t = ["masterNodeId", "inspectSchoolSelect", "backupScopeSelect", "secSchoolSelect", "staffSchoolSelect", "paymentSchoolSelect", "filterChairmenSchool", "deviceSchoolSelect", "pwdReqSchoolSelect", "broadcastSchoolTarget", "rollbackSchoolSelect", "featureSchoolSelect", "new_pay_school_id"];
-    t.forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "featureSchoolSelect" || id === "masterNodeId" || id === "new_pay_school_id") ? '<option value="">-- Choose Institution --</option>' : h; } });
+    if (loadSchoolsInFlightPromise) return loadSchoolsInFlightPromise;
 
-    try {
-        const { data: sp } = await supabaseClient.from("schools").select("*");
-        let requestsHtml = "";
-
-        (sp || []).forEach(d => {
-            const data = d;
-            const op = `<option value="${d.id}">${data.schoolName.toUpperCase()}</option>`;
-            t.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML += op; });
-
-            if (data.sessionUpgradeStatus === "pending") {
-                const chairman = window.fetchedChairmen ? window.fetchedChairmen.find(c => c.schoolId === d.id) : null;
-                const cName = chairman ? chairman.name : "N/A";
-                requestsHtml += `<tr class="hover:bg-slateSurface/50 transition">
-                    <td class="p-4 font-bold text-white">${data.schoolName}</td>
-                    <td class="p-4 text-gray-200">${cName}</td>
-                    <td class="p-4"><span class="text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10 px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">PENDING APPROVAL</span></td>
-                    <td class="p-4 text-right">
-                        <button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="approveSessionUpgrade('${d.id}')"><i class="fas fa-check"></i> APPROVE</button>
-                    </td>
-                </tr>`;
+    loadSchoolsInFlightPromise = (async () => {
+        try {
+            let rawSchools = [];
+            if (Array.isArray(window.institutionRegistryData) && window.institutionRegistryData.length > 0) {
+                rawSchools = [...window.institutionRegistryData];
+            } else {
+                try {
+                    const { data: rpcSchools, error: rpcErr } = await supabaseClient.rpc("company_list_institutions");
+                    if (!rpcErr && Array.isArray(rpcSchools) && rpcSchools.length > 0) {
+                        rawSchools = rpcSchools;
+                    }
+                } catch (_) {}
             }
-        });
 
-        const reqTable = document.getElementById("upgradeRequestsTableBody");
-        if (reqTable) {
-            reqTable.innerHTML = requestsHtml || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>NO PENDING REQUESTS</td></tr>";
+            if (!rawSchools.length) {
+                const { data: directSchools, error: dirErr } = await supabaseClient.from("schools").select("*");
+                if (!dirErr && Array.isArray(directSchools)) {
+                    rawSchools = directSchools;
+                }
+            }
+
+            // Deduplicate institutions strictly so each school/college appears EXACTLY ONCE
+            const deduplicated = [];
+            (rawSchools || []).forEach(d => {
+                if (!d) return;
+                const name = (d.schoolName || d.name || "").trim();
+                if (!name) return;
+                const id = d.id || d.schoolId;
+                const code = (d.institution_code || d.affiliationNo || "").trim();
+                const normKey = window.normalizeSchoolNameKey ? window.normalizeSchoolNameKey(name) : name.toUpperCase().replace(/\bGOVERNMENT\b/g, 'GOVT').replace(/\bCOLLAGE\b/g, 'COLLEGE').replace(/[^A-Z0-9]/g, '');
+
+                let existing = deduplicated.find(u => 
+                    (id && (u.id === id || u.matchingIds.includes(id))) ||
+                    (code && u.institution_code === code) ||
+                    (normKey && u.normKey === normKey)
+                );
+
+                if (!existing) {
+                    existing = {
+                        id: id,
+                        name: name,
+                        upperName: name.toUpperCase(),
+                        normKey: normKey,
+                        institution_code: code,
+                        matchingIds: [id].filter(Boolean),
+                        data: d
+                    };
+                    deduplicated.push(existing);
+                } else {
+                    if (id && !existing.matchingIds.includes(id)) {
+                        existing.matchingIds.push(id);
+                    }
+                    if (code && !existing.institution_code) {
+                        existing.institution_code = code;
+                    }
+                    // Keep the cleaner/longer name if available
+                    if (name.length > existing.name.length && !name.includes("undefined")) {
+                        existing.name = name;
+                        existing.upperName = name.toUpperCase();
+                    }
+                }
+            });
+
+            // Sort alphabetically for clean display
+            deduplicated.sort((a, b) => a.name.localeCompare(b.name));
+            window.uniqueInstitutionsList = deduplicated;
+
+            // Generate unique options HTML once
+            let optionsHtml = "";
+            deduplicated.forEach(sch => {
+                optionsHtml += `<option value="${sch.id}">${sch.name.toUpperCase()}</option>`;
+            });
+
+            const t = [
+                "masterNodeId",
+                "inspectSchoolSelect",
+                "backupScopeSelect",
+                "secSchoolSelect",
+                "staffSchoolSelect",
+                "paymentSchoolSelect",
+                "filterChairmenSchool",
+                "deviceSchoolSelect",
+                "pwdReqSchoolSelect",
+                "broadcastSchoolTarget",
+                "rollbackSchoolSelect",
+                "featureSchoolSelect",
+                "new_pay_school_id"
+            ];
+
+            t.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const previousVal = el.value;
+                const defaultLabel = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "featureSchoolSelect" || id === "masterNodeId" || id === "new_pay_school_id")
+                    ? '<option value="">-- Choose Institution --</option>'
+                    : '<option value="ALL">-- GLOBAL NETWORK --</option>';
+
+                el.innerHTML = defaultLabel + optionsHtml;
+
+                if (previousVal && el.querySelector(`option[value="${previousVal}"]`)) {
+                    el.value = previousVal;
+                }
+            });
+
+            // Upgrade requests table
+            let requestsHtml = "";
+            (rawSchools || []).forEach(d => {
+                if (d && d.sessionUpgradeStatus === "pending") {
+                    const chairman = window.fetchedChairmen ? window.fetchedChairmen.find(c => c.schoolId === d.id) : null;
+                    const cName = chairman ? chairman.name : "N/A";
+                    requestsHtml += `<tr class="hover:bg-slateSurface/50 transition">
+                        <td class="p-4 font-bold text-white">${d.schoolName || d.name}</td>
+                        <td class="p-4 text-gray-200">${cName}</td>
+                        <td class="p-4"><span class="text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10 px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">PENDING APPROVAL</span></td>
+                        <td class="p-4 text-right">
+                            <button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="approveSessionUpgrade('${d.id}')"><i class="fas fa-check"></i> APPROVE</button>
+                        </td>
+                    </tr>`;
+                }
+            });
+
+            const reqTable = document.getElementById("upgradeRequestsTableBody");
+            if (reqTable) {
+                reqTable.innerHTML = requestsHtml || "<tr><td colspan='4' class='text-center p-4 text-coolGray font-mono'>NO PENDING REQUESTS</td></tr>";
+            }
+        } catch (e) {
+            console.error("loadSchoolsForDropdown error:", e);
+            if (window.handleDbError) window.handleDbError(e);
+            else window.showToast("ERROR: " + (e.message || e), "#e11d48");
         }
-    } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
+    })().finally(() => {
+        loadSchoolsInFlightPromise = null;
+    });
+
+    return loadSchoolsInFlightPromise;
 }
 
 window.approveSessionUpgrade = (schoolId) => {
