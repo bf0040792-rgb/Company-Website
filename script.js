@@ -3297,9 +3297,13 @@ async function loadSchoolsForDropdown() {
                 const el = document.getElementById(id);
                 if (!el) return;
                 const previousVal = el.value;
-                const defaultLabel = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "featureSchoolSelect" || id === "masterNodeId" || id === "new_pay_school_id")
+                let defaultLabel = (id === "inspectSchoolSelect" || id === "secSchoolSelect" || id === "masterNodeId" || id === "new_pay_school_id")
                     ? '<option value="">-- Choose Institution --</option>'
                     : '<option value="ALL">-- GLOBAL NETWORK --</option>';
+
+                if (id === "featureSchoolSelect") {
+                    defaultLabel = '<option value="">-- Choose Institution --</option><option value="ALL">🌐 ALL INSTITUTIONS (Global Override)</option>';
+                }
 
                 el.innerHTML = defaultLabel + optionsHtml;
 
@@ -3535,7 +3539,7 @@ window.loadFeatureTogglesForSchool = async () => {
     const studentContainer = document.getElementById("feature-student-toggles-container");
     removeStaticFeatureMarkup();
     if (!schoolContainer || !studentContainer) return;
-    if (!sid || sid === "ALL") {
+    if (!sid) {
         schoolContainer.innerHTML = "";
         studentContainer.innerHTML = "";
         schoolContainer.classList.add("hidden-el");
@@ -3544,9 +3548,32 @@ window.loadFeatureTogglesForSchool = async () => {
 
     setFeatureControlsBusy(true);
     try {
-        const { data: featureDoc } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-        const { data: schoolDoc } = featureDoc ? { data: null } : await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
-        const featureData = featureDoc ? featureDoc : (schoolDoc ? schoolDoc : {});
+        let featureData = {};
+        if (sid === "ALL") {
+            featureData = companyFeatureSettings || {};
+        } else {
+            // 1. Try company_get_feature_controls RPC
+            try {
+                const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("company_get_feature_controls", { p_school_id: sid });
+                if (!rpcErr && rpcData && Object.keys(rpcData).length > 0) {
+                    featureData = rpcData;
+                }
+            } catch (rpcEx) {
+                console.warn("RPC company_get_feature_controls notice:", rpcEx);
+            }
+
+            // 2. Fallback to direct feature_controls query if RPC was empty
+            if (!featureData || Object.keys(featureData).length === 0) {
+                const { data: fcRow } = await supabaseClient.from("feature_controls").select("*").eq("schoolId", sid).maybeSingle();
+                if (fcRow) {
+                    featureData = fcRow.featureSettings || fcRow;
+                } else {
+                    const { data: sRow } = await supabaseClient.from("schools").select("*").eq("id", sid).maybeSingle();
+                    featureData = sRow?.featureSettings || sRow?.data?.featureSettings || {};
+                }
+            }
+        }
+
         companyFeatureSettings = normalizeFeatureSettings(featureData);
         renderFeatureGroup("school", "feature-toggles-container");
         renderFeatureGroup("student", "feature-student-toggles-container");
@@ -3561,7 +3588,7 @@ window.loadFeatureTogglesForSchool = async () => {
 
 window.saveFeatureToggles = async (group, key, enabled) => {
     const sid = document.getElementById("featureSchoolSelect")?.value;
-    if (!sid || sid === "ALL" || !companyFeatureRegistry[group]?.some(feature => feature.key === key)) return;
+    if (!sid || !companyFeatureRegistry[group]?.some(feature => feature.key === key)) return;
 
     const previousSettings = JSON.parse(JSON.stringify(companyFeatureSettings));
     companyFeatureSettings[group] = companyFeatureSettings[group] || {};
@@ -3569,10 +3596,12 @@ window.saveFeatureToggles = async (group, key, enabled) => {
     companyFeatureSettings.companyLocked[group] = companyFeatureSettings.companyLocked[group] || {};
     companyFeatureSettings[group][key] = enabled;
     companyFeatureSettings.companyLocked[group][key] = !enabled;
-    renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
+
     if (group === "school") {
         const feature = companyFeatureRegistry.school.find(item => item.key === key);
         if (feature?.moduleKey) {
+            companyFeatureSettings.modules = companyFeatureSettings.modules || {};
+            companyFeatureSettings.companyLocked.modules = companyFeatureSettings.companyLocked.modules || {};
             companyFeatureSettings.modules[feature.moduleKey] = enabled;
             companyFeatureSettings.companyLocked.modules[feature.moduleKey] = !enabled;
         }
@@ -3582,24 +3611,82 @@ window.saveFeatureToggles = async (group, key, enabled) => {
             if (currentKey === key) companyFeatureSettings.student[legacyKey] = enabled;
         });
     }
+
     renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
     setFeatureControlsBusy(true);
+
     try {
-        const enabledModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state !== false).map(([moduleKey]) => moduleKey);
-        const restrictedModules = Object.entries(companyFeatureSettings.modules).filter(([, state]) => state === false).map(([moduleKey]) => moduleKey);
-        await supabaseClient.from("schools").update({
-            featureSettings: companyFeatureSettings,
-            enabledModules,
-            restrictedModules,
-            updatedAt: new Date().toISOString(),
-            updatedBy: superAdminUid || "hq"
-        }, { merge: true });
-        window.showToast("FEATURE ACCESS POLICY UPDATED", "#10b981");
+        // 1. Save via SECURITY DEFINER RPC (bypasses RLS with Super Admin authority)
+        let rpcSuccess = false;
+        try {
+            const { data: rpcRes, error: rpcErr } = await supabaseClient.rpc("company_save_feature_controls", {
+                p_school_id: sid,
+                p_feature_settings: companyFeatureSettings
+            });
+            if (!rpcErr && rpcRes && rpcRes.success) {
+                rpcSuccess = true;
+            } else if (rpcErr) {
+                console.warn("RPC company_save_feature_controls warning:", rpcErr);
+            }
+        } catch (rpcEx) {
+            console.warn("RPC invocation notice:", rpcEx);
+        }
+
+        // 2. Direct sync to feature_controls table as primary or fallback
+        if (!rpcSuccess) {
+            if (sid !== "ALL") {
+                await supabaseClient.from("feature_controls").upsert({
+                    id: sid,
+                    schoolId: sid,
+                    featureSettings: companyFeatureSettings,
+                    updatedAt: new Date().toISOString(),
+                    updatedBy: superAdminUid || "hq"
+                });
+            } else {
+                const { data: allSchools } = await supabaseClient.from("schools").select("id");
+                for (const s of (allSchools || [])) {
+                    await supabaseClient.from("feature_controls").upsert({
+                        id: s.id,
+                        schoolId: s.id,
+                        featureSettings: companyFeatureSettings,
+                        updatedAt: new Date().toISOString(),
+                        updatedBy: superAdminUid || "hq"
+                    });
+                }
+            }
+        }
+
+        // 3. Mirror onto schools table
+        const enabledModules = Object.entries(companyFeatureSettings.modules || {}).filter(([, state]) => state !== false).map(([moduleKey]) => moduleKey);
+        const restrictedModules = Object.entries(companyFeatureSettings.modules || {}).filter(([, state]) => state === false).map(([moduleKey]) => moduleKey);
+        try {
+            if (sid !== "ALL") {
+                await supabaseClient.from("schools").update({
+                    featureSettings: companyFeatureSettings,
+                    enabledModules,
+                    restrictedModules,
+                    updatedAt: new Date().toISOString()
+                }).eq("id", sid);
+            } else {
+                await supabaseClient.from("schools").update({
+                    featureSettings: companyFeatureSettings,
+                    enabledModules,
+                    restrictedModules,
+                    updatedAt: new Date().toISOString()
+                });
+            }
+        } catch (schoolUpdateEx) {
+            console.warn("Schools table mirror notice (non-fatal):", schoolUpdateEx);
+        }
+
+        const targetLabel = sid === "ALL" ? "ALL INSTITUTIONS" : sid;
+        window.showToast(`SECURITY POLICY UPDATED FOR ${targetLabel}: ${key.toUpperCase()} ${enabled ? "ENABLED" : "LOCKED"}`, "#10b981");
         window.logAudit(`Updated ${group} Feature Toggle`, `${sid}:${key}:${enabled ? "ON" : "OFF"}`);
     } catch (e) {
+        console.error("Save Feature Toggles Error:", e);
         companyFeatureSettings = previousSettings;
         renderFeatureGroup(group, group === "school" ? "feature-toggles-container" : "feature-student-toggles-container");
-        window.showToast("ERROR: " + e.message, "#e11d48");
+        window.showToast("ERROR: " + (e.message || e), "#e11d48");
         await window.loadFeatureTogglesForSchool();
     } finally {
         setFeatureControlsBusy(false);
@@ -3670,7 +3757,28 @@ window.toggleAdvancedSecurity = async (type) => {
     if (type === 'readonly') { updateObj.readOnlyMode = document.getElementById("sec-readonly-toggle").checked; msg = "READ-ONLY MODE"; }
     try { await supabaseClient.from("schools").update(updateObj).eq("id", sid); window.showToast(`${msg} PROTOCOL UPDATED!`); window.logAudit(`Toggled ${msg}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); }
 };
-window.toggleFeatureFlag = async (flag) => { const sid = document.getElementById("secSchoolSelect").value; if (!sid || sid === "ALL") return; const isChecked = document.getElementById(`mod-${flag}`).checked; try { await supabaseClient.from("schools").update({ featureSettings: { modules: { [flag]: isChecked } }, updatedAt: new Date().toISOString(), updatedBy: superAdminUid || "hq" }, { merge: true }); window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`); window.logAudit(`Toggled Flag ${flag}`, sid); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } };
+window.toggleFeatureFlag = async (flag) => {
+    const sid = document.getElementById("secSchoolSelect").value;
+    if (!sid || sid === "ALL") return;
+    const isChecked = document.getElementById(`mod-${flag}`).checked;
+    try {
+        let currentFs = {};
+        const { data: fcRow } = await supabaseClient.from("feature_controls").select("*").eq("schoolId", sid).maybeSingle();
+        if (fcRow && fcRow.featureSettings) currentFs = fcRow.featureSettings;
+        currentFs.modules = currentFs.modules || {};
+        currentFs.modules[flag] = isChecked;
+
+        await supabaseClient.rpc("company_save_feature_controls", {
+            p_school_id: sid,
+            p_feature_settings: currentFs
+        });
+        window.showToast(`MODULE ${flag.toUpperCase()} UPDATED!`);
+        window.logAudit(`Toggled Flag ${flag}`, sid);
+    } catch (e) {
+        if(window.handleDbError) window.handleDbError(e);
+        else window.showToast("ERROR: " + (e.message || e), "#e11d48");
+    }
+};
 
 const csvExportBtnEl = document.getElementById("csvExportBtn");
 if (csvExportBtnEl) csvExportBtnEl.addEventListener("click", async () => {
