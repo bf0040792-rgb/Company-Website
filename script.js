@@ -2233,6 +2233,8 @@ window.toggleStaffBlock = async (id, willBlock) => {
 
 // REALTIME SUPABASE SYNC (Without page refresh)
 window.initDirectoryRealtimeSync = function() {
+    const dashboard = document.getElementById("dashboard-wrapper");
+    if (!superAdminUid && (!dashboard || dashboard.classList.contains("hidden-el"))) return;
     if (window._directoryRealtimeChannel) {
         try { supabaseClient.removeChannel(window._directoryRealtimeChannel); } catch (_) {}
     }
@@ -2278,8 +2280,10 @@ window.initDirectoryRealtimeSync = function() {
     });
 };
 
-// Start listening immediately
-try { window.initDirectoryRealtimeSync(); } catch (_) {}
+// Start listening only when authenticated
+if (typeof superAdminUid !== 'undefined' && superAdminUid) {
+    try { window.initDirectoryRealtimeSync(); } catch (_) {}
+}
 
 window.handleRealtimeStudentChange = function(payload) {
     const { eventType, new: newRec, old: oldRec } = payload || {};
@@ -4267,6 +4271,8 @@ window.renderRealSystemTrafficChart = async () => {
     const dashCanvas = document.getElementById("dashboardTrafficChart");
     const secCanvas = document.getElementById("apiHeatmap");
     if (!dashCanvas && !secCanvas) return;
+    const dashboard = document.getElementById("dashboard-wrapper");
+    if (!superAdminUid && (!dashboard || dashboard.classList.contains("hidden-el"))) return;
 
     let timeLabels = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Live'];
     let telemetryData = [0, 0, 0, 0, 0, 0, 0];
@@ -5422,6 +5428,8 @@ document.getElementById("ai-chat-input")?.addEventListener("keypress", (e) => {
 // ==========================================
 
 window.loadGlobalAnalyticsDashboard = async () => {
+    const dashboard = document.getElementById("dashboard-wrapper");
+    if (!superAdminUid && (!dashboard || dashboard.classList.contains("hidden-el"))) return;
     try {
         const { data: schoolsSnapData } = await supabaseClient.from("schools").select("*");
         const schoolNames = new Map();
@@ -5879,9 +5887,12 @@ document.querySelectorAll('.menu-item').forEach(btn => {
     });
 });
 
-// Load dashboard analytics by default after a short delay
+// Load dashboard analytics by default after a short delay only if dashboard is active
 setTimeout(() => {
-    if (window.loadGlobalAnalyticsDashboard) window.loadGlobalAnalyticsDashboard();
+    const dashboard = document.getElementById("dashboard-wrapper");
+    if (dashboard && !dashboard.classList.contains("hidden-el") && window.loadGlobalAnalyticsDashboard) {
+        window.loadGlobalAnalyticsDashboard();
+    }
 }, 2000);
 
 // ==========================================
