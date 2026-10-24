@@ -45,24 +45,40 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
     }
 });
 // ==========================================
-// 🛡️ GEO-FENCING LAYER
+// 🛡️ SUPERADMIN SESSION & ACCESS CONTROL
 // ==========================================
-const allowedMasterIPs = ['127.0.0.1', '192.168.1.1', '::1'];
-
-async function verifyGeoFence() {
+window.verifySuperAdminSession = async function () {
     try {
-        const res = await fetch('https://api.ipify.org?format=json');
-        const data = await res.json();
-        if (!allowedMasterIPs.includes(data.ip)) {
-            console.warn(`Unauthorized Access Attempt from IP: ${data.ip} (Geo-Fence currently disabled for testing)`);
-        } else {
-            console.log(`✅ Geo-Fence Passed: ${data.ip}`);
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        if (error || !session || !session.user) {
+            return false;
         }
+        const uid = session.user.id;
+        const { data: ud, error: udErr } = await supabaseClient
+            .from("users")
+            .select("id, role, schoolId, status")
+            .eq("id", uid)
+            .maybeSingle();
+        if (udErr || !ud) return false;
+        const role = (ud.role || "").toLowerCase();
+        const sid = ud.schoolId;
+        const isGlobal = !sid || ["COMPANY", "HQ", "SYSTEM"].includes(String(sid).toUpperCase());
+        const isAllowed = isGlobal && ["developer", "admin", "superadmin", "root"].includes(role);
+        return isAllowed && ud.status !== "blocked";
     } catch (e) {
-        console.error("Geo-fencing verification failed:", e);
+        console.error("Superadmin session verification error:", e);
+        return false;
     }
-}
-verifyGeoFence();
+};
+
+window.requireSuperAdmin = async function (actionName = "admin operation") {
+    const isAuthorized = await window.verifySuperAdminSession();
+    if (!isAuthorized) {
+        window.showToast(`ACCESS DENIED: Active verified Superadmin session required for ${actionName}.`, "#e11d48");
+        throw new Error(`Unauthorized: Superadmin session required for ${actionName}`);
+    }
+    return true;
+};
 
 // ==========================================
 // 1. SUPABASE SYSTEM INITIALIZATION
@@ -1264,11 +1280,12 @@ window.filterChairmenList = () => {
         const sc = dt.status === "blocked" ? "text-rose-400 border border-rose-500/50 shadow-[0_0_5px_rgba(244,63,94,0.3)] bg-rose-500/10" : "text-emerald-400 border border-emerald-500/50 shadow-[0_0_5px_rgba(16,185,129,0.3)] bg-emerald-500/10";
         const bb = dt.status === "blocked" ? `<button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="updateStatus('${dt.id}', 'active')">UNBLOCK</button>` : `<button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] font-mono transition" onclick="updateStatus('${dt.id}', 'blocked')">BLOCK</button>`;
         const shadowBtn = dt.shadowBan ? `<button class="px-2 py-1 bg-slate-600/50 border border-slate-500 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition" onclick="toggleShadowBan('${dt.id}', false)"><i class="fas fa-eye"></i> UNBAN</button>` : `<button class="px-2 py-1 bg-purple-600/20 border border-purple-500 hover:bg-purple-600 text-purple-400 hover:text-white rounded text-[10px] font-mono transition" onclick="toggleShadowBan('${dt.id}', true)"><i class="fas fa-ghost"></i> SHADOW BAN</button>`;
+        const safeSchoolName = (dt.schoolName || 'Unknown Institution').replace(/'/g, "\\'");
         const actions = dt.id ? `
-                <button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" onclick="window.impersonateUser('${dt.id}', '${dt.schoolId}', '${dt.email}', '${dt.plainPassword}')"><i class="fas fa-user-secret"></i></button>
+                <button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] transition" title="Secure Impersonate" onclick="window.impersonateUser('${dt.id}', '${dt.schoolId}', '${dt.email || ''}')"><i class="fas fa-user-secret"></i></button>
                 <button class="px-2 py-1 bg-amber-500/20 border border-amber-500 hover:bg-amber-500 text-amber-400 hover:text-slateBase rounded text-[10px] transition" onclick="window.openEditChairman('${dt.id}')"><i class="fas fa-edit"></i></button>
                 <button class="px-2 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] transition" onclick="window.openLicenseModal('${dt.schoolId}')"><i class="fas fa-calendar-check"></i></button>
-                <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.generateGSTInvoice('${dt.schoolId}', '${dt.schoolName.replace(/'/g, "\\'")}', '${dt.email}', '${dt.subscriptionTier || 'Starter'}')"><i class="fas fa-file-invoice"></i></button>
+                <button class="px-2 py-1 bg-blue-600/20 border border-blue-500 hover:bg-blue-600 text-blue-400 hover:text-white rounded text-[10px] transition" onclick="window.generateGSTInvoice('${dt.schoolId}', '${safeSchoolName}', '${dt.email || ''}', '${dt.subscriptionTier || 'Starter'}')"><i class="fas fa-file-invoice"></i></button>
                 ${bb} ${shadowBtn}
                 <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition" onclick="window.deleteChairman('${dt.id}', '${dt.schoolId}')"><i class="fas fa-trash"></i></button>`
             : `<button class="px-2 py-1 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 hover:bg-indigo-600 hover:text-white rounded text-[10px] font-mono transition" onclick="window.openInstitutionEditor('${dt.schoolId}')"><i class="fas fa-sliders"></i> CONFIGURE</button>`;
@@ -1277,7 +1294,7 @@ window.filterChairmenList = () => {
             : `<span class="${sc} px-2 py-1 rounded text-[10px] font-bold font-mono tracking-widest">${(dt.status || 'ACTIVE').toUpperCase()}</span>`;
         html += `<tr class="hover:bg-slateSurface/50 transition">
             <td class="p-4"><img src="${dt.logoUrl || 'https://via.placeholder.com/40'}" class="w-8 h-8 rounded-lg border border-tealAccent/30 object-cover shadow-[0_0_10px_rgba(0,240,255,0.2)]"></td>
-            <td class="p-4 sensitive-data font-bold text-white">${dt.schoolName}</td>
+            <td class="p-4 sensitive-data font-bold text-white">${dt.schoolName || '—'}</td>
             <td class="p-4"><code class="text-tealAccent font-mono text-[11px] font-bold tracking-wider">${dt.schoolId || "—"}</code></td>
             <td class="p-4">${typeBadge}</td>
             <td class="p-4 sensitive-data text-gray-200">${dt.name || "—"}<br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.email || ""}</span></td>
@@ -1355,7 +1372,10 @@ window.saveChairmanEdit = async () => {
         }
 
         await supabaseClient.from("users").update({ name: newChairmanName, schoolName: newSchoolName, email: newEmail, logoUrl: finalLogoUrl }).eq("id", uid);
-        if (ch.schoolId) { await supabaseClient.from("schools").update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: maxStudents ? Number(maxStudents).eq("id", ch.schoolId) : null, themeColor: themeColor }); }
+        if (ch.schoolId) {
+            const parsedMaxStudents = maxStudents ? Number(maxStudents) : null;
+            await supabaseClient.from("schools").update({ schoolName: newSchoolName, logoUrl: finalLogoUrl, maxStudents: parsedMaxStudents, themeColor: themeColor }).eq("id", ch.schoolId);
+        }
 
         window.showToast("✅ DETAILS UPDATED SUCCESSFULLY!"); window.logAudit("Edited Node Credentials", newSchoolName);
         window.closeCustomModal("edit-chairman-modal"); loadChairmen(); loadSchoolsForDropdown();
@@ -1416,28 +1436,30 @@ window.updateStatus = (uid, ns) => {
 
 window.toggleShadowBan = async (uid, state) => { window.customConfirm(state ? "ENABLE SHADOW BAN? Data will appear saved to them but won't sync." : "REMOVE SHADOW BAN?", async () => { await supabaseClient.from("users").update({ shadowBan: state }).eq("id", uid); window.showToast(state ? "SHADOW BAN ENABLED!" : "SHADOW BAN REMOVED."); await loadChairmen(); window.filterChairmenList?.(); window.logAudit(state ? "Shadow Banned" : "Unbanned", uid); }); };
 
-// Cascade Delete - direct data delete with immediate UI update
+// Cascade Delete - Atomic, transactional node purge via database RPC
 window.deleteChairman = (uid, sid) => {
-    window.customConfirm("DANGER: ENTIRE NODE (School, Chairman, Staff, Students, Photos) WILL BE WIPED PERMANENTLY. PROCEED?", async () => {
+    if (!sid || sid === "undefined" || sid === "null") {
+        window.showToast("INVALID INSTITUTION IDENTIFIER", "#e11d48");
+        return;
+    }
+    const entered = prompt(`⚠️ CRITICAL SECURITY ACTION: ENTIRE INSTITUTION NODE WILL BE IRREVERSIBLY WIPED.\n\nType the Institution ID "${sid}" to confirm permanent deletion:`);
+    if (entered !== sid) {
+        if (entered !== null) window.showToast("DELETION CANCELLED: Confirmation ID mismatch.", "#e11d48");
+        return;
+    }
+
+    window.customConfirm(`FINAL WARNING: Wipe institution node "${sid}" and all its records immediately?`, async () => {
         try {
-            window.showToast("WIPING COMPLETELY... PLEASE WAIT", "#f59e0b");
-            if (uid) {
-                await supabaseClient.from("users").delete().eq("id", uid);
-            }
-            if (sid && sid !== "undefined" && sid !== "null") {
-                await supabaseClient.from("schools").delete().eq("id", sid);
+            await window.requireSuperAdmin("institution wipe");
+            window.showToast("PURGING NODE ATOMICALLY VIA DATABASE RPC...", "#f59e0b");
+            const { data, error } = await supabaseClient.rpc('purge_institution_node', {
+                p_school_id: sid,
+                p_chairman_uid: uid || null,
+                p_confirm_school_id: sid
+            });
+            if (error) throw error;
 
-                const { data: students } = await supabaseClient.from("students").select("id").eq("schoolId", sid);
-                for (const doc of (students || [])) {
-                    await supabaseClient.rpc('delete_student', { p_student_id: doc.id });
-                }
-
-                const { data: staffData } = await supabaseClient.from("users").select("id").eq("schoolId", sid).eq("role", "staff");
-                for (const doc of (staffData || [])) {
-                    await supabaseClient.from("users").delete().eq("id", doc.id);
-                }
-            }
-            window.showToast("✅ COMPLETE NODE WIPED OUT!");
+            window.showToast("✅ COMPLETE NODE PURGED ATOMICALLY!");
             await Promise.allSettled([
                 loadChairmen(),
                 window.loadInstitutionRegistry ? window.loadInstitutionRegistry() : Promise.resolve(),
@@ -1448,18 +1470,28 @@ window.deleteChairman = (uid, sid) => {
             window.filterChairmenList?.();
             window.renderInstitutionRegistry?.();
             window.logAudit("Completely Wiped Node", sid);
-        } catch (err) { window.showToast("❌ DELETE ERROR: " + err.message, "#e11d48"); }
+        } catch (err) {
+            console.error("Purge error:", err);
+            window.showToast("❌ DELETE ERROR: " + (err.message || err), "#e11d48");
+        }
     });
 };
 
-window.impersonateUser = async (uid, schoolId, email, pass) => {
-    window.showToast("GENERATING IMPERSONATION TOKEN...", "#f59e0b");
-    window.logAudit("Impersonated User", uid);
-    setTimeout(() => {
-        const safeEmail = encodeURIComponent(email); const safePass = encodeURIComponent(pass);
-        const chairmanPortalLink = "https://bf0040792-rgb.github.io/SCHOOL.COLLAGE.STAFF.STUDENT.PROTAL/";
-        window.open(`${chairmanPortalLink}?impersonate=true&email=${safeEmail}&pass=${safePass}&isGhost=true`, '_blank');
-    }, 1500);
+window.impersonateUser = async (uid, schoolId, email) => {
+    try {
+        await window.requireSuperAdmin("user impersonation");
+        window.showToast("GENERATING SECURE IMPERSONATION SESSION...", "#f59e0b");
+        window.logAudit("Impersonated User", uid);
+        setTimeout(() => {
+            const safeEmail = encodeURIComponent(email || "");
+            const safeSchoolId = encodeURIComponent(schoolId || "");
+            const safeUid = encodeURIComponent(uid || "");
+            const chairmanPortalLink = "https://bf0040792-rgb.github.io/SCHOOL.COLLAGE.STAFF.STUDENT.PROTAL/";
+            window.open(`${chairmanPortalLink}?impersonate=true&uid=${safeUid}&schoolId=${safeSchoolId}&email=${safeEmail}&isGhost=true`, '_blank');
+        }, 1000);
+    } catch (err) {
+        console.error("Impersonate error:", err);
+    }
 };
 
 // ==========================================
@@ -2623,12 +2655,18 @@ window.deleteGlobalStaff = (uid) => { window.customConfirm("PURGE STAFF MEMBER &
 window.showStaffDetail = (sId) => {
     const st = (window.fetchedGlobalStaffList || []).find(s => s.id === sId); if (!st) return;
     const isBlocked = window.isStaffBlocked ? window.isStaffBlocked(st) : (st.status === 'blocked');
-    document.getElementById("sd-photo").src = st.photoUrl || "https://via.placeholder.com/80";
-    document.getElementById("sd-name").innerText = st.name || "N/A";
-    document.getElementById("sd-role").innerText = (st.staffRole || st.role || "N/A").toUpperCase();
-    document.getElementById("sd-email").innerText = st.email || "N/A";
-    document.getElementById("sd-password").innerText = st.plainPassword || "••••••";
-    document.getElementById("sd-status").innerHTML = `<span class="${isBlocked ? "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" : "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"}">${isBlocked ? "BLOCKED" : "ACTIVE"}</span>`;
+    const photoEl = document.getElementById("sd-photo");
+    if (photoEl) photoEl.src = st.photoUrl || "https://via.placeholder.com/80";
+    const nameEl = document.getElementById("sd-name");
+    if (nameEl) nameEl.innerText = st.name || "N/A";
+    const roleEl = document.getElementById("sd-role");
+    if (roleEl) roleEl.innerText = (st.staffRole || st.role || "N/A").toUpperCase();
+    const emailEl = document.getElementById("sd-email");
+    if (emailEl) emailEl.innerText = st.email || "N/A";
+    const pwdEl = document.getElementById("sd-password");
+    if (pwdEl) pwdEl.innerText = "•••••••• [ENCRYPTED]";
+    const statusEl = document.getElementById("sd-status");
+    if (statusEl) statusEl.innerHTML = `<span class="${isBlocked ? "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" : "text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"}">${isBlocked ? "BLOCKED" : "ACTIVE"}</span>`;
     openCustomModal("staff-modal");
 };
 window.sendDirectMessage = (rid, sid, typ) => {
@@ -3201,29 +3239,99 @@ window.exportToTallyCSV = async () => {
 // 9C. GST INVOICE GENERATOR
 // ==========================================
 window.loadPasswordRequests = () => {
-    const sid = document.getElementById("pwdReqSchoolSelect").value; let html = ""; let ls = window.fetchedChairmen;
+    const selEl = document.getElementById("pwdReqSchoolSelect");
+    const sid = selEl ? selEl.value : "ALL";
+    let html = "";
+    let ls = window.fetchedChairmen || [];
     if (sid !== "ALL" && sid !== "") { ls = ls.filter(c => c.schoolId === sid); }
     (ls || []).forEach(dt => {
         let reqHtml = `<span class="text-coolGray text-[10px] font-mono tracking-widest">NO REQUEST</span>`;
-        let btnHtml = `<button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`;
-        if (dt.suggestedPassword) { reqHtml = `<span class="text-amber-400 font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">${dt.suggestedPassword}</span>`; btnHtml = `<button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.approvePasswordRequest('${dt.id}', '${dt.suggestedPassword}')">APPROVE</button> <button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition ml-1" onclick="window.adminForceChangePassword('${dt.id}')">FORCE</button>`; }
-        html += `<tr class="hover:bg-slateSurface/50 transition"><td class="p-4"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" data-id="${dt.id}"></td><td class="p-4"><strong class="text-white">${dt.schoolName}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name}</span></td><td class="p-4"><div class="flex items-center gap-2"><span class="pwd-mask tracking-widest text-lg text-tealAccent">•••••••</span><span class="pwd-text hidden-el text-rose-400 font-mono font-bold text-[10px] tracking-widest">KEY: ${dt.plainPassword || 'N/A'}<br>PIN: ${dt.pin || 'NOT SET'}</span><button class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-mono transition border border-glassBorder" onclick="window.togglePwd(this)">DECRYPT</button></div></td><td class="p-4">${reqHtml}</td><td class="p-4 text-right flex gap-1 justify-end">${btnHtml} <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition ml-1" onclick="window.deletePasswordRequest('${dt.id}')"><i class="fas fa-trash"></i></button></td></tr>`;
+        let btnHtml = `<button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.adminForceChangePassword('${dt.id}')">FORCE RESET</button>`;
+        if (dt.suggestedPassword) {
+            reqHtml = `<span class="text-amber-400 font-bold font-mono tracking-widest drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">RESET PENDING</span>`;
+            btnHtml = `<button class="px-3 py-1 bg-emerald-600/20 border border-emerald-500 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded text-[10px] font-mono transition" onclick="window.approvePasswordRequest('${dt.id}', '${dt.suggestedPassword}')">APPROVE</button> <button class="px-3 py-1 bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded text-[10px] font-mono transition ml-1" onclick="window.adminForceChangePassword('${dt.id}')">FORCE RESET</button>`;
+        }
+        html += `<tr class="hover:bg-slateSurface/50 transition">
+            <td class="p-4"><input type="checkbox" class="row-checkbox w-4 h-4 rounded border-glassBorder text-amber-500 bg-slateSurface focus:ring-amber-500" data-id="${dt.id}"></td>
+            <td class="p-4"><strong class="text-white">${dt.schoolName || '—'}</strong><br><span class="text-[10px] text-tealAccent/70 font-mono tracking-widest">${dt.name || '—'}</span></td>
+            <td class="p-4"><div class="flex items-center gap-2"><span class="tracking-widest text-sm text-tealAccent font-mono">••••••••</span><span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">ENCRYPTED</span></div></td>
+            <td class="p-4">${reqHtml}</td>
+            <td class="p-4 text-right flex gap-1 justify-end">${btnHtml} <button class="px-2 py-1 bg-rose-600/20 border border-rose-500 hover:bg-rose-600 text-rose-400 hover:text-white rounded text-[10px] transition ml-1" onclick="window.deletePasswordRequest('${dt.id}')"><i class="fas fa-trash"></i></button></td>
+        </tr>`;
     });
-    document.getElementById("password-req-table").innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO TARGETS FOUND</td></tr>";
-}
+    const tableEl = document.getElementById("password-req-table");
+    if (tableEl) tableEl.innerHTML = html || "<tr><td colspan='5' class='p-4 text-center text-coolGray font-mono'>NO TARGETS FOUND</td></tr>";
+};
+
 window.deletePasswordRequest = async (uid) => {
-    window.customConfirm("DELETE KEY FROM SYSTEM?", async () => {
+    window.customConfirm("DISCARD PENDING PASSWORD RESET REQUEST?", async () => {
         try {
+            await window.requireSuperAdmin("delete password request");
             await supabaseClient.from("users").update({ plainPassword: null, suggestedPassword: null }).eq("id", uid);
-            window.showToast("KEY ERASED!");
+            window.showToast("RESET REQUEST DISCARDED!");
             await loadChairmen();
             if (typeof window.loadPasswordRequests === "function") window.loadPasswordRequests();
-        } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + (e.message || e), "#e11d48"); }
+        } catch (e) {
+            if (window.handleDbError) window.handleDbError(e);
+            else window.showToast("ERROR: " + (e.message || e), "#e11d48");
+        }
     });
 };
-window.togglePwd = (btn) => { const td = btn.parentElement; const m = td.querySelector('.pwd-mask'), t = td.querySelector('.pwd-text'); if (m.classList.contains("hidden-el")) { m.classList.remove("hidden-el"); t.classList.add("hidden-el"); btn.innerText = "DECRYPT"; } else { m.classList.add("hidden-el"); t.classList.remove("hidden-el"); btn.innerText = "ENCRYPT"; } };
-window.approvePasswordRequest = (uid, np) => { window.customConfirm("APPROVE THIS KEY?", async () => { try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.showToast("✅ KEY UPDATED!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }); };
-window.adminForceChangePassword = (uid) => { document.getElementById("pwd-prompt-input").value = ""; openCustomModal("pwd-prompt-modal"); document.getElementById("pwd-prompt-confirm").onclick = async () => { const np = document.getElementById("pwd-prompt-input").value; if (!np) return; try { const sessionData = await supabaseClient.auth.getSession(); const token = sessionData.data.session?.access_token; await fetch("https://school-backend-zlgy.onrender.com/api/change-password", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, body: JSON.stringify({ targetUid: uid, newPassword: np }) }); await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid); window.closeCustomModal("pwd-prompt-modal"); window.showToast("✅ KEY OVERRIDDEN!"); loadChairmen(); } catch (e) { if(window.handleDbError) window.handleDbError(e); else window.showToast("ERROR: " + e.message, "#e11d48"); } }; };
+
+window.togglePwd = (btn) => {
+    window.showToast("Plaintext passwords are encrypted and cannot be displayed.", "#f59e0b");
+};
+
+window.approvePasswordRequest = (uid, np) => {
+    window.customConfirm("APPROVE THIS PASSWORD RESET REQUEST?", async () => {
+        try {
+            await window.requireSuperAdmin("approve password request");
+            const sessionData = await supabaseClient.auth.getSession();
+            const token = sessionData.data.session?.access_token;
+            await fetch("https://school-backend-zlgy.onrender.com/api/change-password", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ targetUid: uid, newPassword: np })
+            });
+            await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid);
+            window.showToast("✅ PASSWORD RESET APPLIED!");
+            loadChairmen();
+        } catch (e) {
+            if (window.handleDbError) window.handleDbError(e);
+            else window.showToast("ERROR: " + (e.message || e), "#e11d48");
+        }
+    });
+};
+
+window.adminForceChangePassword = (uid) => {
+    const input = document.getElementById("pwd-prompt-input");
+    if (input) input.value = "";
+    openCustomModal("pwd-prompt-modal");
+    const confirmBtn = document.getElementById("pwd-prompt-confirm");
+    if (confirmBtn) {
+        confirmBtn.onclick = async () => {
+            const np = document.getElementById("pwd-prompt-input")?.value;
+            if (!np) return;
+            try {
+                await window.requireSuperAdmin("force password reset");
+                const sessionData = await supabaseClient.auth.getSession();
+                const token = sessionData.data.session?.access_token;
+                await fetch("https://school-backend-zlgy.onrender.com/api/change-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ targetUid: uid, newPassword: np })
+                });
+                await supabaseClient.from("users").update({ suggestedPassword: null, plainPassword: null }).eq("id", uid);
+                window.closeCustomModal("pwd-prompt-modal");
+                window.showToast("✅ CREDENTIALS OVERRIDDEN SECURELY!");
+                loadChairmen();
+            } catch (e) {
+                if (window.handleDbError) window.handleDbError(e);
+                else window.showToast("ERROR: " + (e.message || e), "#e11d48");
+            }
+        };
+    }
+};
 
 let loadSchoolsInFlightPromise = null;
 window.uniqueInstitutionsList = [];
@@ -4388,21 +4496,29 @@ window.renderRealSystemTrafficChart = async () => {
     };
 
     // Safely render on Dashboard without infinite expansion
-    if (dashCanvas) {
+    if (dashCanvas && typeof Chart !== "undefined" && typeof dashCanvas.getContext === "function") {
         if (window.dashTrafficChartInstance) {
-            window.dashTrafficChartInstance.destroy();
+            try { window.dashTrafficChartInstance.destroy(); } catch (e) { /* ignore */ }
             window.dashTrafficChartInstance = null;
         }
-        window.dashTrafficChartInstance = new Chart(dashCanvas.getContext("2d"), JSON.parse(JSON.stringify(chartConfig)));
+        try {
+            window.dashTrafficChartInstance = new Chart(dashCanvas.getContext("2d"), JSON.parse(JSON.stringify(chartConfig)));
+        } catch (err) {
+            console.warn("Traffic chart instantiation skipped:", err);
+        }
     }
 
     // Safely render on System Limits tab without infinite expansion
-    if (secCanvas) {
+    if (secCanvas && typeof Chart !== "undefined" && typeof secCanvas.getContext === "function") {
         if (window.apiHeatmapChart) {
-            window.apiHeatmapChart.destroy();
+            try { window.apiHeatmapChart.destroy(); } catch (e) { /* ignore */ }
             window.apiHeatmapChart = null;
         }
-        window.apiHeatmapChart = new Chart(secCanvas.getContext("2d"), JSON.parse(JSON.stringify(chartConfig)));
+        try {
+            window.apiHeatmapChart = new Chart(secCanvas.getContext("2d"), JSON.parse(JSON.stringify(chartConfig)));
+        } catch (err) {
+            console.warn("API Heatmap instantiation skipped:", err);
+        }
     }
 
     const badge = document.getElementById("dash-traffic-badge");
@@ -5496,44 +5612,51 @@ window.loadGlobalAnalyticsDashboard = async () => {
         };
 
         const ctxStudent = document.getElementById('studentChart');
-        if (ctxStudent) {
-            if (window.studentChartInstance) window.studentChartInstance.destroy();
-            window.studentChartInstance = new Chart(ctxStudent, {
-                type: 'bar',
-                data: {
-                    labels: chartLabels,
-                    datasets: [{
-                        label: 'Students',
-                        data: chartData,
-                        backgroundColor: 'rgba(34, 211, 238, 0.72)',
-                        borderColor: '#22d3ee',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        maxBarThickness: 42
-                    }]
-                },
-                options: {
-                    ...sharedChartOptions,
-                    scales: {
-                        x: {
-                            grid: { display: false },
-                            ticks: {
-                                color: axisColor,
-                                maxRotation: 35,
-                                minRotation: 0,
-                                autoSkip: true,
-                                maxTicksLimit: 10,
-                                font: { size: 10 }
+        if (ctxStudent && typeof Chart !== "undefined" && typeof ctxStudent.getContext === "function") {
+            if (window.studentChartInstance) {
+                try { window.studentChartInstance.destroy(); } catch (e) { /* ignore */ }
+                window.studentChartInstance = null;
+            }
+            try {
+                window.studentChartInstance = new Chart(ctxStudent, {
+                    type: 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            label: 'Students',
+                            data: chartData,
+                            backgroundColor: 'rgba(34, 211, 238, 0.72)',
+                            borderColor: '#22d3ee',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            maxBarThickness: 42
+                        }]
+                    },
+                    options: {
+                        ...sharedChartOptions,
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    color: axisColor,
+                                    maxRotation: 35,
+                                    minRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 10,
+                                    font: { size: 10 }
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: gridColor, drawBorder: false },
+                                ticks: { color: axisColor, precision: 0, padding: 8 }
                             }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: gridColor, drawBorder: false },
-                            ticks: { color: axisColor, precision: 0, padding: 8 }
                         }
                     }
-                }
-            });
+                });
+            } catch (err) {
+                console.warn("Student chart skipped:", err);
+            }
         }
 
         const { data: txSnapData } = await supabaseClient.from("transactions").select("*").eq("type", "Fee");
@@ -5561,9 +5684,13 @@ window.loadGlobalAnalyticsDashboard = async () => {
         });
 
         const ctxRev = document.getElementById('revenueChart');
-        if (ctxRev) {
-            if (window.revenueChartInstance) window.revenueChartInstance.destroy();
-            window.revenueChartInstance = new Chart(ctxRev, {
+        if (ctxRev && typeof Chart !== "undefined" && typeof ctxRev.getContext === "function") {
+            if (window.revenueChartInstance) {
+                try { window.revenueChartInstance.destroy(); } catch (e) { /* ignore */ }
+                window.revenueChartInstance = null;
+            }
+            try {
+                window.revenueChartInstance = new Chart(ctxRev, {
                 type: 'line',
                 data: {
                     labels: Object.keys(monthlyRev),
